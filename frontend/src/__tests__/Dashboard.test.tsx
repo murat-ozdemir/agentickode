@@ -2,9 +2,9 @@
 // Licensed under AGPLv3. See LICENSE file.
 // Commercial licensing: info@mechemsi.com
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 
 vi.mock("../api", () => ({
   getRuns: vi.fn().mockResolvedValue({
@@ -44,6 +44,9 @@ class MockEventSource {
 vi.stubGlobal("EventSource", MockEventSource);
 
 import Dashboard from "../pages/Dashboard";
+import { getRuns } from "../api";
+
+const lastRunsQuery = () => vi.mocked(getRuns).mock.lastCall?.[0];
 
 describe("Dashboard", () => {
   it("renders the heading", async () => {
@@ -54,5 +57,27 @@ describe("Dashboard", () => {
   it("renders the search input", async () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByPlaceholderText("Search runs...")).toBeInTheDocument();
+  });
+
+  describe("per page selector", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+      vi.mocked(getRuns).mockResolvedValue({ items: [], total: 120, offset: 0, limit: 10 });
+    });
+
+    it("requests 10 runs per page by default", async () => {
+      render(<MemoryRouter><Dashboard /></MemoryRouter>);
+      expect(await screen.findByTestId("page-size")).toHaveValue("10");
+      expect(lastRunsQuery()).toMatchObject({ limit: 10, offset: 0 });
+    });
+
+    it("refetches from the first page and remembers the new size", async () => {
+      render(<MemoryRouter><Dashboard /></MemoryRouter>);
+      fireEvent.click(await screen.findByText("Next"));
+      await waitFor(() => expect(lastRunsQuery()).toMatchObject({ offset: 10 }));
+      fireEvent.change(screen.getByTestId("page-size"), { target: { value: "25" } });
+      await waitFor(() => expect(lastRunsQuery()).toMatchObject({ limit: 25, offset: 0 }));
+      expect(window.localStorage.getItem("dashboard.pageSize")).toBe("25");
+    });
   });
 });

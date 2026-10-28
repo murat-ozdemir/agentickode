@@ -9,10 +9,21 @@ interface Props {
   offset: number;
   limit: number;
   onPageChange: (newOffset: number) => void;
+  /** Optional "Per page" selector; shown whenever there are runs. */
+  pageSizes?: number[];
+  onLimitChange?: (newLimit: number) => void;
 }
 
-export default function Pagination({ total, offset, limit, onPageChange }: Props) {
-  if (total <= limit) return null;
+export default function Pagination({
+  total,
+  offset,
+  limit,
+  onPageChange,
+  pageSizes,
+  onLimitChange,
+}: Props) {
+  const showSizes = !!(pageSizes && onLimitChange && total > 0);
+  if (total <= limit && !showSizes) return null;
 
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(total / limit);
@@ -25,6 +36,23 @@ export default function Pagination({ total, offset, limit, onPageChange }: Props
         {offset + 1}–{Math.min(offset + limit, total)} of {total}
       </span>
       <div className="flex items-center gap-2">
+        {showSizes && (
+          <label className="inline-flex items-center gap-1.5 mr-2 text-gray-500">
+            Per page
+            <select
+              data-testid="page-size"
+              value={limit}
+              onChange={(e) => onLimitChange?.(Number(e.target.value))}
+              className="bg-gray-900/40 border border-gray-700/50 rounded px-1.5 py-1 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              {pageSizes?.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           onClick={() => onPageChange(Math.max(0, offset - limit))}
           disabled={!hasPrev}
