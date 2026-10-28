@@ -45,7 +45,9 @@ def _get_phase_module(phase_name: str):
 
 def _flow_type_for(run: TaskRun) -> str:
     """PR-review runs use the ``pr_review`` flow; everything else ``implement``."""
-    return "pr_review" if (run.task_source_meta or {}).get("review_mode") else "implement"
+    # bimetri yamasi: review_mode=fix (PR yorumuyla duzeltme) kod kosusudur, inceleme degil
+    _mode = (run.task_source_meta or {}).get("review_mode")
+    return "pr_review" if _mode and _mode != "fix" else "implement"
 
 
 async def execute_pipeline(run: TaskRun, session: AsyncSession, services: ServiceContainer) -> None:
