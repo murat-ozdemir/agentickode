@@ -23,6 +23,7 @@ from backend.services.http_client import get_http_client
 from backend.services.workspace.sandbox import RemoteSandbox
 from backend.services.workspace.worktree import WorktreeManager, WorktreePaths
 from backend.worker.broadcaster import broadcaster
+from backend.worker.phases._bimetri_duzeltme import DEGISIKLIK_YOK_NOTU, duzeltme_govdesi
 from backend.worker.phases._bimetri_etiket import (
     etiketler,
     inceleme_baslat,
@@ -75,6 +76,13 @@ async def run(
             await _git.run_git(["rev-list", "--count", f"origin/{pr_branch}..HEAD"], cwd=_cwd)
         ).stdout.strip()
         if not _ahead or _ahead == "0":
+            # bimetri yamasi: ajanin gerekcesi PR'a yazilsin (yoksa yalnizca kosu gunlugunde kalir)
+            await _bimetri_pr_yorumu(
+                task_run,
+                session,
+                int(pr_number),
+                duzeltme_govdesi(task_run, "Düzeltme: değişiklik yapılmadı", DEGISIKLIK_YOK_NOTU),
+            )
             raise RuntimeError("Duzeltme kosusu: ajan degisiklik birakmadi, PR dalina push edilmedi")
         # bimetri yamasi: duzeltme test dosyalarina dokundu mu (push'tan once; sonra origin/<dal> ilerler)
         import re as _re
@@ -116,31 +124,9 @@ async def run(
             await broadcaster.log(
                 task_run.id, f"PR test/inceleme etiketleri ayarlanamadi: {exc}", level="warning", phase="finalization"
             )
-        try:
-            from backend.config import settings as _settings
-
-            _ozet = (task_run.coding_results or {}).get("response") or ""
-            if isinstance(_ozet, dict):  # CLI ajani: yalnizca son mesaj
-                _ozet = _ozet.get("output") or ""
-            _ozet = (_ozet if isinstance(_ozet, str) else str(_ozet)).strip()[:6000]
-            _kosu = f"{_settings.app_base_url.rstrip('/')}/runs/{task_run.id}"
-            _cr = task_run.coding_results or {}
-            _govde = (
-                f"## Düzeltme push edildi ({_ahead} commit)\n\n"
-                + (_ozet or "_Ajan özet bırakmadı._")
-                + f"\n\n---\nAjan: {_cr.get('agent') or '?'}"
-                + (f" · Model: {_cr['model']}" if _cr.get("model") else "")
-                + f" · Koşu: [#{task_run.id}]({_kosu}) · AgenticKode"
-            ).replace("@", "@​")  # kendi yorumu yeni kosu tetiklemesin
-            await get_git_provider(
-                task_run.git_provider,
-                get_http_client(),
-                access_token=await get_project_token(task_run, session),
-            ).post_pr_comment(f"{task_run.repo_owner}/{task_run.repo_name}", int(pr_number), _govde)
-        except Exception as exc:
-            await broadcaster.log(
-                task_run.id, f"PR'a yorum yazilamadi: {exc}", level="warning", phase="finalization"
-            )
+        await _bimetri_pr_yorumu(
+            task_run, session, int(pr_number), duzeltme_govdesi(task_run, f"Düzeltme push edildi ({_ahead} commit)")
+        )
         # bimetri yamasi: test dosyasina dokunan duzeltme kosusu basarisiz sayilir -> status/on-hold
         if _test_dokunan:
             raise RuntimeError(
@@ -395,6 +381,15 @@ async def _bimetri_oto_duzeltme(task_run: TaskRun, n: int, session: AsyncSession
     return await oto_tur_karari(
         gp, f"{task_run.repo_owner}/{task_run.repo_name}", n, "inceleme değişiklik istedi", task_run.id
     )
+
+
+async def _bimetri_pr_yorumu(task_run: TaskRun, session: AsyncSession, n: int, govde: str) -> None:
+    try:
+        await get_git_provider(
+            task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session)
+        ).post_pr_comment(f"{task_run.repo_owner}/{task_run.repo_name}", n, govde)
+    except Exception as exc:
+        await broadcaster.log(task_run.id, f"PR'a yorum yazilamadi: {exc}", level="warning", phase="finalization")
 
 
 async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta: dict, session: AsyncSession) -> None:

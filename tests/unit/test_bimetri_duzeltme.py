@@ -29,15 +29,19 @@ class TestDuzeltmeKosusu:
         )
         await db_session.commit()
 
-    async def _calistir(self, db_session, make_task_run, mock_services, git: SahteGit):
+    async def _calistir(self, db_session, make_task_run, mock_services, git: SahteGit, gp=None):
         run = make_task_run(
             pr_url=None,
             task_source_meta=dict(_META),
-            coding_results={"agent": "agent/codex@agent-2", "model": "gpt-6-luna"},
+            coding_results={
+                "agent": "agent/codex@agent-2",
+                "model": "gpt-6-luna",
+                "response": "Kod issue ile uyumlu.",
+            },
         )
         db_session.add(run)
         await db_session.commit()
-        gp = AsyncMock()
+        gp = gp or AsyncMock()
         push = AsyncMock()
         with (
             patch(
@@ -67,9 +71,21 @@ class TestDuzeltmeKosusu:
         alt = govde.replace("​", "").rsplit("\n", 1)[-1]
         assert alt.startswith("Ajan: agent/codex@agent-2 · Model: gpt-6-luna · Koşu: [#")
 
-    async def test_no_new_commit_fails_without_push(self, db_session, make_task_run, mock_services):
-        with pytest.raises(RuntimeError, match="degisiklik birakmadi"):
-            await self._calistir(db_session, make_task_run, mock_services, SahteGit(ahead="0"))
+    async def test_no_new_commit_posts_reason_then_fails(
+        self, db_session, make_task_run, mock_services
+    ):
+        gp = AsyncMock()
+        with (
+            patch("backend.worker.phases.finalization.get_git_provider", return_value=gp),
+            pytest.raises(RuntimeError, match="degisiklik birakmadi"),
+        ):
+            await self._calistir(
+                db_session, make_task_run, mock_services, SahteGit(ahead="0"), gp=gp
+            )
+        govde = gp.post_pr_comment.await_args.args[2]
+        assert govde.startswith("## Düzeltme: değişiklik yapılmadı\n\nKod issue ile uyumlu.")
+        assert "`status/on-hold`" in govde
+        assert "Koşu: [#" in govde
 
     async def test_touching_tests_stops_chain(self, db_session, make_task_run, mock_services):
         git = SahteGit(diff="src/main/A.java\nmod/src/test/ATest.java")
