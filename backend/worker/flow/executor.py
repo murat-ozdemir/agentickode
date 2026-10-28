@@ -198,7 +198,8 @@ async def execute_flow_prompt(
                 "- Mevcut testleri silme; `@Disabled` ya da `@Ignore` ekleme.\n"
                 "- Değişikliğe göre birim testleri yaz (JUnit 5, Mockito; `*Test.java`). Veritabanına dokunan kod "
                 "için Testcontainers ile entegrasyon testi yaz (`*IT.java`); repodaki örnek IT'nin kurduğu yapıyı kullan.\n"
-                "- Repo kökünde `.sdkmanrc` varsa önce: `source ~/.sdkman/bin/sdkman-init.sh && sdk env`.\n"
+                "- JDK'yı `mvn`/`mvnw` repo kökündeki `.sdkmanrc`'ye göre kendisi seçer; "
+                "`sdk` komutunu çalıştırma, `JAVA_HOME`'u değiştirme.\n"
                 "- Testleri çalıştır: `mvnw` varsa `sh mvnw -q verify`, yoksa `mvn -q verify`. Yalnızca ilgili "
                 "modül için `-pl <modül> -am` kullanabilirsin.\n"
                 "- Bir test kalırsa nedenini araştır. Hata uygulama kodundaysa testi değiştirme, raporla. "
@@ -214,8 +215,8 @@ async def execute_flow_prompt(
             prompt += (
                 "\n\n## Ek kurallar (yukarıdakilerden önceliklidir)\n"
                 "- Repo kökündeki AGENTS.md dosyasındaki kurallara uy.\n"
-                "- Repo kökünde `.sdkmanrc` varsa derlemeden önce: "
-                "`source ~/.sdkman/bin/sdkman-init.sh && sdk env`.\n"
+                "- JDK'yı `mvn`/`mvnw` repo kökündeki `.sdkmanrc`'ye göre kendisi seçer; "
+                "`sdk` komutunu çalıştırma, `JAVA_HOME`'u değiştirme.\n"
                 "- Push etme, PR açma; PR'ı platform açar. Son mesajında PR'dan söz etme.\n"
                 "- Son mesajını Türkçe yaz (ç, ğ, ı, ö, ş, ü); bu mesaj PR açıklamasına konur.\n"
             )
