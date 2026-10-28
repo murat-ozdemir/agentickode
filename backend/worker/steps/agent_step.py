@@ -129,15 +129,23 @@ async def run_agent_step(
                 raise ValueError(
                     "agent step mode='task' requires task_run.workspace_path to be set"
                 )
+            # bimetri yamasi: onceki cagrinin token/maliyet bilgisi tasinmasin
+            if isinstance(adapter, CLIAdapter):
+                adapter._bimetri_usage = None
             response = await adapter.run_task(workspace, rendered_prompt, **kwargs)
             result["response"] = response
+            result["usage"] = getattr(adapter, "_bimetri_usage", None)
             if isinstance(response, dict) and response.get("session_id"):
                 result["session_id"] = response["session_id"]
             return result
 
         # default: generate
+        # bimetri yamasi: generate modunda da token/maliyet
+        if isinstance(adapter, CLIAdapter):
+            adapter._bimetri_usage = None
         response_text = await adapter.generate(rendered_prompt, **kwargs)
         result["response"] = response_text
+        result["usage"] = getattr(adapter, "_bimetri_usage", None)
         return result
     finally:
         # Always restore the adapter's worker_user so concurrent runs

@@ -38,6 +38,44 @@ from backend.worker.steps.agent_step import run_agent_step
 logger = logging.getLogger("agentickode.flow.executor")
 
 
+# bimetri yamasi: ajan cagrisini agent_invocations'a ekle (dashboard); commit'i kosu yapar, hata kosuyu bozmaz
+def _bimetri_cagri_kaydi(run, session, agent, phase, t0, result, exc) -> None:
+    try:
+        from backend.models import AgentInvocation
+
+        result = result or {}
+        resp = result.get("response")
+        rd = resp if isinstance(resp, dict) else {}
+        out = rd.get("output") if rd else resp
+        usage = result.get("usage") or {}
+        rc = rd.get("exit_code")
+        t1 = datetime.now(UTC)
+        session.add(
+            AgentInvocation(
+                run_id=run.id,
+                workspace_server_id=run.workspace_server_id,
+                agent_name=str(agent or result.get("agent") or "?"),
+                phase_name=phase,
+                prompt_chars=len(result.get("prompt") or ""),
+                response_chars=len(out) if isinstance(out, str) else 0,
+                exit_code=rc,
+                files_changed=rd.get("files_changed"),
+                duration_seconds=round((t1 - t0).total_seconds(), 1),
+                estimated_tokens_in=usage.get("input_tokens"),
+                estimated_tokens_out=usage.get("output_tokens"),
+                estimated_cost_usd=usage.get("cost_usd"),
+                status="failed" if exc is not None or rc not in (None, 0) else "success",
+                error_message=str(exc)[:2000] if exc is not None else None,
+                started_at=t0,
+                completed_at=t1,
+                session_id=result.get("session_id"),
+                metadata_={"model": result.get("model"), "bimetri": True},
+            )
+        )
+    except Exception:
+        logger.warning("agent_invocations kaydi eklenemedi", exc_info=True)
+
+
 def _compose_prompt(prompt: str, data: dict[str, Any]) -> str:
     """Append the fetched data as a context block the agent can read."""
     if not data:
@@ -141,13 +179,21 @@ async def execute_flow_prompt(
             resolved.adapter, log_fn=_agent_log, agent_settings=resolved.agent_settings
         )
 
-        result = await run_agent_step(
-            run,
-            session,
-            services,
-            # bimetri yamasi: etiketten gelen ajan ve model
-            {"agent": agent_name, "model": model, "params": {"prompt": prompt, "mode": flow.agent_mode}},
-        )
+        # bimetri yamasi: cagri suresi ve sonucu agent_invocations'a
+        _ajan = getattr(resolved.adapter, "agent_name", agent_name)
+        _t0 = datetime.now(UTC)
+        try:
+            result = await run_agent_step(
+                run,
+                session,
+                services,
+                # bimetri yamasi: etiketten gelen ajan ve model
+                {"agent": agent_name, "model": model, "params": {"prompt": prompt, "mode": flow.agent_mode}},
+            )
+        except Exception as _exc:
+            _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, None, _exc)
+            raise
+        _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, {**result, "model": model}, None)
         run.coding_results = {
             "flow_prompt": flow.name,
             "agent": result.get("agent"),

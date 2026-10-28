@@ -120,9 +120,19 @@ class CLIAdapter:
         except (json.JSONDecodeError, ValueError):
             return raw_stdout
 
+        # bimetri yamasi: Claude JSON'unda token "usage" altinda, maliyet total_cost_usd'de
+        _u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        self._bimetri_usage = {
+            "input_tokens": sum(
+                int(_u.get(k) or 0)
+                for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+            ) or None,
+            "output_tokens": _u.get("output_tokens"),
+            "cost_usd": data.get("total_cost_usd"),
+        }
         # Extract token usage if present
-        tokens_in = data.get("input_tokens")
-        tokens_out = data.get("output_tokens")
+        tokens_in = data.get("input_tokens", _u.get("input_tokens"))
+        tokens_out = data.get("output_tokens", _u.get("output_tokens"))
         if isinstance(tokens_in, int) and isinstance(tokens_out, int):
             self._last_token_usage = (tokens_in, tokens_out)
             logger.info("Parsed token usage: in=%d out=%d", tokens_in, tokens_out)

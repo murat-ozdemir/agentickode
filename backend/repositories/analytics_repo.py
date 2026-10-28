@@ -78,9 +78,39 @@ class AnalyticsRepository:
         return round(sum(durations) / len(durations), 1) if durations else 0.0
 
     async def _phase_durations(self, cutoff: datetime) -> list[dict[str, Any]]:
-        """Per-phase durations are no longer tracked (ADR-009: runs are a single
-        agent call; the legacy ``phase_executions`` table was removed)."""
-        return []
+        # bimetri yamasi: faz sureleri task_logs'tan (faz degisimleri arasi sure)
+        from backend.models import TaskLog
+
+        rows = (
+            await self.session.execute(
+                select(TaskLog.run_id, TaskLog.phase, TaskLog.timestamp)
+                .join(TaskRun, TaskRun.id == TaskLog.run_id)
+                .where(TaskRun.created_at >= cutoff, TaskLog.phase.isnot(None))
+                .order_by(TaskLog.run_id, TaskLog.timestamp, TaskLog.id)
+            )
+        ).all()
+        per_run: dict[int, dict[str, float]] = {}
+        prev = None  # (run_id, phase, baslangic, son log)
+        for run_id, phase, ts in [*rows, (None, None, None)]:
+            if prev and (run_id != prev[0] or phase != prev[1]):
+                end = ts if run_id == prev[0] else prev[3]
+                d = per_run.setdefault(prev[0], {})
+                d[prev[1]] = d.get(prev[1], 0.0) + max((end - prev[2]).total_seconds(), 0.0)
+                prev = None
+            if run_id is None:
+                break
+            prev = (run_id, phase, prev[2] if prev else ts, ts)
+        totals: dict[str, list[float]] = {}
+        for d in per_run.values():
+            for ph, sec in d.items():
+                totals.setdefault(ph, []).append(sec)
+        order = ["workspace_setup", "init", "agent", "finalization"]
+        return [
+            {"phase_name": ph, "avg_seconds": round(sum(v) / len(v), 1), "count": len(v)}
+            for ph, v in sorted(
+                totals.items(), key=lambda kv: (order.index(kv[0]) if kv[0] in order else 99, kv[0])
+            )
+        ]
 
     async def _agent_stats(self, cutoff: datetime) -> list[dict[str, Any]]:
         """Agent invocation stats with success rate and avg duration."""
