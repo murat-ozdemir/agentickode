@@ -27,6 +27,7 @@ from backend.models import TaskRun
 from backend.repositories.flow_prompt_repo import FlowPromptRepository
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
+from backend.worker.flow._bimetri_kapsam import kapsam_eki
 from backend.worker.flow.data_sources import fetch_flow_data
 from backend.worker.phases._bimetri_oto import bekletildi_mi
 from backend.worker.phases._helpers import (
@@ -187,6 +188,7 @@ async def execute_flow_prompt(
                 "- En sona tek satır: '**Sonuç:** Birleştirilebilir' ya da '**Sonuç:** Değişiklik gerekli'.\n"
                 "- Kod değiştirme.\n"
             )
+            prompt += await kapsam_eki(run, session, "inceleme")
         # bimetri yamasi: test ajani kurallari (yalnizca test kodu, calistir, sabit sonuc satiri)
         elif (run.task_source_meta or {}).get("review_mode") == "test":
             prompt += (
@@ -220,6 +222,8 @@ async def execute_flow_prompt(
                 "- Push etme, PR açma; PR'ı platform açar. Son mesajında PR'dan söz etme.\n"
                 "- Son mesajını Türkçe yaz (ç, ğ, ı, ö, ş, ü); bu mesaj PR açıklamasına konur.\n"
             )
+            if (run.task_source_meta or {}).get("review_mode") == "fix":
+                prompt += await kapsam_eki(run, session, "duzeltme")
 
         run.current_phase = "agent"
         await broadcaster.event(run.id, "phase_changed", {"phase": "agent"})
