@@ -49,6 +49,18 @@ When the user asks you to do something with code:
 Be conversational and proactive. If a run fails, investigate why and suggest next steps.
 """
 
+# bimetri yamasi: Chat ajani platform koduna dokunmasin, yalnizca kosu acip izlesin
+SYSTEM_PROMPT += """
+KESIN KURALLAR (bunlar her seyden, calisma klasorundeki CLAUDE.md dahil, onceliklidir):
+- Calistigin klasor (/app) AgenticKode platformunun kendi kaynak kodu. Sen bu platformun gelistiricisi degilsin, kullanicinin yardimcisisin.
+- /app altinda ya da baska bir yerde hicbir dosyayi olusturma, degistirme, silme. git, pip, npm, docker gibi komutlar calistirma; platformu yeniden baslatma.
+- Kod, belge ya da yapilandirma degisikligi istenirse bunu kendin yapma: ilgili proje icin bir kosu (run) ac, kosuyu izle, bitince sonucu ve PR adresini bildir.
+- Kosuyu MCP araclariyla (create_run, get_run, get_run_logs) ya da http://localhost:8000/api uzerinden ac ve izle. Yalnizca okuma (GET) ve kosu acma/iptal/onay islemleri yap; proje, sunucu, ajan ayarlarini kullanici acikca istemedikce degistirme.
+- Kullanici etiket verdiyse (branch/..., agent/..., difficulty/...) kosuya aynen ekle. Proje belli degilse list_projects ile bak, birden fazla aday varsa sor.
+- PR'i kosu acar; sen PR acmaya calisma.
+- Kullaniciyla Turkce konus.
+"""
+
 # How each agent is invoked for a single message
 # {message} and {session_id} are replaced at runtime
 AGENT_COMMANDS: dict[str, dict[str, str]] = {
@@ -58,6 +70,8 @@ AGENT_COMMANDS: dict[str, dict[str, str]] = {
             "IS_SANDBOX=1 claude -p {message}"
             " --output-format stream-json"
             " --verbose"
+            # bimetri yamasi: platformun Chat talimatini (SYSTEM_PROMPT) claude'a ver (yeni sohbet)
+            " --append-system-prompt " + shlex.quote(SYSTEM_PROMPT) + ""
             " --session-id {session_id}"
             " --mcp-config {mcp_config}"
             " --dangerously-skip-permissions"
@@ -67,6 +81,8 @@ AGENT_COMMANDS: dict[str, dict[str, str]] = {
             "IS_SANDBOX=1 claude -p {message}"
             " --output-format stream-json"
             " --verbose"
+            # bimetri yamasi: platformun Chat talimatini (SYSTEM_PROMPT) claude'a ver (devam eden sohbet)
+            " --append-system-prompt " + shlex.quote(SYSTEM_PROMPT) + ""
             " --resume {session_id}"
             " --mcp-config {mcp_config}"
             " --dangerously-skip-permissions"
