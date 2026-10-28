@@ -69,19 +69,42 @@ async def run(
         ).stdout.strip()
         if not _ahead or _ahead == "0":
             raise RuntimeError("Duzeltme kosusu: ajan degisiklik birakmadi, PR dalina push edilmedi")
+        # bimetri yamasi: duzeltme test dosyalarina dokundu mu (push'tan once; sonra origin/<dal> ilerler)
+        import re as _re
+
+        _test_dokunan = [
+            _y
+            for _y in (
+                await _git.run_git(["diff", "--name-only", f"origin/{pr_branch}..HEAD"], cwd=_cwd)
+            ).stdout.splitlines()
+            if _re.search(r"(^|/)src/test/", _y)
+        ]
+        _mvnw = bool((await _git.run_git(["ls-files", "mvnw"], cwd=_cwd)).stdout.strip())
         await _push_to_pr_branch(task_run, pr_branch, session)
         task_run.pr_url = meta.get("pr_url") or None
         await session.commit()
-        try:  # yeni commit'ler yeniden incelensin: ai-reviewed -> ai-review (label_updated tetikler)
+        # bimetri yamasi: duzeltmeden sonra zincir testten baslar (ai-test; mvnw yoksa ai-review)
+        try:
             _gp = get_git_provider(
                 task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session)
             )
             _rp = f"{task_run.repo_owner}/{task_run.repo_name}"
-            await _gp.remove_label(_rp, int(pr_number), "ai-reviewed")
-            await _gp.add_label(_rp, int(pr_number), "ai-review")
+            for _l in ("ai-review", "ai-reviewed", "ai-test", "ai-tested", "test/passed", "test/failed"):
+                await _gp.remove_label(_rp, int(pr_number), _l)
+            if _test_dokunan:
+                await _gp.post_pr_comment(
+                    _rp,
+                    int(pr_number),
+                    "## Düzeltme test dosyalarına dokundu\n\n"
+                    + "\n".join(f"- `{_y}`" for _y in _test_dokunan[:20])
+                    + "\n\nTest dosyalarını değiştirmek insan onayı ister; zincir durdu (`status/on-hold`). "
+                    "Uygunsa `status/on-hold`'u kaldırıp `ai-test` koy.",
+                )
+            else:
+                await _gp.add_label(_rp, int(pr_number), "ai-test" if _mvnw else "ai-review")
         except Exception as exc:
             await broadcaster.log(
-                task_run.id, f"PR ai-review etiketi geri konamadi: {exc}", level="warning", phase="finalization"
+                task_run.id, f"PR test/inceleme etiketleri ayarlanamadi: {exc}", level="warning", phase="finalization"
             )
         try:
             from backend.config import settings as _settings
@@ -105,10 +128,21 @@ async def run(
             await broadcaster.log(
                 task_run.id, f"PR'a yorum yazilamadi: {exc}", level="warning", phase="finalization"
             )
+        # bimetri yamasi: test dosyasina dokunan duzeltme kosusu basarisiz sayilir -> status/on-hold
+        if _test_dokunan:
+            raise RuntimeError(
+                "Duzeltme test dosyalarina dokundu (" + ", ".join(_test_dokunan[:5]) + "); insan incelemesi gerekli"
+            )
+
+    # bimetri yamasi: test kosusu (ai-test) sonu: denetim, push, rapor, etiket zinciri
+    if pr_branch and review_mode == "test":
+        await _bimetri_test_finalize(task_run, int(pr_number), pr_branch, meta, session)
 
     # Post review comment on source PR for pr-review / fix-pr workflows
     if task_run.review_result and pr_number:
-        await _post_review_comment(task_run, pr_number, session)
+        # bimetri yamasi: "Değişiklik gerekli" incelemesi ajanin PR'inda otomatik duzeltme turu acar
+        _oto = review_mode == "comment" and await _bimetri_oto_duzeltme(task_run, int(pr_number), session)
+        await _post_review_comment(task_run, pr_number, session, _oto)
         # Flip the label to mark the PR as reviewed (visible marker; the DB head
         # SHA remains the source of truth the poller dedupes on).
         if review_mode == "comment":
@@ -208,6 +242,23 @@ async def run(
                 task_run.default_branch,
             ) or None
             await session.commit()
+            # bimetri yamasi: yeni PR'a ai-test (repoda mvnw varsa); test ajani zinciri baslatir
+            if task_run.pr_url and task_run.git_provider == "gitea":
+                try:
+                    _mvnw = await RemoteGitOps(await get_ssh_for_run(task_run, session)).run_git(
+                        ["ls-files", "mvnw"], cwd=task_run.workspace_path
+                    )
+                    if _mvnw.stdout.strip():
+                        await provider.add_label(
+                            f"{task_run.repo_owner}/{task_run.repo_name}",
+                            int(task_run.pr_url.rstrip("/").rsplit("/", 1)[-1]),
+                            "ai-test",
+                        )
+                        await broadcaster.log(task_run.id, "PR'a ai-test kondu", phase="finalization")
+                except Exception as exc:
+                    await broadcaster.log(
+                        task_run.id, f"PR'a ai-test konamadi: {exc}", level="warning", phase="finalization"
+                    )
             # bimetri yamasi: PR'in dalini issue'nun "Branch/Tag" alanina bagla
             if task_run.pr_url and issue_no and task_run.git_provider == "gitea":
                 try:
@@ -319,6 +370,146 @@ async def run(
     await broadcaster.log(task_run.id, "Cleanup complete", phase="finalization")
 
 
+# bimetri yamasi: otomatik duzeltme turu - bu yorumu webhook (gitea-pr-comment) duzeltme kosusuna cevirir
+_BIMETRI_OTO = (
+    "@agentickode {neden} Uygulama kodunu düzelt; test ajanının testlerini değiştirme, "
+    "bir test yanlışsa son mesajında açıkla.\n<!-- agentickode-oto -->\n\n"
+)
+
+
+async def _bimetri_oto_izin(gp, rp: str, n: int) -> bool:
+    """Otomatik tur yalnizca acik, botun actigi ve status/on-hold olmayan PR'da."""
+    try:
+        r = await gp._client.get(f"{gp._base_url}/api/v1/repos/{rp}/pulls/{n}", headers=gp._headers(), timeout=30.0)
+        r.raise_for_status()
+        pr = r.json()
+        if pr.get("state") != "open" or pr.get("merged"):
+            return False
+        if any(la.get("name") == "status/on-hold" for la in pr.get("labels") or []):
+            return False
+        r = await gp._client.get(f"{gp._base_url}/api/v1/user", headers=gp._headers(), timeout=30.0)
+        r.raise_for_status()
+        return bool(r.json().get("login")) and (pr.get("user") or {}).get("login") == r.json().get("login")
+    except Exception:
+        logger.warning("Otomatik tur izni denetlenemedi (%s#%s)", rp, n, exc_info=True)
+        return False
+
+
+async def _bimetri_oto_duzeltme(task_run: TaskRun, n: int, session: AsyncSession) -> bool:
+    ozet = str((task_run.review_result or {}).get("summary") or "")
+    if task_run.git_provider != "gitea" or "Değişiklik gerekli" not in ozet[-400:]:
+        return False
+    gp = get_git_provider(task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session))
+    return await _bimetri_oto_izin(gp, f"{task_run.repo_owner}/{task_run.repo_name}", n)
+
+
+async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta: dict, session: AsyncSession) -> None:
+    import contextlib
+    import re
+
+    from backend.config import settings as _settings
+
+    rp = f"{task_run.repo_owner}/{task_run.repo_name}"
+    gp = get_git_provider(task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session))
+    # once ai-test kalksin: bundan sonraki etiket degisiklikleri yeni test kosusu acmasin
+    for _l in ("ai-test", "test/passed", "test/failed"):
+        with contextlib.suppress(Exception):
+            await gp.remove_label(rp, n, _l)
+    with contextlib.suppress(Exception):
+        await gp.add_label(rp, n, "ai-tested")
+    task_run.pr_url = meta.get("pr_url") or None
+
+    git = RemoteGitOps(await get_ssh_for_run(task_run, session))
+    cwd = task_run.workspace_path
+    if (await git.run_git(["status", "--porcelain"], cwd=cwd)).stdout.strip():
+        await git.run_git(["add", "-A"], cwd=cwd)
+        issue_no = meta.get("issue_number")
+        await git.run_git(
+            ["-c", "user.name=AgenticKode", "-c", "user.email=agentickode@localhost",
+             "commit", "-m", f"test: PR #{n} testleri" + (f" (#{issue_no})" if issue_no else "")],
+            cwd=cwd,
+        )
+    # kural denetimi: yalnizca src/test/**, test silme yok, @Disabled/@Ignore yok
+    ihlal = []
+    for satir in (await git.run_git(["diff", "--name-status", f"origin/{pr_branch}..HEAD"], cwd=cwd)).stdout.splitlines():
+        durum, *yollar = satir.split("\t")
+        for y in yollar:
+            if not re.search(r"(^|/)src/test/", y):
+                ihlal.append(f"test klasörü dışında değişiklik: `{y}`")
+            elif durum.startswith("D"):
+                ihlal.append(f"test silindi: `{y}`")
+    fark = (await git.run_git(["diff", "-U0", f"origin/{pr_branch}..HEAD"], cwd=cwd)).stdout
+    if re.search(r"(?m)^\+(?!\+\+).*@(Disabled|Ignore)\b", fark):
+        ihlal.append("`@Disabled` / `@Ignore` eklendi")
+    # bimetri yamasi: degisen test dosyalarinda kaybolan @Test metotlari (silinmis ya da adi degismis)
+    _test_rx = re.compile(
+        r"@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b[^{;]*?\bvoid\s+(\w+)\s*\(", re.S
+    )
+    kaybolan = []
+    _degisen = (await git.run_git(
+        ["diff", "--name-only", "--diff-filter=M", f"origin/{pr_branch}..HEAD"], cwd=cwd
+    )).stdout.splitlines()
+    for y in (y for y in _degisen if re.search(r"(^|/)src/test/", y)):
+        try:
+            _once = (await git.run_git(["show", f"origin/{pr_branch}:{y}"], cwd=cwd)).stdout
+            _sonra = (await git.run_git(["show", f"HEAD:{y}"], cwd=cwd)).stdout
+        except Exception:
+            continue
+        kaybolan += [f"`{y.rsplit('/', 1)[-1]}#{a}`" for a in sorted(set(_test_rx.findall(_once)) - set(_test_rx.findall(_sonra)))]
+    ahead = (await git.run_git(["rev-list", "--count", f"origin/{pr_branch}..HEAD"], cwd=cwd)).stdout.strip()
+
+    rapor = (task_run.coding_results or {}).get("response") or ""
+    if isinstance(rapor, dict):  # CLI ajani: yalnizca son mesaj
+        rapor = rapor.get("output") or ""
+    rapor = (rapor if isinstance(rapor, str) else str(rapor)).strip()
+    m = re.search(r"\*\*Sonuç:\*\*\s*(Testler geçti|Testler kaldı|Test edilemedi)", rapor[-400:])
+    sonuc = m.group(1) if m else "Test edilemedi"
+    if ihlal:
+        sonuc = "Kural ihlali"
+    elif ahead and ahead != "0":
+        await _push_to_pr_branch(task_run, pr_branch, session)
+
+    _kosu = f"{_settings.app_base_url.rstrip('/')}/runs/{task_run.id}"
+    govde = (
+        "## AI Test Raporu\n\n"
+        + (
+            "**Kural ihlali; testler push edilmedi:**\n" + "\n".join(f"- {i}" for i in ihlal) + "\n\n"
+            if ihlal else ""
+        )
+        # bimetri yamasi: kaybolan test metotlari uyarisi (kosuyu durdurmaz)
+        + (
+            "**Uyarı: test ajanı mevcut test metotlarını sildi ya da adlarını değiştirdi:** "
+            + ", ".join(kaybolan)
+            + ". Eski testlerin kapsadığı durumların yeni testlerde olup olmadığına bakın.\n\n"
+            if kaybolan else ""
+        )
+        + (rapor[:12000] or "_Ajan rapor bırakmadı._")
+        + ("" if m else "\n\n_Rapor sonuç satırı içermiyor; 'Test edilemedi' sayıldı._")
+        # bimetri yamasi: test raporunda da ajan ve model (kod PR'indaki gibi)
+        + "\n\n---\n"
+        + f"Ajan: {(task_run.coding_results or {}).get('agent') or '?'}"
+        + (f" · Model: {task_run.coding_results['model']}" if (task_run.coding_results or {}).get("model") else "")
+        + f" · Koşu: [#{task_run.id}]({_kosu}) · AgenticKode"
+    ).replace("@", "@​")
+    oto = sonuc == "Testler kaldı" and await _bimetri_oto_izin(gp, rp, n)
+    if oto:
+        govde = _BIMETRI_OTO.format(neden="Test ajanı başarısız testler buldu (rapor aşağıda).") + govde
+    try:
+        await gp.post_pr_comment(rp, n, govde)
+    except Exception as exc:
+        await broadcaster.log(task_run.id, f"Test raporu yazilamadi: {exc}", level="warning", phase="finalization")
+    await broadcaster.log(task_run.id, f"Test sonucu: {sonuc}", phase="finalization")
+
+    if sonuc == "Testler geçti":
+        await gp.add_label(rp, n, "test/passed")
+        await gp.remove_label(rp, n, "ai-reviewed")
+        await gp.add_label(rp, n, "ai-review")  # label_updated -> inceleme
+    elif sonuc == "Testler kaldı":
+        await gp.add_label(rp, n, "test/failed")
+    else:  # Test edilemedi / kural ihlali: kosu basarisiz -> status/on-hold
+        raise RuntimeError(f"Test kosusu: {sonuc}")
+
+
 async def _cleanup_worktree_if_any(task_run: TaskRun, ssh, phase_config: dict | None) -> None:
     """Remove the per-run worktree if workspace_setup created one.
 
@@ -389,10 +580,15 @@ async def _push_to_pr_branch(task_run: TaskRun, pr_branch: str, session: AsyncSe
     )
 
 
-async def _post_review_comment(task_run: TaskRun, pr_number: int, session: AsyncSession) -> None:
+async def _post_review_comment(
+    task_run: TaskRun, pr_number: int, session: AsyncSession, oto: bool = False
+) -> None:
     """Post AI review results as a comment on the source PR."""
     repo_path = f"{task_run.repo_owner}/{task_run.repo_name}"
-    body = _build_review_comment(task_run.review_result)
+    # bimetri yamasi: incelemedeki @ yeni kosu tetiklemesin; otomatik turda yorum @agentickode ile baslar
+    body = _build_review_comment(task_run.review_result).replace("@", "@​")
+    if oto:
+        body = _BIMETRI_OTO.format(neden="İnceleme değişiklik istedi; aşağıdaki bulguları düzelt.") + body
 
     project_token = await get_project_token(task_run, session)
     client = get_http_client()

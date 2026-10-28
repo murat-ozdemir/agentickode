@@ -186,6 +186,29 @@ async def execute_flow_prompt(
                 "- En sona tek satır: '**Sonuç:** Birleştirilebilir' ya da '**Sonuç:** Değişiklik gerekli'.\n"
                 "- Kod değiştirme.\n"
             )
+        # bimetri yamasi: test ajani kurallari (yalnizca test kodu, calistir, sabit sonuc satiri)
+        elif (run.task_source_meta or {}).get("review_mode") == "test":
+            prompt += (
+                "\n\n## Test ajanı kuralları (yukarıdakilerden önceliklidir)\n"
+                "- Sen test ajanısın. Görevin bu PR'daki değişikliği test etmek; uygulama kodunu düzeltmek değil.\n"
+                "- Repo kökündeki AGENTS.md'yi oku. 'Test yazma' yasağı sana uygulanmaz; diğer kuralları geçerli.\n"
+                "- Yalnızca test klasörlerinde (`src/test/**`) dosya ekle ya da değiştir. Başka hiçbir dosyaya "
+                "dokunma, pom.xml'e de. Eksik bağımlılık ya da ayar varsa raporda belirt.\n"
+                "- Mevcut testleri silme; `@Disabled` ya da `@Ignore` ekleme.\n"
+                "- Değişikliğe göre birim testleri yaz (JUnit 5, Mockito; `*Test.java`). Veritabanına dokunan kod "
+                "için Testcontainers ile entegrasyon testi yaz (`*IT.java`); repodaki örnek IT'nin kurduğu yapıyı kullan.\n"
+                "- Repo kökünde `.sdkmanrc` varsa önce: `source ~/.sdkman/bin/sdkman-init.sh && sdk env`.\n"
+                "- Testleri çalıştır: `mvnw` varsa `sh mvnw -q verify`, yoksa `mvn -q verify`. Yalnızca ilgili "
+                "modül için `-pl <modül> -am` kullanabilirsin.\n"
+                "- Bir test kalırsa nedenini araştır. Hata uygulama kodundaysa testi değiştirme, raporla. "
+                "Hata senin testindeyse testini düzelt.\n"
+                "- Commit et: Türkçe, tek satır, `test: ...` önekiyle. Push etme.\n"
+                "- Son mesajın PR'a test raporu olarak yazılır; Türkçe yaz (ç, ğ, ı, ö, ş, ü): yazdığın testler, "
+                "çalıştırdığın komut, geçen/kalan sayısı, kalan her test için beklenen, gerçekleşen ve olası neden.\n"
+                "- Son mesajının son satırı tam olarak şunlardan biri olsun: '**Sonuç:** Testler geçti', "
+                "'**Sonuç:** Testler kaldı', '**Sonuç:** Test edilemedi'. Ortam yüzünden (Docker, JDK, "
+                "bağımlılık indirme, test veritabanı) çalıştıramadıysan 'Test edilemedi'.\n"
+            )
         else:
             prompt += (
                 "\n\n## Ek kurallar (yukarıdakilerden önceliklidir)\n"
@@ -234,6 +257,13 @@ async def execute_flow_prompt(
             for lbl in _canli + list(_m.get("labels") or [])
         ]
         agent_name = next((lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("agent/")), None)
+        # bimetri yamasi: test kosusunda ajan test-agent/ etiketinden, yoksa kodu yazanin tersi
+        if _m.get("review_mode") == "test":
+            _yazan = agent_name or _m.get("agent_override") or flow.agent
+            agent_name = next(
+                (lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("test-agent/")),
+                {"claude": "codex", "codex": "claude"}.get(_yazan or "", "claude"),
+            )
         if agent_name and agent_name not in AGENT_COMMANDS:
             await broadcaster.log(
                 run.id, f"Bilinmeyen ajan etiketi: agent/{agent_name}", level="warning", phase="agent"

@@ -47,7 +47,8 @@ def _flow_type_for(run: TaskRun) -> str:
     """PR-review runs use the ``pr_review`` flow; everything else ``implement``."""
     # bimetri yamasi: review_mode=fix (PR yorumuyla duzeltme) kod kosusudur, inceleme degil
     _mode = (run.task_source_meta or {}).get("review_mode")
-    return "pr_review" if _mode and _mode != "fix" else "implement"
+    # bimetri yamasi: review_mode=test (ai-test) de PR dalinda calisan kod kosusudur
+    return "pr_review" if _mode and _mode not in ("fix", "test") else "implement"
 
 
 async def execute_pipeline(run: TaskRun, session: AsyncSession, services: ServiceContainer) -> None:

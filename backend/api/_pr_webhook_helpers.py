@@ -144,6 +144,59 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
     return {"status": "accepted", "completed": done}
 
 
+# bimetri yamasi: ai-test etiketi PR dalinda test kosusu acar (review_mode=test); status/on-hold iken acmaz
+async def _bimetri_test_run(
+    body: dict, db: AsyncSession, project: ProjectConfig, label_names: list[str]
+) -> dict:
+    import re
+
+    pr = body.get("pull_request") or {}
+    full = body.get("repository", {}).get("full_name", "")
+    pr_number = int(pr.get("number") or 0)
+    if pr.get("state") != "open" or pr.get("merged"):
+        return {"status": "ignored", "reason": "pr_not_open"}
+    if "status/on-hold" in label_names:
+        return {"status": "ignored", "reason": "on_hold"}
+    head = pr.get("head") or {}
+    branch = head.get("ref") or ""
+    if not branch or (head.get("repo") or {}).get("full_name", full) != full:
+        return {"status": "ignored", "reason": "pr_branch_not_in_repo"}
+    if await _active_review_exists(db, project.project_id, f"pr-test-{pr_number}"):
+        return {"status": "ignored", "reason": "test_in_progress"}
+    m = re.search(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", pr.get("body") or "")
+    issue_no = int(m.group(1)) if m else None
+    base = (pr.get("base") or {}).get("ref") or "main"
+    pr_body = (pr.get("body") or "").strip()[:4000]
+    run = create_task_run(
+        task_id=f"pr-test-{pr_number}",
+        project=project,
+        title=f"[PR #{pr_number}] Test: {(pr.get('title') or '')[:80]}",
+        description=(
+            f"Gitea PR #{pr_number} (**{pr.get('title', '')}**) icin testleri yaz ve calistir.\n\n"
+            f"Bu PR'in dalindasin (`{branch}`); yeni dal acma. PR'daki degisiklik: "
+            f"`git diff origin/{base}...HEAD`.\n"
+            + (f"Bagli issue: #{issue_no}; commit mesajinda `(#{issue_no})` kullan.\n" if issue_no else "")
+            + (f"\nPR aciklamasi:\n\n{pr_body}\n" if pr_body else "")
+        ),
+        task_source="gitea",
+        task_source_meta={
+            "repo_full_name": full,
+            "issue_number": issue_no,
+            "pr_number": pr_number,
+            "pr_head_branch": branch,
+            "pr_url": pr.get("html_url"),
+            "review_mode": "test",
+            "trigger": "ai_test",
+            "labels": label_names,
+        },
+    )
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+    logger.info("Created test run #%d from Gitea PR #%d (%s)", run.id, pr_number, full)
+    return {"status": "accepted", "run_id": run.id}
+
+
 async def handle_pr_event(
     request: Request,
     db: AsyncSession,
@@ -175,6 +228,11 @@ async def handle_pr_event(
         return {"status": "ignored", "reason": "unknown_project"}
 
     label_names = [lbl.get("name", "") for lbl in pr.get("labels", [])]
+    # bimetri yamasi: ai-test once gelir (inceleme testten sonra); push (synchronized) test baslatmaz
+    if source == "gitea" and "ai-test" in label_names:
+        if action == "synchronized":
+            return {"status": "ignored", "reason": "test_not_on_push"}
+        return await _bimetri_test_run(body, db, project, label_names)
     # PR-review is opt-in via the ``ai-review`` label (ADR-009: the run dispatches
     # to the pr_review flow prompt).
     if "ai-review" not in label_names:

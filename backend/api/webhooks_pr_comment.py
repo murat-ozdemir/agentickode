@@ -99,6 +99,9 @@ async def gitea_pr_comment_webhook(
     m = re.search(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", pr.get("body") or "")
     issue_no = int(m.group(1)) if m else None
     labels = [la.get("name", "") for la in pr.get("labels") or []]
+    # bimetri yamasi: status/on-hold iken otomatik tur acilmaz; insanin @agentickode yorumu acar (kosu etiketi kaldirir)
+    if "status/on-hold" in labels and "<!-- agentickode-oto -->" in comment_body:
+        return {"status": "ignored", "reason": "on_hold"}
     if issue_no:  # ajan/zorluk etiketleri issue'dan gelsin
         r = await provider._client.get(f"{api}/issues/{issue_no}", headers=provider._headers(), timeout=30.0)
         if r.status_code == 200:
