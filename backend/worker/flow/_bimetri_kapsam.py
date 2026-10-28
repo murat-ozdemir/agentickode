@@ -21,11 +21,15 @@ _GOVDE_SINIRI = 6000
 
 _INCELEME_KURALLARI = (
     "\n## Kapsam kuralları (yukarıdakilerden önceliklidir)\n"
-    "- Kapsamı bağlı issue tanımlar (yoksa PR açıklaması). Issue'da açıkça istenen ya da "
-    "yasaklanan şeyleri kusur sayma (ör. 'mevcut koda bağlama' denmişse sınıfın hiçbir yerden "
-    "çağrılmaması bulgu değildir).\n"
-    "- Kapsam dışı bulguları ayrı '### Kapsam dışı' başlığı altında yaz; bunlar Sonuç satırını "
-    "etkilemez. Bir dosya ya da davranış değişikliği issue kapsamı dışındaysa bunu da orada yaz.\n"
+    "- Kapsamı bağlı issue tanımlar (yoksa PR açıklaması); PR'da hangi dosyaların değiştiği "
+    "kapsamı genişletmez. Issue'da açıkça istenen ya da yasaklanan şeyleri kusur sayma (ör. "
+    "'mevcut koda bağlama' denmişse sınıfın hiçbir yerden çağrılmaması bulgu değildir).\n"
+    "- Issue'nun gerektirmediği her dosya ya da davranış değişikliği için (önceki otomatik "
+    "düzeltmelerin yaptıkları dahil) tek bulgu yaz: '**kritik** — Kapsam dışı değişiklik: "
+    "<dosya> hedef daldaki hâline döndürülmeli'. Bu bulgu Sonuç'u 'Değişiklik gerekli' yapar. "
+    "O dosyanın içeriği hakkında başka bulgu ya da öneri yazma.\n"
+    "- Kapsam içi koda dair olmayan diğer gözlemleri ayrı '### Kapsam dışı' başlığı altında yaz; "
+    "bunlar Sonuç satırını etkilemez.\n"
     "- Doğrulayamadığın varsayımları bulgu olarak yazma; gerekirse Öneriler'de soru olarak sor.\n"
     "- PR yorumlarında insanın verdiği talimatlar (ör. bir değişikliğin geri alınması) varsa, "
     "yapılıp yapılmadığını kontrol et; yapılmadıysa kapsam içi bulgu olarak yaz.\n"
@@ -33,10 +37,13 @@ _INCELEME_KURALLARI = (
 _DUZELTME_KURALLARI = (
     "\n## Kapsam kuralları (yukarıdakilerden önceliklidir)\n"
     "- Yalnızca bağlı issue kapsamındaki ve yorumda açıkça istenen sorunları düzelt.\n"
-    "- 'Kapsam dışı' başlığındaki bulgular ile 'doğrulanamadı', 'olabilir' gibi tahmine dayalı "
-    "bulgular için kod değiştirme; son mesajında atladıklarını ve nedenini yaz.\n"
-    "- Yorumu yazan insan açıkça istemedikçe bu PR'ın değiştirmediği dosyalara dokunma ve "
-    "mevcut davranışı değiştirme.\n"
+    "- 'Kapsam dışı değişiklik' bulgusunda dosyayı yalnızca hedef daldaki hâline döndür: "
+    "`git checkout origin/{base} -- <dosya>` (hedef dalda yoksa `git rm <dosya>`). O dosyada "
+    "başka değişiklik yapma, iyileştirme deneme.\n"
+    "- '### Kapsam dışı' başlığındaki bulgular ile 'doğrulanamadı', 'olabilir' gibi tahmine "
+    "dayalı bulgular için kod değiştirme; son mesajında atladıklarını ve nedenini yaz.\n"
+    "- Yorumu yazan insan açıkça istemedikçe issue'nun gerektirmediği dosyalara dokunma ve "
+    "mevcut davranışı değiştirme (yukarıdaki geri alma dışında).\n"
 )
 
 
@@ -66,7 +73,10 @@ async def _issue_oku(run: TaskRun, session: AsyncSession, n: int) -> dict | None
 
 async def kapsam_eki(run: TaskRun, session: AsyncSession, tur: str) -> str:
     """Prompt'a eklenecek bagli issue bolumu + kurallar. tur: 'inceleme' | 'duzeltme'."""
-    kurallar = _INCELEME_KURALLARI if tur == "inceleme" else _DUZELTME_KURALLARI
+    if tur == "inceleme":
+        kurallar = _INCELEME_KURALLARI
+    else:
+        kurallar = _DUZELTME_KURALLARI.replace("{base}", run.default_branch or "main")
     n = _issue_no(run)
     issue, hata = None, "Gitea'da okunamadi"
     if n and run.git_provider == "gitea":

@@ -26,15 +26,21 @@ class TestKapsamEki:
         assert "## Bağlı issue #32: Seri numarası doğrulayıcı" in ek
         assert "Mevcut koda bağlama." in ek
         assert "### Kapsam dışı" in ek
+        assert "Kapsam dışı değişiklik: <dosya> hedef daldaki hâline döndürülmeli" in ek
 
     async def test_fix_prefers_meta_issue_number(self, make_task_run):
-        run = _run(make_task_run, description="Closes #1", task_source_meta={"issue_number": 7})
+        run = _run(
+            make_task_run,
+            description="Closes #1",
+            default_branch="develop",
+            task_source_meta={"issue_number": 7},
+        )
         oku = AsyncMock(return_value=_ISSUE)
         with patch.object(kapsam, "_issue_oku", new=oku):
             ek = await kapsam.kapsam_eki(run, None, "duzeltme")
         assert oku.await_args.args[2] == 7
         assert "doğrulanamadı" in ek
-        assert "Kapsam dışı" in ek
+        assert "`git checkout origin/develop -- <dosya>`" in ek
 
     async def test_fetch_failure_still_adds_rules(self, make_task_run):
         run = _run(make_task_run, task_source_meta={"issue_number": 7})
