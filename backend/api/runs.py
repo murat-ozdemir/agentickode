@@ -60,14 +60,38 @@ async def create_run(req: CreateRunRequest, db: AsyncSession = Depends(get_db)):
 
     ts = int(time.time())
     slug = project.project_slug or project.repo_name
-    branch_name = f"agentickode/{slug}/{ts}"
+    # bimetri yamasi: elle acilan kosuda da branch/<tur> etiketi + okunur ad, orn. bug/manual-1729-readme-duzelt
+    import re
+    import unicodedata
+
+    kind = next(
+        (
+            n
+            for n in (
+                re.sub(r"[^a-z0-9-]+", "-", str(lbl).strip().lower()[7:]).strip("-")
+                for lbl in req.labels or []
+                if str(lbl).strip().lower().startswith("branch/")
+            )
+            if n
+        ),
+        "feature",
+    )
+    words = re.sub(
+        r"[^a-z0-9]+",
+        "-",
+        unicodedata.normalize("NFKD", req.title.replace("ı", "i").replace("İ", "I").lower())
+        .encode("ascii", "ignore")
+        .decode(),
+    ).strip("-")[:40].rstrip("-")
+    branch_name = f"{kind}/manual-{ts}" + (f"-{words}" if words else "")
 
     # workspace_server_id from request; auto-assign if not provided
     if req.workspace_server_id is not None:
         ws_server_id = req.workspace_server_id
     else:
         ws_server_id = await select_workspace_for_run(req.project_id, db)
-    workspace_path = project.workspace_path or project.repo_name
+    # bimetri yamasi: klasor yapisi Gitea'daki gibi, orn. /workspaces/Bienport-IoT/platform-backend
+    workspace_path = project.workspace_path or f"/workspaces/{project.repo_owner}/{project.repo_name}"
 
     # Build task_source_meta upfront so we never mutate Column objects
     meta: dict = {"labels": req.labels}

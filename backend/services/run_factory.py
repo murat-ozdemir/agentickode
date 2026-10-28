@@ -19,7 +19,8 @@ def resolve_workspace_path(project: ProjectConfig, task_id: str) -> str:
         return f"/workspaces/{task_id}"
     if project.workspace_path:
         return str(project.workspace_path)
-    return f"/workspaces/{project.project_id}"
+    # bimetri yamasi: klasor yapisi Gitea'daki gibi, orn. /workspaces/Bienport-IoT/platform-backend
+    return f"/workspaces/{project.repo_owner}/{project.repo_name}"
 
 
 def create_task_run(
@@ -49,7 +50,32 @@ def create_task_run(
         project_id=project.project_id,
         title=title,
         description=description,
-        branch_name=f"feature/ai-{task_id}",
+        # bimetri yamasi: okunur branch adi, orn. feature/12-login-hata-mesaji
+        # bimetri yamasi: branch on eki branch/<tur> etiketinden (branch/bug -> bug/), yoksa feature
+        branch_name=next(
+            (
+                n
+                for n in (
+                    __import__("re").sub(r"[^a-z0-9-]+", "-", str(lbl).strip().lower()[7:]).strip("-")
+                    for lbl in (task_source_meta or {}).get("labels") or []
+                    if str(lbl).strip().lower().startswith("branch/")
+                )
+                if n
+            ),
+            "feature",
+        )
+        + f"/{task_id}-"
+        + (
+            __import__("re").sub(
+                r"[^a-z0-9]+",
+                "-",
+                __import__("unicodedata")
+                .normalize("NFKD", title.replace("ı", "i").replace("İ", "I").lower())
+                .encode("ascii", "ignore")
+                .decode(),
+            ).strip("-")[:40].rstrip("-")
+            or "ai"
+        ),
         workspace_path=resolve_workspace_path(project, task_id),
         repo_owner=project.repo_owner,
         repo_name=project.repo_name,
