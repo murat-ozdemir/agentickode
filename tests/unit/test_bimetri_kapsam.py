@@ -42,6 +42,16 @@ class TestKapsamEki:
         assert "doğrulanamadı" in ek
         assert "`git checkout origin/develop -- <dosya>`" in ek
 
+    async def test_test_run_gets_issue_and_test_rules(self, make_task_run):
+        run = _run(make_task_run, task_source_meta={"issue_number": 32, "review_mode": "test"})
+        oku = AsyncMock(return_value=_ISSUE)
+        with patch.object(kapsam, "_issue_oku", new=oku):
+            ek = await kapsam.kapsam_eki(run, None, "test")
+        assert oku.await_args.args[2] == 32
+        assert "## Bağlı issue #32: Seri numarası doğrulayıcı" in ek
+        assert "testleri koda göre değil issue'ya göre yaz" in ek
+        assert "Açık soru" in ek
+
     async def test_fetch_failure_still_adds_rules(self, make_task_run):
         run = _run(make_task_run, task_source_meta={"issue_number": 7})
         with patch.object(kapsam, "_issue_oku", new=AsyncMock(side_effect=RuntimeError("x"))):

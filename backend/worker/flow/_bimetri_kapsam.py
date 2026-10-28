@@ -45,6 +45,15 @@ _DUZELTME_KURALLARI = (
     "- Yorumu yazan insan açıkça istemedikçe issue'nun gerektirmediği dosyalara dokunma ve "
     "mevcut davranışı değiştirme (yukarıdaki geri alma dışında).\n"
 )
+_TEST_KURALLARI = (
+    "\n## Kapsam kuralları (yukarıdakilerden önceliklidir)\n"
+    "- Beklenen davranışı bağlı issue tanımlar; testleri koda göre değil issue'ya göre yaz.\n"
+    "- Kod issue ile çelişiyorsa testi issue'ya göre yaz, kalmasına izin ver ve raporla.\n"
+    "- PR'daki mevcut bir testin beklediği değer issue ile çelişiyorsa testi issue'ya göre "
+    "güncelle (yalnızca `src/test/**`); raporda hangi testi neden değiştirdiğini yaz.\n"
+    "- Issue ilgili kuralı açıkça tanımlamıyorsa hiçbir testi değiştirme; raporda "
+    "'Açık soru' olarak yaz.\n"
+)
 
 
 def _issue_no(run: TaskRun) -> int | None:
@@ -72,9 +81,11 @@ async def _issue_oku(run: TaskRun, session: AsyncSession, n: int) -> dict | None
 
 
 async def kapsam_eki(run: TaskRun, session: AsyncSession, tur: str) -> str:
-    """Prompt'a eklenecek bagli issue bolumu + kurallar. tur: 'inceleme' | 'duzeltme'."""
+    """Prompt'a eklenecek bagli issue bolumu + kurallar. tur: 'inceleme' | 'test' | 'duzeltme'."""
     if tur == "inceleme":
         kurallar = _INCELEME_KURALLARI
+    elif tur == "test":
+        kurallar = _TEST_KURALLARI
     else:
         kurallar = _DUZELTME_KURALLARI.replace("{base}", run.default_branch or "main")
     n = _issue_no(run)

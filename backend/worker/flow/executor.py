@@ -213,6 +213,7 @@ async def execute_flow_prompt(
                 "'**Sonuç:** Testler kaldı', '**Sonuç:** Test edilemedi'. Ortam yüzünden (Docker, JDK, "
                 "bağımlılık indirme, test veritabanı) çalıştıramadıysan 'Test edilemedi'.\n"
             )
+            prompt += await kapsam_eki(run, session, "test")
         else:
             prompt += (
                 "\n\n## Ek kurallar (yukarıdakilerden önceliklidir)\n"
