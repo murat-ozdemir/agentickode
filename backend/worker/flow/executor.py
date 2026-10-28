@@ -84,6 +84,43 @@ def _compose_prompt(prompt: str, data: dict[str, Any]) -> str:
     return f"{prompt}\n\n## Context (fetched by AgenticKode)\n```json\n{block}\n```"
 
 
+# bimetri yamasi: issue'nun ve (biliniyorsa) PR'in durum etiketi (yalnizca Gitea); hata kosuyu bozmaz
+async def _bimetri_durum(run: TaskRun, session: AsyncSession, label: str | None) -> None:
+    import re
+
+    meta = run.task_source_meta or {}
+    if run.git_provider != "gitea":
+        return
+    targets = []
+    if meta.get("issue_number"):
+        targets.append(("Issue", int(meta["issue_number"])))
+    m = re.search(r"/pulls/(\d+)", run.pr_url or meta.get("pr_url") or "")
+    pr_no = meta.get("pr_number") or (m.group(1) if m else None)
+    if pr_no:
+        targets.append(("PR", int(pr_no)))
+    if not targets:
+        return
+    try:
+        from backend.services.git import get_git_provider
+        from backend.services.http_client import get_http_client
+        from backend.worker.phases._helpers import get_project_token
+
+        provider = get_git_provider(
+            "gitea", get_http_client(), access_token=await get_project_token(run, session)
+        )
+    except Exception as exc:
+        await broadcaster.log(run.id, f"Durum etiketi ayarlanamadi: {exc}", level="warning", phase="agent")
+        return
+    for kind, n in targets:
+        try:
+            await provider.set_status_label(f"{run.repo_owner}/{run.repo_name}", n, label)
+            await broadcaster.log(run.id, f"{kind} #{n} durumu: {label or 'temizlendi'}", phase="agent")
+        except Exception as exc:
+            await broadcaster.log(
+                run.id, f"{kind} #{n} durum etiketi ayarlanamadi: {exc}", level="warning", phase="agent"
+            )
+
+
 async def _run_phase(name: str, run: TaskRun, session: AsyncSession, services: ServiceContainer):
     """Run a builtin phase module (workspace_setup / init / finalization)."""
     from backend.worker.pipeline import _get_phase_module
@@ -127,6 +164,9 @@ async def execute_flow_prompt(
     )
 
     try:
+        # bimetri yamasi: kod kosusu basladi, issue (duzeltmede PR de) status/in-progress
+        if flow.flow_type != "pr_review":
+            await _bimetri_durum(run, session, "status/in-progress")
         # Task-mode flows need a checked-out workspace; generate-mode (e.g. PR
         # review on a fetched diff) skips setup entirely.
         if flow.agent_mode == "task":
@@ -146,9 +186,34 @@ async def execute_flow_prompt(
         # bimetri yamasi: etiketle ajan (agent/codex) ve model (difficulty/hard) secimi
         from backend.services.adapters.cli_commands import AGENT_COMMANDS
 
+        # bimetri yamasi: etiketler kosu basinda Gitea'dan guncel okunur (once PR, sonra issue, en son webhook yuku)
+        _canli: list = []
+        _m = run.task_source_meta or {}
+        if run.git_provider == "gitea":
+            try:
+                from backend.services.git import get_git_provider as _ggp
+                from backend.services.http_client import get_http_client as _ghc
+                from backend.worker.phases._helpers import get_project_token as _gpt
+
+                _gp = _ggp("gitea", _ghc(), access_token=await _gpt(run, session))
+                for _n in (_m.get("pr_number"), _m.get("issue_number")):
+                    if not _n:
+                        continue
+                    _r = await _gp._client.get(
+                        f"{_gp._base_url}/api/v1/repos/{run.repo_owner}/{run.repo_name}/issues/{int(_n)}/labels",
+                        headers=_gp._headers(),
+                        timeout=30.0,
+                    )
+                    if _r.status_code == 200:
+                        _canli += [la.get("name", "") for la in _r.json()]
+            except Exception as exc:
+                await broadcaster.log(
+                    run.id, f"Guncel etiketler okunamadi, webhook'takiler kullaniliyor: {exc}",
+                    level="warning", phase="agent",
+                )
         labels = [
             str(lbl).strip().lower().replace("ı", "i")
-            for lbl in (run.task_source_meta or {}).get("labels") or []
+            for lbl in _canli + list(_m.get("labels") or [])
         ]
         agent_name = next((lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("agent/")), None)
         if agent_name and agent_name not in AGENT_COMMANDS:
@@ -223,6 +288,9 @@ async def execute_flow_prompt(
         # bimetri yamasi: PR acilmayan kod kosusu basarili sayilmasin (listede failed gorunsun)
         if flow.flow_type != "pr_review" and not run.pr_url:
             raise RuntimeError("PR acilmadi: ajan degisiklik birakmadi ya da PR olusturulamadi")
+        # bimetri yamasi: PR acik/guncellendi, issue ve PR status/review
+        if flow.flow_type != "pr_review":
+            await _bimetri_durum(run, session, "status/review")
 
         run.status = "completed"
         run.completed_at = datetime.now(UTC)
@@ -244,3 +312,6 @@ async def execute_flow_prompt(
         )
         with contextlib.suppress(Exception):
             await close_run_session(run, session)
+        # bimetri yamasi: basarisiz kod kosusu: issue (ve varsa PR) status/on-hold
+        if flow.flow_type != "pr_review":
+            await _bimetri_durum(run, session, "status/on-hold")

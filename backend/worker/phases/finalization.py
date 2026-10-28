@@ -54,7 +54,57 @@ async def run(
     # fix-mode runs — a comment-only PR review must never push to the PR branch
     # (it has no checkout/commits and pushing would fail or clobber the branch).
     if pr_branch and not task_run.pr_url and review_mode == "fix":
+        # bimetri yamasi: duzeltme kosusu (PR yorumu) - kalan degisikligi commit'le, PR dalina push et, PR'a yorum yaz
+        _git = RemoteGitOps(await get_ssh_for_run(task_run, session))
+        _cwd = task_run.workspace_path
+        if (await _git.run_git(["status", "--porcelain"], cwd=_cwd)).stdout.strip():
+            await _git.run_git(["add", "-A"], cwd=_cwd)
+            await _git.run_git(
+                ["-c", "user.name=AgenticKode", "-c", "user.email=agentickode@localhost",
+                 "commit", "-m", f"fix: PR #{pr_number} yorumundaki istek"],
+                cwd=_cwd,
+            )
+        _ahead = (
+            await _git.run_git(["rev-list", "--count", f"origin/{pr_branch}..HEAD"], cwd=_cwd)
+        ).stdout.strip()
+        if not _ahead or _ahead == "0":
+            raise RuntimeError("Duzeltme kosusu: ajan degisiklik birakmadi, PR dalina push edilmedi")
         await _push_to_pr_branch(task_run, pr_branch, session)
+        task_run.pr_url = meta.get("pr_url") or None
+        await session.commit()
+        try:  # yeni commit'ler yeniden incelensin: ai-reviewed -> ai-review (label_updated tetikler)
+            _gp = get_git_provider(
+                task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session)
+            )
+            _rp = f"{task_run.repo_owner}/{task_run.repo_name}"
+            await _gp.remove_label(_rp, int(pr_number), "ai-reviewed")
+            await _gp.add_label(_rp, int(pr_number), "ai-review")
+        except Exception as exc:
+            await broadcaster.log(
+                task_run.id, f"PR ai-review etiketi geri konamadi: {exc}", level="warning", phase="finalization"
+            )
+        try:
+            from backend.config import settings as _settings
+
+            _ozet = (task_run.coding_results or {}).get("response") or ""
+            if isinstance(_ozet, dict):  # CLI ajani: yalnizca son mesaj
+                _ozet = _ozet.get("output") or ""
+            _ozet = (_ozet if isinstance(_ozet, str) else str(_ozet)).strip()[:6000]
+            _kosu = f"{_settings.app_base_url.rstrip('/')}/runs/{task_run.id}"
+            _govde = (
+                f"## Düzeltme push edildi ({_ahead} commit)\n\n"
+                + (_ozet or "_Ajan özet bırakmadı._")
+                + f"\n\n---\nKoşu: [#{task_run.id}]({_kosu}) · AgenticKode"
+            ).replace("@", "@​")  # kendi yorumu yeni kosu tetiklemesin
+            await get_git_provider(
+                task_run.git_provider,
+                get_http_client(),
+                access_token=await get_project_token(task_run, session),
+            ).post_pr_comment(f"{task_run.repo_owner}/{task_run.repo_name}", int(pr_number), _govde)
+        except Exception as exc:
+            await broadcaster.log(
+                task_run.id, f"PR'a yorum yazilamadi: {exc}", level="warning", phase="finalization"
+            )
 
     # Post review comment on source PR for pr-review / fix-pr workflows
     if task_run.review_result and pr_number:
@@ -133,6 +183,29 @@ async def run(
                 task_run.default_branch,
             ) or None
             await session.commit()
+            # bimetri yamasi: PR'in dalini issue'nun "Branch/Tag" alanina bagla
+            if task_run.pr_url and issue_no and task_run.git_provider == "gitea":
+                try:
+                    _r = await provider._client.patch(
+                        f"{provider._base_url}/api/v1/repos/{task_run.repo_owner}/"
+                        f"{task_run.repo_name}/issues/{issue_no}",
+                        headers=provider._headers(),
+                        json={"ref": f"refs/heads/{task_run.branch_name}"},
+                        timeout=30.0,
+                    )
+                    _r.raise_for_status()
+                    await broadcaster.log(
+                        task_run.id,
+                        f"Issue #{issue_no} dali: {task_run.branch_name}",
+                        phase="finalization",
+                    )
+                except Exception as exc:
+                    await broadcaster.log(
+                        task_run.id,
+                        f"Issue dali ayarlanamadi: {exc}",
+                        level="warning",
+                        phase="finalization",
+                    )
         except Exception as exc:
             await broadcaster.log(
                 task_run.id, f"PR acilamadi: {exc}", level="warning", phase="finalization"

@@ -104,6 +104,46 @@ async def resolve_pr_review_flow_prompt_id(db) -> int | None:
     return int(flow.id) if flow else None
 
 
+# bimetri yamasi: merge edilen PR'a ve aciklamasindaki "Closes #N" issue'larina status/completed
+async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRepository) -> dict:
+    import re
+    from types import SimpleNamespace
+
+    from backend.services.git import get_git_provider
+    from backend.services.http_client import get_http_client
+    from backend.worker.phases._helpers import get_project_token
+
+    pr = body.get("pull_request") or {}
+    full = body.get("repository", {}).get("full_name", "")
+    owner, name = full.split("/", 1) if "/" in full else ("", full)
+    project = await repo.get_by_git_repo("gitea", owner, name)
+    if not project:
+        project = await repo.get_by_id(full)
+    if not project:
+        return {"status": "ignored", "reason": "unknown_project"}
+    pattern = r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)"
+    issues = sorted({int(n) for n in re.findall(pattern, pr.get("body") or "")})
+    if pr.get("number"):  # PR'in kendisi de etiketlensin
+        issues.append(int(pr["number"]))
+    token = await get_project_token(
+        SimpleNamespace(
+            git_provider="gitea",
+            project_id=project.project_id,
+            workspace_server_id=getattr(project, "workspace_server_id", None),
+        ),
+        db,
+    )
+    provider = get_git_provider("gitea", get_http_client(), access_token=token)
+    done = []
+    for n in issues:
+        try:
+            await provider.set_status_label(full, n, "status/completed")
+            done.append(n)
+        except Exception:
+            logger.warning("#%s status/completed etiketlenemedi", n, exc_info=True)
+    return {"status": "accepted", "completed": done}
+
+
 async def handle_pr_event(
     request: Request,
     db: AsyncSession,
@@ -117,6 +157,9 @@ async def handle_pr_event(
     """Parse a provider ``pull_request`` event and launch a review when matched."""
     body = await read_verified_body(request, secret, signature_header)
     action = body.get("action", "")
+    # bimetri yamasi: Gitea'da PR merge edilince bagli issue status/completed
+    if source == "gitea" and action == "closed" and (body.get("pull_request") or {}).get("merged"):
+        return await _bimetri_pr_merged(body, db, repo)
     if action not in allowed_actions:
         return {"status": "ignored", "reason": f"action_{action}"}
 

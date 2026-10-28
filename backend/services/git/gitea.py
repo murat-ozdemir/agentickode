@@ -191,6 +191,52 @@ class GiteaProvider:
         if resp.status_code != 404:
             resp.raise_for_status()
 
+    # bimetri yamasi: tek durum etiketi - hedef status/* eklenir, digerleri (issue ya da PR) kaldirilir
+    async def set_status_label(self, repo_path: str, number: int, label: str | None) -> None:
+        base = f"{self._base_url}/api/v1/repos/{repo_path}/issues/{number}/labels"
+        resp = await self._client.get(base, headers=self._headers(), timeout=30.0)
+        resp.raise_for_status()
+        current = {la.get("name"): la.get("id") for la in resp.json()}
+        for name, lid in current.items():
+            if (name or "").startswith("status/") and name != label:
+                r = await self._client.delete(f"{base}/{lid}", headers=self._headers(), timeout=30.0)
+                if r.status_code != 404:
+                    r.raise_for_status()
+        if not label or label in current:
+            return
+        label_id = await self._label_id(repo_path, label)
+        if label_id is None:  # organizasyon etiketi olabilir
+            owner = repo_path.split("/", 1)[0]
+            r = await self._client.get(
+                f"{self._base_url}/api/v1/orgs/{owner}/labels",
+                headers=self._headers(),
+                params={"limit": 100},
+                timeout=30.0,
+            )
+            if r.status_code == 200:
+                label_id = next((la.get("id") for la in r.json() if la.get("name") == label), None)
+        if label_id is None:
+            logger.warning("Gitea etiketi %r bulunamadi (%s); once Gitea'da olustur", label, repo_path)
+            return
+        r = await self._client.post(base, headers=self._headers(), json={"labels": [label_id]}, timeout=30.0)
+        r.raise_for_status()
+
+    async def assign_self(self, repo_path: str, number: int) -> None:
+        """Token sahibini (bot) mevcut atananlari koruyarak issue'ya ata."""
+        r = await self._client.get(f"{self._base_url}/api/v1/user", headers=self._headers(), timeout=30.0)
+        login = r.json().get("login") if r.status_code == 200 else None
+        login = login or "agentickode"
+        url = f"{self._base_url}/api/v1/repos/{repo_path}/issues/{number}"
+        r = await self._client.get(url, headers=self._headers(), timeout=30.0)
+        r.raise_for_status()
+        names = [u.get("login") for u in r.json().get("assignees") or [] if u.get("login")]
+        if login in names:
+            return
+        r = await self._client.patch(
+            url, headers=self._headers(), json={"assignees": names + [login]}, timeout=30.0
+        )
+        r.raise_for_status()
+
     async def list_issues(self, repo_path: str, state: str = "open", limit: int = 30) -> list[dict]:
         resp = await self._client.get(
             f"{self._base_url}/api/v1/repos/{repo_path}/issues",

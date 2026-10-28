@@ -232,6 +232,27 @@ async def gitea_issue_webhook(
     await db.refresh(run)
 
     logger.info(f"Created run #{run.id} from Gitea webhook: {run.title}")
+    # bimetri yamasi: kuyruga alinan issue status/open ve bot (token sahibi) atanir
+    try:
+        from types import SimpleNamespace
+
+        from backend.services.git import get_git_provider
+        from backend.services.http_client import get_http_client
+        from backend.worker.phases._helpers import get_project_token
+
+        token = await get_project_token(
+            SimpleNamespace(
+                git_provider="gitea",
+                project_id=project.project_id,
+                workspace_server_id=getattr(project, "workspace_server_id", None),
+            ),
+            db,
+        )
+        provider = get_git_provider("gitea", get_http_client(), access_token=token)
+        await provider.set_status_label(repo_full_name, int(issue.get("number")), "status/open")
+        await provider.assign_self(repo_full_name, int(issue.get("number")))
+    except Exception:
+        logger.warning("Issue #%s status/open ya da atama yapilamadi", issue.get("number"), exc_info=True)
     return {"status": "accepted", "run_id": run.id}
 
 
