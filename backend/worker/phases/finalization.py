@@ -124,10 +124,13 @@ async def run(
                 _ozet = _ozet.get("output") or ""
             _ozet = (_ozet if isinstance(_ozet, str) else str(_ozet)).strip()[:6000]
             _kosu = f"{_settings.app_base_url.rstrip('/')}/runs/{task_run.id}"
+            _cr = task_run.coding_results or {}
             _govde = (
                 f"## Düzeltme push edildi ({_ahead} commit)\n\n"
                 + (_ozet or "_Ajan özet bırakmadı._")
-                + f"\n\n---\nKoşu: [#{task_run.id}]({_kosu}) · AgenticKode"
+                + f"\n\n---\nAjan: {_cr.get('agent') or '?'}"
+                + (f" · Model: {_cr['model']}" if _cr.get("model") else "")
+                + f" · Koşu: [#{task_run.id}]({_kosu}) · AgenticKode"
             ).replace("@", "@​")  # kendi yorumu yeni kosu tetiklemesin
             await get_git_provider(
                 task_run.git_provider,

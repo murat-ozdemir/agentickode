@@ -214,6 +214,8 @@ async def execute_flow_prompt(
             prompt += (
                 "\n\n## Ek kurallar (yukarıdakilerden önceliklidir)\n"
                 "- Repo kökündeki AGENTS.md dosyasındaki kurallara uy.\n"
+                "- Repo kökünde `.sdkmanrc` varsa derlemeden önce: "
+                "`source ~/.sdkman/bin/sdkman-init.sh && sdk env`.\n"
                 "- Push etme, PR açma; PR'ı platform açar. Son mesajında PR'dan söz etme.\n"
                 "- Son mesajını Türkçe yaz (ç, ğ, ı, ö, ş, ü); bu mesaj PR açıklamasına konur.\n"
             )

@@ -30,7 +30,11 @@ class TestDuzeltmeKosusu:
         await db_session.commit()
 
     async def _calistir(self, db_session, make_task_run, mock_services, git: SahteGit):
-        run = make_task_run(pr_url=None, task_source_meta=dict(_META))
+        run = make_task_run(
+            pr_url=None,
+            task_source_meta=dict(_META),
+            coding_results={"agent": "agent/codex@agent-2", "model": "gpt-6-luna"},
+        )
         db_session.add(run)
         await db_session.commit()
         gp = AsyncMock()
@@ -60,6 +64,8 @@ class TestDuzeltmeKosusu:
         gp.add_label.assert_awaited_once_with("org/repo", 5, "ai-test")
         govde = gp.post_pr_comment.await_args.args[2]
         assert govde.startswith("## Düzeltme push edildi (1 commit)")
+        alt = govde.replace("​", "").rsplit("\n", 1)[-1]
+        assert alt.startswith("Ajan: agent/codex@agent-2 · Model: gpt-6-luna · Koşu: [#")
 
     async def test_no_new_commit_fails_without_push(self, db_session, make_task_run, mock_services):
         with pytest.raises(RuntimeError, match="degisiklik birakmadi"):
