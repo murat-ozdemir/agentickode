@@ -84,11 +84,17 @@ async def restart_run(run_id: int, db: AsyncSession = Depends(get_db)):
     if run.status in ("pending", "running"):
         raise HTTPException(400, f"Run is {run.status}, cancel it first")
 
+    await reset_run_for_restart(run, db)
+    await db.commit()
+    logger.info(f"Run #{run_id} fully restarted")
+    return {"status": "restarted"}
+
+
+async def reset_run_for_restart(run, db: AsyncSession) -> None:
+    """Reset a finished run so the worker picks it up from scratch (caller commits)."""
     # Re-derive the original workspace_path from the project config
     project = await db.get(ProjectConfig, run.project_id)
-    original_ws_path = (project.workspace_path if project else None) or run.repo_name
-    run.workspace_path = original_ws_path
-
+    run.workspace_path = (project.workspace_path if project else None) or run.repo_name
     run.status = "pending"
     run.error_message = None
     run.approved = None
@@ -103,10 +109,6 @@ async def restart_run(run_id: int, db: AsyncSession = Depends(get_db)):
     run.test_results = None
     run.review_result = None
     run.updated_at = datetime.now(UTC)
-
-    await db.commit()
-    logger.info(f"Run #{run_id} fully restarted")
-    return {"status": "restarted"}
 
 
 @router.post("/runs/{run_id}/cancel")

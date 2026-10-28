@@ -28,6 +28,7 @@ from backend.repositories.flow_prompt_repo import FlowPromptRepository
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
 from backend.worker.flow.data_sources import fetch_flow_data
+from backend.worker.phases._bimetri_oto import bekletildi_mi
 from backend.worker.phases._helpers import (
     close_run_session,
     ensure_agent_ready,
@@ -307,6 +308,11 @@ async def execute_flow_prompt(
             _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, None, _exc)
             raise
         _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, {**result, "model": model}, None)
+        # bimetri yamasi: CLI hata koduyla bittiyse (limit, kimlik, cokme) kosu basarisiz
+        _rd = result.get("response")
+        _rc = _rd.get("exit_code") if isinstance(_rd, dict) else None
+        if _rc not in (None, 0):
+            raise RuntimeError(f"Ajan CLI hata koduyla bitti ({_rc})")
         run.coding_results = {
             "flow_prompt": flow.name,
             "agent": result.get("agent"),
@@ -337,7 +343,8 @@ async def execute_flow_prompt(
         if flow.flow_type != "pr_review" and not run.pr_url:
             raise RuntimeError("PR acilmadi: ajan degisiklik birakmadi ya da PR olusturulamadi")
         # bimetri yamasi: PR acik/guncellendi, issue ve PR status/review
-        if flow.flow_type != "pr_review":
+        # (otomatik tur siniri dolduysa PR/issue status/on-hold kalir)
+        if flow.flow_type != "pr_review" and not bekletildi_mi(run.id):
             await _bimetri_durum(run, session, "status/review")
 
         run.status = "completed"
@@ -360,6 +367,5 @@ async def execute_flow_prompt(
         )
         with contextlib.suppress(Exception):
             await close_run_session(run, session)
-        # bimetri yamasi: basarisiz kod kosusu: issue (ve varsa PR) status/on-hold
-        if flow.flow_type != "pr_review":
-            await _bimetri_durum(run, session, "status/on-hold")
+        # bimetri yamasi: basarisiz kosu (inceleme dahil): issue (ve varsa PR) status/on-hold
+        await _bimetri_durum(run, session, "status/on-hold")

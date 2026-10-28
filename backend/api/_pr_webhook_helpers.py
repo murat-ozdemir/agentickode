@@ -228,6 +228,16 @@ async def handle_pr_event(
         return {"status": "ignored", "reason": "unknown_project"}
 
     label_names = [lbl.get("name", "") for lbl in pr.get("labels", [])]
+    # bimetri yamasi: bot push'u yok sayilir; insan push'u botun PR'inda testi yeniden baslatir
+    if source == "gitea" and action == "synchronized":
+        try:
+            from backend.api._bimetri_push import proje_saglayici, push_karari
+
+            karar = await push_karari(await proje_saglayici(project, db), body, label_names)
+            if karar:
+                return karar
+        except Exception:
+            logger.warning("Push karari verilemedi (%s)", repo_full_name, exc_info=True)
     # bimetri yamasi: ai-test once gelir (inceleme testten sonra); push (synchronized) test baslatmaz
     if source == "gitea" and "ai-test" in label_names:
         if action == "synchronized":

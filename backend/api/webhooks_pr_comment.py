@@ -31,24 +31,28 @@ async def gitea_pr_comment_webhook(
     repo: ProjectConfigRepository = Depends(_get_repo),
 ):
     import re
-    from types import SimpleNamespace
 
     from sqlalchemy import select
 
+    from backend.api._bimetri_komut import (
+        DEVAM_VARSAYILAN,
+        devam_isareti,
+        inceleme_komutu,
+        komut_ayikla,
+        yazma_yetkisi,
+    )
+    from backend.api._bimetri_push import proje_saglayici
+    from backend.api._bimetri_tekrar import tekrar_baslat
     from backend.api._pr_webhook_helpers import read_verified_body
     from backend.config import settings
     from backend.models import TaskRun
-    from backend.services.git import get_git_provider
-    from backend.services.http_client import get_http_client
-    from backend.worker.phases._helpers import get_project_token
 
     body = await read_verified_body(request, settings.gitea_webhook_secret, "X-Gitea-Signature")
     action = body.get("action", "")
     if action != "created":
         return {"status": "ignored", "reason": f"action_{action}"}
     issue = body.get("issue") or {}
-    if not (body.get("is_pull") or issue.get("pull_request")):
-        return {"status": "ignored", "reason": "not_pr"}
+    pr_mi = bool(body.get("is_pull") or issue.get("pull_request"))
     comment = body.get("comment") or {}
     comment_body = comment.get("body") or ""
     if not any(t in comment_body.lower() for t in _MENTION_TRIGGERS):
@@ -63,7 +67,31 @@ async def gitea_pr_comment_webhook(
         logger.warning("No project config for %s", full)
         return {"status": "ignored", "reason": "unknown_project"}
 
+    # bimetri yamasi: komutlar (review/tekrar/devam), yazma yetkisi denetimi, issue'da tekrar
+    provider = await proje_saglayici(project, db)
     pr_number = int(issue.get("number") or 0)
+    login = (comment.get("user") or {}).get("login", "?")
+    try:
+        yetkili = await yazma_yetkisi(provider, full, login)
+    except Exception:
+        logger.warning("Yetki denetlenemedi (%s, %s)", full, login, exc_info=True)
+        yetkili = False
+    if not yetkili:
+        await provider.post_pr_comment(
+            full, pr_number, f"{login}: bu komut için repoda yazma yetkin yok; yok sayıldı."
+        )
+        return {"status": "ignored", "reason": "no_permission"}
+    komut, kalan = komut_ayikla(comment_body)
+    if komut == "tekrar":
+        yanit = await tekrar_baslat(db, provider, full, project.project_id, pr_number, pr_mi)
+        await provider.post_pr_comment(full, pr_number, yanit)
+        return {"status": "accepted", "reason": "retry"}
+    if not pr_mi:  # zero-width bosluk: botun yaniti yeniden komut sayilmasin
+        await provider.post_pr_comment(
+            full, pr_number, "Issue'da yalnızca `@\u200bagentickode tekrar` çalışır."
+        )
+        return {"status": "ignored", "reason": "not_pr"}
+
     active = await db.execute(
         select(TaskRun.id)
         .where(
@@ -76,15 +104,6 @@ async def gitea_pr_comment_webhook(
     if active.scalar_one_or_none():
         return {"status": "ignored", "reason": "fix_in_progress"}
 
-    token = await get_project_token(
-        SimpleNamespace(
-            git_provider="gitea",
-            project_id=project.project_id,
-            workspace_server_id=getattr(project, "workspace_server_id", None),
-        ),
-        db,
-    )
-    provider = get_git_provider("gitea", get_http_client(), access_token=token)
     api = f"{provider._base_url}/api/v1/repos/{full}"
     resp = await provider._client.get(f"{api}/pulls/{pr_number}", headers=provider._headers(), timeout=30.0)
     resp.raise_for_status()
@@ -102,17 +121,19 @@ async def gitea_pr_comment_webhook(
     # bimetri yamasi: status/on-hold iken otomatik tur acilmaz; insanin @agentickode yorumu acar (kosu etiketi kaldirir)
     if "status/on-hold" in labels and "<!-- agentickode-oto -->" in comment_body:
         return {"status": "ignored", "reason": "on_hold"}
+    if komut == "review":
+        yanit = await inceleme_komutu(provider, full, pr_number, issue_no, labels)
+        await provider.post_pr_comment(full, pr_number, yanit)
+        return {"status": "accepted", "reason": "review"}
+    if komut == "devam":
+        await devam_isareti(provider, full, pr_number, login)
     if issue_no:  # ajan/zorluk etiketleri issue'dan gelsin
         r = await provider._client.get(f"{api}/issues/{issue_no}", headers=provider._headers(), timeout=30.0)
         if r.status_code == 200:
             labels += [la.get("name", "") for la in r.json().get("labels") or []]
 
-    instruction = comment_body
-    for trigger in _MENTION_TRIGGERS:
-        instruction = re.sub(re.escape(trigger), "", instruction, flags=re.IGNORECASE)
-    instruction = instruction.strip() or f"PR #{pr_number} uzerindeki yorumlari ele al"
+    instruction = kalan or (DEVAM_VARSAYILAN if komut == "devam" else f"PR #{pr_number} uzerindeki yorumlari ele al")
     alinti = "> " + comment_body.strip().replace("\n", "\n> ")
-    login = (comment.get("user") or {}).get("login", "?")
 
     run = create_task_run(
         task_id=f"pr-comment-{pr_number}-{comment.get('id', '')}",

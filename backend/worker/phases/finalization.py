@@ -23,6 +23,13 @@ from backend.services.http_client import get_http_client
 from backend.services.workspace.sandbox import RemoteSandbox
 from backend.services.workspace.worktree import WorktreeManager, WorktreePaths
 from backend.worker.broadcaster import broadcaster
+from backend.worker.phases._bimetri_etiket import (
+    etiketler,
+    inceleme_baslat,
+    inceleme_istendi,
+    pr_acilis_etiketleri,
+)
+from backend.worker.phases._bimetri_oto import OTO_YORUM, oto_tur_karari
 from backend.worker.phases._helpers import (
     close_run_session,
     get_auth_url,
@@ -100,8 +107,11 @@ async def run(
                     + "\n\nTest dosyalarını değiştirmek insan onayı ister; zincir durdu (`status/on-hold`). "
                     "Uygunsa `status/on-hold`'u kaldırıp `ai-test` koy.",
                 )
-            else:
-                await _gp.add_label(_rp, int(pr_number), "ai-test" if _mvnw else "ai-review")
+            elif _mvnw:
+                await _gp.add_label(_rp, int(pr_number), "ai-test")
+            # bimetri yamasi: mvnw yoksa AI incelemesi yalnizca istendiyse (issue/PR'da ai-review)
+            elif await inceleme_istendi(_gp, _rp, int(pr_number), meta.get("issue_number")):
+                await _gp.add_label(_rp, int(pr_number), "ai-review")
         except Exception as exc:
             await broadcaster.log(
                 task_run.id, f"PR test/inceleme etiketleri ayarlanamadi: {exc}", level="warning", phase="finalization"
@@ -242,22 +252,26 @@ async def run(
                 task_run.default_branch,
             ) or None
             await session.commit()
-            # bimetri yamasi: yeni PR'a ai-test (repoda mvnw varsa); test ajani zinciri baslatir
+            # bimetri yamasi: yeni PR'a difficulty/*, test-agent/* ve ai-test (mvnw varsa) ya da ai-review
             if task_run.pr_url and task_run.git_provider == "gitea":
                 try:
                     _mvnw = await RemoteGitOps(await get_ssh_for_run(task_run, session)).run_git(
                         ["ls-files", "mvnw"], cwd=task_run.workspace_path
                     )
-                    if _mvnw.stdout.strip():
-                        await provider.add_label(
-                            f"{task_run.repo_owner}/{task_run.repo_name}",
-                            int(task_run.pr_url.rstrip("/").rsplit("/", 1)[-1]),
-                            "ai-test",
-                        )
-                        await broadcaster.log(task_run.id, "PR'a ai-test kondu", phase="finalization")
+                    _konan = await pr_acilis_etiketleri(
+                        provider,
+                        f"{task_run.repo_owner}/{task_run.repo_name}",
+                        int(task_run.pr_url.rstrip("/").rsplit("/", 1)[-1]),
+                        issue_no,
+                        _cr.get("agent"),
+                        bool(_mvnw.stdout.strip()),
+                    )
+                    await broadcaster.log(
+                        task_run.id, f"PR etiketleri: {', '.join(_konan) or 'yok'}", phase="finalization"
+                    )
                 except Exception as exc:
                     await broadcaster.log(
-                        task_run.id, f"PR'a ai-test konamadi: {exc}", level="warning", phase="finalization"
+                        task_run.id, f"PR etiketleri konamadi: {exc}", level="warning", phase="finalization"
                     )
             # bimetri yamasi: PR'in dalini issue'nun "Branch/Tag" alanina bagla
             if task_run.pr_url and issue_no and task_run.git_provider == "gitea":
@@ -370,37 +384,14 @@ async def run(
     await broadcaster.log(task_run.id, "Cleanup complete", phase="finalization")
 
 
-# bimetri yamasi: otomatik duzeltme turu - bu yorumu webhook (gitea-pr-comment) duzeltme kosusuna cevirir
-_BIMETRI_OTO = (
-    "@agentickode {neden} Uygulama kodunu düzelt; test ajanının testlerini değiştirme, "
-    "bir test yanlışsa son mesajında açıkla.\n<!-- agentickode-oto -->\n\n"
-)
-
-
-async def _bimetri_oto_izin(gp, rp: str, n: int) -> bool:
-    """Otomatik tur yalnizca acik, botun actigi ve status/on-hold olmayan PR'da."""
-    try:
-        r = await gp._client.get(f"{gp._base_url}/api/v1/repos/{rp}/pulls/{n}", headers=gp._headers(), timeout=30.0)
-        r.raise_for_status()
-        pr = r.json()
-        if pr.get("state") != "open" or pr.get("merged"):
-            return False
-        if any(la.get("name") == "status/on-hold" for la in pr.get("labels") or []):
-            return False
-        r = await gp._client.get(f"{gp._base_url}/api/v1/user", headers=gp._headers(), timeout=30.0)
-        r.raise_for_status()
-        return bool(r.json().get("login")) and (pr.get("user") or {}).get("login") == r.json().get("login")
-    except Exception:
-        logger.warning("Otomatik tur izni denetlenemedi (%s#%s)", rp, n, exc_info=True)
-        return False
-
-
 async def _bimetri_oto_duzeltme(task_run: TaskRun, n: int, session: AsyncSession) -> bool:
     ozet = str((task_run.review_result or {}).get("summary") or "")
     if task_run.git_provider != "gitea" or "Değişiklik gerekli" not in ozet[-400:]:
         return False
     gp = get_git_provider(task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session))
-    return await _bimetri_oto_izin(gp, f"{task_run.repo_owner}/{task_run.repo_name}", n)
+    return await oto_tur_karari(
+        gp, f"{task_run.repo_owner}/{task_run.repo_name}", n, "inceleme değişiklik istedi", task_run.id
+    )
 
 
 async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta: dict, session: AsyncSession) -> None:
@@ -411,8 +402,11 @@ async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta
 
     rp = f"{task_run.repo_owner}/{task_run.repo_name}"
     gp = get_git_provider(task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session))
+    # bimetri yamasi: insan test surerken ai-review koyduysa hatirla; ai-test'ten once kaldir ki
+    # ai-test kalkinca inceleme test sonucunu beklemeden baslamasin
+    pr_ai_review = "ai-review" in await etiketler(gp, rp, n)
     # once ai-test kalksin: bundan sonraki etiket degisiklikleri yeni test kosusu acmasin
-    for _l in ("ai-test", "test/passed", "test/failed"):
+    for _l in ("ai-review", "ai-test", "test/passed", "test/failed"):
         with contextlib.suppress(Exception):
             await gp.remove_label(rp, n, _l)
     with contextlib.suppress(Exception):
@@ -491,9 +485,11 @@ async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta
         + (f" · Model: {task_run.coding_results['model']}" if (task_run.coding_results or {}).get("model") else "")
         + f" · Koşu: [#{task_run.id}]({_kosu}) · AgenticKode"
     ).replace("@", "@​")
-    oto = sonuc == "Testler kaldı" and await _bimetri_oto_izin(gp, rp, n)
+    oto = sonuc == "Testler kaldı" and await oto_tur_karari(
+        gp, rp, n, "test ajanı başarısız testler buldu", task_run.id
+    )
     if oto:
-        govde = _BIMETRI_OTO.format(neden="Test ajanı başarısız testler buldu (rapor aşağıda).") + govde
+        govde = OTO_YORUM.format(neden="Test ajanı başarısız testler buldu (rapor aşağıda).") + govde
     try:
         await gp.post_pr_comment(rp, n, govde)
     except Exception as exc:
@@ -502,8 +498,11 @@ async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta
 
     if sonuc == "Testler geçti":
         await gp.add_label(rp, n, "test/passed")
-        await gp.remove_label(rp, n, "ai-reviewed")
-        await gp.add_label(rp, n, "ai-review")  # label_updated -> inceleme
+        # bimetri yamasi: AI incelemesi istege bagli; istenmediyse PR status/review'da insani bekler
+        if pr_ai_review or await inceleme_istendi(gp, rp, n, meta.get("issue_number")):
+            await inceleme_baslat(gp, rp, n)  # label_updated -> inceleme
+        else:
+            await broadcaster.log(task_run.id, "AI incelemesi istenmedi; insan incelemesi bekleniyor", phase="finalization")
     elif sonuc == "Testler kaldı":
         await gp.add_label(rp, n, "test/failed")
     else:  # Test edilemedi / kural ihlali: kosu basarisiz -> status/on-hold
@@ -598,7 +597,7 @@ async def _post_review_comment(
         + " · AgenticKode incelemesi"
     )
     if oto:
-        body = _BIMETRI_OTO.format(neden="İnceleme değişiklik istedi; aşağıdaki bulguları düzelt.") + body
+        body = OTO_YORUM.format(neden="İnceleme değişiklik istedi; aşağıdaki bulguları düzelt.") + body
 
     project_token = await get_project_token(task_run, session)
     client = get_http_client()
