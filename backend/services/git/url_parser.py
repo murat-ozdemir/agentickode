@@ -27,6 +27,11 @@ class ParsedGitUrl:
 
 
 def _provider_from_host(host: str) -> str:
+    # bimetri yamasi: .env'deki GITEA_URL'nin sunucusu Gitea sayilir
+    from backend.config import settings
+
+    if settings.gitea_url and host == urlparse(settings.gitea_url).hostname:
+        return "gitea"
     return _HOST_TO_PROVIDER.get(host, "unknown")
 
 

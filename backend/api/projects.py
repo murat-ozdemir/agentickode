@@ -280,10 +280,9 @@ async def create_project(
 
         git_url = f"git@{_provider_host(body.git_provider)}:{body.repo_owner}/{body.repo_name}.git"
         ssh = executor_for_server(server)
-        try:
+        # bimetri yamasi: SSH dogrulamasi olmazsa (Gitea'da SSH kapali) HTTP API'ye dus
+        with contextlib.suppress(Exception):
             detected_branch = await get_default_branch_via_ssh(ssh, git_url)
-        except Exception as exc:
-            raise HTTPException(422, f"SSH repo verification failed: {exc}") from exc
 
     # Step 2: Fallback to direct provider HTTP API if no SSH or no server
     if detected_branch is None:
