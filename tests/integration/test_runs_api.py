@@ -136,7 +136,7 @@ class TestWebhookToRunFlow:
         detail = resp.json()
         assert detail["title"] == "Fix auth bug"
         assert detail["task_source"] == "plane"
-        assert detail["branch_name"] == "feature/ai-TASK-100"
+        assert detail["branch_name"] == "feature/TASK-100-fix-auth-bug"
 
     async def test_plane_webhook_ignores_non_ai_task(self, client, seeded_project):
         payload = {

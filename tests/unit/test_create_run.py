@@ -45,7 +45,7 @@ class TestCreateRun:
         assert data["title"] == "Fix the login bug"
         assert data["project_id"] == "test-proj"
         assert data["id"] > 0
-        assert "agentickode/test-proj/" in data["branch_name"]
+        assert data["branch_name"].startswith("feature/manual-")
 
     async def test_create_run_missing_project_returns_404(self, client: AsyncClient):
         resp = await client.post(
@@ -138,11 +138,12 @@ class TestCreateRun:
         )
         assert resp.status_code == 201
         branch = resp.json()["branch_name"]
-        # Format: agentickode/{slug}/{timestamp}
-        parts = branch.split("/")
-        assert parts[0] == "agentickode"
-        assert parts[1] == "test-proj"
-        assert parts[2].isdigit()
+        # Format: <branch/ etiketi ya da feature>/manual-<timestamp>-<baslik>
+        kind, rest = branch.split("/")
+        assert kind == "feature"
+        _, ts, words = rest.split("-", 2)
+        assert ts.isdigit()
+        assert words == "branch-name-test"
 
     async def test_create_run_task_source_is_manual(self, client: AsyncClient, project, db_session):
         resp = await client.post(

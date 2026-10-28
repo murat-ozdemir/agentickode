@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from backend.worker.phases import finalization
+from tests.unit.bimetri_sahte import SahteGit
 
 
 class TestFinalization:
@@ -411,7 +412,12 @@ class TestFinalization:
         """An explicit fix-mode run pushes fixes to the existing PR branch."""
         run = make_task_run(
             pr_url=None,
-            task_source_meta={"pr_head_branch": "feature/x", "review_mode": "fix"},
+            task_source_meta={
+                "pr_head_branch": "feature/x",
+                "review_mode": "fix",
+                "pr_number": 5,
+                "pr_url": "https://gitea.test/org/repo/pulls/5",
+            },
         )
         db_session.add(run)
         await db_session.commit()
@@ -430,6 +436,12 @@ class TestFinalization:
                 "backend.worker.phases.finalization._push_to_pr_branch",
                 new=AsyncMock(),
             ) as mock_push,
+            patch(
+                "backend.worker.phases.finalization.RemoteGitOps",
+                return_value=SahteGit(ahead="1"),
+            ),
+            patch("backend.worker.phases.finalization.get_project_token", new=AsyncMock()),
+            patch("backend.worker.phases.finalization.get_git_provider", return_value=AsyncMock()),
         ):
             mock_sb_cls.return_value.stop_sandbox = AsyncMock()
             await finalization.run(run, db_session, mock_services)

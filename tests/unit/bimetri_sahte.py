@@ -63,6 +63,23 @@ class SahteGitea:
         self.yorum.setdefault(n, []).append(govde)
 
 
+class SahteGit:
+    """RemoteGitOps yerine: duzeltme kosusunun sordugu git komutlarina sabit yanit."""
+
+    def __init__(self, ahead: str = "1", diff: str = "", mvnw: bool = True):
+        self.yanit = {
+            "status": "",
+            "rev-list": ahead,
+            "diff": diff,
+            "ls-files": "mvnw" if mvnw else "",
+        }
+        self.komutlar: list[list[str]] = []
+
+    async def run_git(self, args: list[str], cwd: str | None = None):
+        self.komutlar.append(args)
+        return SimpleNamespace(stdout=self.yanit.get(args[0], ""))
+
+
 def _hata(kod: int):
     def _f():
         if kod >= 400:

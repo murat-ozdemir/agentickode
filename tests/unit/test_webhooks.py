@@ -15,11 +15,13 @@ class TestResolveWorkspacePath:
         p.project_id = project_id
         p.workspace_config = workspace_config
         p.workspace_path = workspace_path
+        p.repo_owner = "org"
+        p.repo_name = "repo"
         return p
 
     def test_existing_workspace_type(self):
         project = self._make_project({"workspace_type": "existing"})
-        assert _resolve_workspace_path(project, "task-123") == "/workspaces/proj-1"
+        assert _resolve_workspace_path(project, "task-123") == "/workspaces/org/repo"
 
     def test_cluster_workspace_type(self):
         project = self._make_project({"workspace_type": "cluster"})
@@ -27,11 +29,11 @@ class TestResolveWorkspacePath:
 
     def test_default_without_config(self):
         project = self._make_project(None)
-        assert _resolve_workspace_path(project, "task-123") == "/workspaces/proj-1"
+        assert _resolve_workspace_path(project, "task-123") == "/workspaces/org/repo"
 
     def test_default_with_empty_config(self):
         project = self._make_project({})
-        assert _resolve_workspace_path(project, "task-123") == "/workspaces/proj-1"
+        assert _resolve_workspace_path(project, "task-123") == "/workspaces/org/repo"
 
     def test_uses_discovered_workspace_path(self):
         project = self._make_project(None, workspace_path="/home/workspace/linker")
@@ -75,11 +77,23 @@ class TestCreateTaskRun:
         )
         assert run.task_id == "TASK-42"
         assert run.project_id == "proj-1"
-        assert run.branch_name == "feature/ai-TASK-42"
-        assert run.workspace_path == "/workspaces/proj-1"
+        assert run.branch_name == "feature/TASK-42-fix-bug"
+        assert run.workspace_path == "/workspaces/org/repo"
         assert run.repo_owner == "org"
         assert run.git_provider == "gitea"
         assert run.use_claude_api is False
+
+    def test_branch_label_and_turkish_title_shape_branch_name(self):
+        run = _create_task_run(
+            task_id="7",
+            project=self._make_project(),
+            title="Giriş sayfası hatası",  # noqa: RUF001 - dotless i is the point
+            description="d",
+            task_source="gitea",
+            task_source_meta={"labels": ["ai-task", "branch/bug"]},
+            use_claude=False,
+        )
+        assert run.branch_name == "bug/7-giris-sayfasi-hatasi"
 
     def test_use_claude_flag(self):
         project = self._make_project()
