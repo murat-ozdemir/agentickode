@@ -132,6 +132,9 @@ async def execute_flow_prompt(
         # posts it as a PR comment + flips the label (parity with the template path).
         if flow.flow_type == "pr_review":
             resp = result.get("response")
+            # bimetri yamasi: inceleme yorumunda yalnizca ajanin son mesaji (stderr/prompt degil)
+            if isinstance(resp, dict) and isinstance(resp.get("output"), str):
+                resp = resp["output"]
             review_text = resp if isinstance(resp, str) else json.dumps(resp, default=str)
             run.review_result = {
                 "summary": review_text,
