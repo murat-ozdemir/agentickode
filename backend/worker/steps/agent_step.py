@@ -74,6 +74,20 @@ async def run_agent_step(
         project_id=task_run.project_id,
     )
     adapter = resolved.adapter
+    # bimetri yamasi: etiketten gelen modeli komut sablonuna ekle (runuser sarmalayicisinin icine)
+    if phase_config.get("model") and isinstance(adapter, CLIAdapter):
+        import re
+        import shlex
+
+        flag = " --model " + shlex.quote(str(phase_config["model"]))
+        pattern = rf"(?<![\w/.-]){re.escape(adapter.agent_name)}( exec)?(?=\s|$)"
+        adapter.apply_command_overrides(
+            {
+                k: re.sub(pattern, lambda m: m.group(0) + flag, v, count=1)
+                for k, v in adapter._commands.items()
+                if isinstance(v, str) and k != "check"
+            }
+        )
 
     # Resolve effective run-as: step ``params.run_as`` wins over project
     # override. When the adapter is a ``CLIAdapter`` we temporarily flip

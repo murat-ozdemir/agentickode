@@ -105,8 +105,33 @@ async def execute_flow_prompt(
         # Ensure the CLI agent is installed for the run-as (worker) user before
         # invoking it — parity with the legacy coding/reviewing phases. No-op for
         # root / non-CLI adapters; installs into the worker user's home otherwise.
+        # bimetri yamasi: etiketle ajan (agent/codex) ve model (difficulty/hard) secimi
+        from backend.services.adapters.cli_commands import AGENT_COMMANDS
+
+        labels = [
+            str(lbl).strip().lower().replace("ı", "i")
+            for lbl in (run.task_source_meta or {}).get("labels") or []
+        ]
+        agent_name = next((lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("agent/")), None)
+        if agent_name and agent_name not in AGENT_COMMANDS:
+            await broadcaster.log(
+                run.id, f"Bilinmeyen ajan etiketi: agent/{agent_name}", level="warning", phase="agent"
+            )
+            agent_name = None
+        agent_name = agent_name or (run.task_source_meta or {}).get("agent_override") or flow.agent
+        tier = next(
+            (lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("difficulty/")), "easy"
+        ).upper()
         resolved = await services.agent_resolver.resolve_agent(
-            flow.agent, session, run.workspace_server_id, project_id=run.project_id
+            agent_name, session, run.workspace_server_id, project_id=run.project_id
+        )
+        env = (resolved.agent_settings.environment_vars if resolved.agent_settings else None) or {}
+        model = env.get(f"MODEL_FOR_DIFFICULTY_{tier}") or env.get(f"MODEL_FOR_{tier}") or None
+        await broadcaster.log(
+            run.id,
+            f"Ajan: {getattr(resolved.adapter, 'agent_name', agent_name)}, difficulty: {tier.lower()}, "
+            f"model: {model or 'ajanin varsayilani'}",
+            phase="agent",
         )
 
         async def _agent_log(msg: str, level: str = "info") -> None:
@@ -120,13 +145,16 @@ async def execute_flow_prompt(
             run,
             session,
             services,
-            {"agent": flow.agent, "params": {"prompt": prompt, "mode": flow.agent_mode}},
+            # bimetri yamasi: etiketten gelen ajan ve model
+            {"agent": agent_name, "model": model, "params": {"prompt": prompt, "mode": flow.agent_mode}},
         )
         run.coding_results = {
             "flow_prompt": flow.name,
             "agent": result.get("agent"),
             "mode": result.get("mode"),
             "response": result.get("response"),
+            # bimetri yamasi: PR aciklamasi icin secilen model
+            "model": model,
         }
         # PR-review flows: surface the response as review_result so finalization
         # posts it as a PR comment + flips the label (parity with the template path).
