@@ -444,15 +444,17 @@ def _build_review_comment(review: dict) -> str:
     summary = review.get("summary", "")
     approved = review.get("approved", False)
 
-    parts = ["## AI Code Review\n"]
+    # bimetri yamasi: Turkce baslik; sabit Status/Issues/Suggestions satirlari yalnizca yapilandirilmis sonucta
+    parts = ["## AI Kod İncelemesi\n"]
 
     if summary:
         parts.append(f"{summary}\n")
 
-    status = "Approved" if approved else "Changes Requested"
-    parts.append(f"**Status**: {status}")
-    parts.append(f"**Issues Found**: {len(issues)}")
-    parts.append(f"**Suggestions**: {len(suggestions)}\n")
+    if issues or suggestions:
+        status = "Onaylandı" if approved else "Değişiklik gerekli"
+        parts.append(f"**Durum**: {status}")
+        parts.append(f"**Bulgu**: {len(issues)}")
+        parts.append(f"**Öneri**: {len(suggestions)}\n")
 
     if issues:
         parts.append("### Issues\n")

@@ -175,6 +175,24 @@ async def execute_flow_prompt(
 
         data = await fetch_flow_data(run, session, services, flow)
         prompt = _compose_prompt(flow.prompt, data)
+        # bimetri yamasi: Turkce ve PR'i platform acar (sistem flow prompt'lari Ingilizce, DB'de, arayuzden duzenlenmiyor)
+        if flow.flow_type == "pr_review":
+            prompt += (
+                "\n\n## Ek kurallar (yukarıdakilerden önceliklidir)\n"
+                "- İncelemeni Türkçe yaz; Türkçe karakterleri (ç, ğ, ı, ö, ş, ü) kullan.\n"
+                "- Biçim: önce 1-2 cümlelik özet; sonra '### Bulgular' başlığı altında her bulgu için "
+                "önem (kritik/orta/düşük), dosya:satır ve kısa açıklama; sonra '### Öneriler'. "
+                "Bulgu yoksa bunu açıkça yaz.\n"
+                "- En sona tek satır: '**Sonuç:** Birleştirilebilir' ya da '**Sonuç:** Değişiklik gerekli'.\n"
+                "- Kod değiştirme.\n"
+            )
+        else:
+            prompt += (
+                "\n\n## Ek kurallar (yukarıdakilerden önceliklidir)\n"
+                "- Repo kökündeki AGENTS.md dosyasındaki kurallara uy.\n"
+                "- Push etme, PR açma; PR'ı platform açar. Son mesajında PR'dan söz etme.\n"
+                "- Son mesajını Türkçe yaz (ç, ğ, ı, ö, ş, ü); bu mesaj PR açıklamasına konur.\n"
+            )
 
         run.current_phase = "agent"
         await broadcaster.event(run.id, "phase_changed", {"phase": "agent"})
