@@ -56,6 +56,17 @@ async def get_workspace_server_id(task_run: TaskRun, session: AsyncSession) -> i
     if run_server_id is not None:
         return run_server_id
 
+    # bimetri yamasi: webhook kosulari sunucusuz gelir; en bos sunucuyu sec ve kosuya yaz
+    # (yoksa hep oncelik 0'daki makineye gidiyor, ayni anda gelen kosular ayni klasoru eziyordu)
+    if isinstance(task_run, TaskRun) and task_run.project_id:
+        from backend.services.workspace.workspace_selector import select_workspace_for_run
+
+        secilen = await select_workspace_for_run(task_run.project_id, session)
+        if secilen is not None:
+            task_run.workspace_server_id = secilen
+            await session.commit()
+            return secilen
+
     stmt = (
         select(ProjectWorkspaceServer.workspace_server_id)
         .where(ProjectWorkspaceServer.project_id == task_run.project_id)

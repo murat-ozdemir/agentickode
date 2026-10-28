@@ -32,31 +32,44 @@ async def select_workspace_for_run(
     """
     exclude = set(exclude_server_ids or [])
 
-    # Subquery: count active runs per workspace server
+    # bimetri yamasi: aktif kosu sayisi tum projelerde (makine paylasiliyor); esitse en uzun suredir
+    # kosu almayan sunucu, sonra oncelik. Boylece sirali kosular da makineler arasinda doner.
     active_counts = (
         select(
             TaskRun.workspace_server_id,
             func.count(TaskRun.id).label("active"),
         )
         .where(
-            TaskRun.project_id == project_id,
             TaskRun.status.in_(["pending", "running"]),
             TaskRun.workspace_server_id.is_not(None),
         )
         .group_by(TaskRun.workspace_server_id)
         .subquery()
     )
+    last_used = (
+        select(
+            TaskRun.workspace_server_id,
+            func.max(TaskRun.id).label("last_run"),
+        )
+        .where(TaskRun.workspace_server_id.is_not(None))
+        .group_by(TaskRun.workspace_server_id)
+        .subquery()
+    )
 
-    # Main query: join project's assigned servers with active counts
     stmt = (
         select(ProjectWorkspaceServer.workspace_server_id)
         .outerjoin(
             active_counts,
             ProjectWorkspaceServer.workspace_server_id == active_counts.c.workspace_server_id,
         )
+        .outerjoin(
+            last_used,
+            ProjectWorkspaceServer.workspace_server_id == last_used.c.workspace_server_id,
+        )
         .where(ProjectWorkspaceServer.project_id == project_id)
         .order_by(
             func.coalesce(active_counts.c.active, 0).asc(),
+            func.coalesce(last_used.c.last_run, 0).asc(),
             ProjectWorkspaceServer.priority.asc(),
         )
         .limit(1)
