@@ -54,15 +54,19 @@ Be conversational and proactive. If a run fails, investigate why and suggest nex
 AGENT_COMMANDS: dict[str, dict[str, str]] = {
     "claude": {
         "new": (
-            "claude -p {message}"
+            # bimetri yamasi: --verbose (stream-json icin sart) ve IS_SANDBOX=1 (konteyner root, skip-permissions icin) (yeni sohbet)
+            "IS_SANDBOX=1 claude -p {message}"
             " --output-format stream-json"
+            " --verbose"
             " --session-id {session_id}"
             " --mcp-config {mcp_config}"
             " --dangerously-skip-permissions"
         ),
         "resume": (
-            "claude -p {message}"
+            # bimetri yamasi: --verbose (stream-json icin sart) ve IS_SANDBOX=1 (konteyner root, skip-permissions icin) (devam eden sohbet)
+            "IS_SANDBOX=1 claude -p {message}"
             " --output-format stream-json"
+            " --verbose"
             " --resume {session_id}"
             " --mcp-config {mcp_config}"
             " --dangerously-skip-permissions"
@@ -250,6 +254,9 @@ async def invoke_agent(
 
         # Parse stream-json output (Claude)
         output_text, events = _parse_stream_output(stdout, agent_name)
+        # bimetri yamasi: ajan hata verdiyse bos cevap yerine hatayi goster
+        if not output_text and exit_code:
+            output_text = stderr_bytes.decode("utf-8", errors="replace").strip() or f"Ajan hata verdi (kod {exit_code})"
 
         return InvocationResult(
             output=output_text,
