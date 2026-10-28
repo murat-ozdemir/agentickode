@@ -64,6 +64,115 @@ async def run(
         if review_mode == "comment":
             await _flip_review_label(task_run, pr_number, session)
 
+    # bimetri yamasi: ajan commit/push etmediyse degisiklikleri commit'leyip push et; bos kosuda PR yok
+    bos_kosu = False
+    if not task_run.pr_url and not pr_number and task_run.branch_name and task_run.workspace_path:
+        try:
+            ssh = await get_ssh_for_run(task_run, session)
+            git = RemoteGitOps(ssh)
+            cwd = task_run.workspace_path
+            if (await git.run_git(["status", "--porcelain"], cwd=cwd)).stdout.strip():
+                await git.run_git(["add", "-A"], cwd=cwd)
+                await git.run_git(
+                    ["-c", "user.name=AgenticKode", "-c", "user.email=agentickode@localhost",
+                     "commit", "-m", task_run.title or task_run.branch_name],
+                    cwd=cwd,
+                )
+                await broadcaster.log(
+                    task_run.id, "Ajanin biraktigi degisiklikler commit'lendi", phase="finalization"
+                )
+            ahead = (
+                await git.run_git(
+                    ["rev-list", "--count", f"origin/{task_run.default_branch}..HEAD"], cwd=cwd
+                )
+            ).stdout.strip()
+            if ahead and ahead != "0":
+                auth_url, method = await get_auth_url(
+                    get_repo_https_url(task_run.git_provider, task_run.repo_owner, task_run.repo_name),
+                    task_run.git_provider,
+                    ssh,
+                    token_override=await get_project_token(task_run, session),
+                )
+                await git.run_git(["remote", "set-url", "origin", auth_url], cwd=cwd)
+                await git.run_git(
+                    ["push", "-u", "origin", f"HEAD:refs/heads/{task_run.branch_name}"], cwd=cwd
+                )
+                await broadcaster.log(
+                    task_run.id,
+                    f"{task_run.branch_name} push edildi ({ahead} commit, auth={method})",
+                    phase="finalization",
+                )
+            else:
+                bos_kosu = True
+                await broadcaster.log(
+                    task_run.id,
+                    "Ajan hicbir degisiklik birakmadi; PR acilmayacak",
+                    level="warning",
+                    phase="finalization",
+                )
+        except Exception as exc:
+            await broadcaster.log(
+                task_run.id, f"Branch push edilemedi: {exc}", level="warning", phase="finalization"
+            )
+
+    # bimetri yamasi: degisiklik push edildiyse ve PR yoksa PR'i platform acsin
+    if not task_run.pr_url and not pr_number and task_run.branch_name and not bos_kosu:
+        issue_no = meta.get("issue_number")
+        try:
+            provider = get_git_provider(
+                task_run.git_provider,
+                get_http_client(),
+                access_token=await get_project_token(task_run, session),
+            )
+            task_run.pr_url = await provider.create_pr(
+                f"{task_run.repo_owner}/{task_run.repo_name}",
+                task_run.title,
+                (f"Closes #{issue_no}\n\n" if issue_no else "")
+                + "AgenticKode tarafindan acildi.",
+                task_run.branch_name,
+                task_run.default_branch,
+            ) or None
+            await session.commit()
+        except Exception as exc:
+            await broadcaster.log(
+                task_run.id, f"PR acilamadi: {exc}", level="warning", phase="finalization"
+            )
+
+    # bimetri yamasi: PR'i ajan actiysa aciklamaya "Closes #N" ekle, merge'de issue kapansin
+    issue_no = meta.get("issue_number")
+    if task_run.pr_url and issue_no and task_run.git_provider == "gitea":
+        try:
+            import re
+
+            provider = get_git_provider(
+                task_run.git_provider,
+                get_http_client(),
+                access_token=await get_project_token(task_run, session),
+            )
+            pr_no = task_run.pr_url.rstrip("/").rsplit("/", 1)[-1]
+            api = (
+                f"{provider._base_url}/api/v1/repos/"
+                f"{task_run.repo_owner}/{task_run.repo_name}/pulls/{pr_no}"
+            )
+            resp = await provider._client.get(api, headers=provider._headers(), timeout=30.0)
+            resp.raise_for_status()
+            body = resp.json().get("body") or ""
+            if not re.search(rf"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#{issue_no}\b", body):
+                resp = await provider._client.patch(
+                    api,
+                    headers=provider._headers(),
+                    json={"body": f"Closes #{issue_no}\n\n{body}"},
+                    timeout=30.0,
+                )
+                resp.raise_for_status()
+                await broadcaster.log(
+                    task_run.id, f"PR aciklamasina 'Closes #{issue_no}' eklendi", phase="finalization"
+                )
+        except Exception as exc:
+            await broadcaster.log(
+                task_run.id, f"PR aciklamasi guncellenemedi: {exc}", level="warning", phase="finalization"
+            )
+
     if task_run.pr_url:
         await broadcaster.log(
             task_run.id,

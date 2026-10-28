@@ -143,6 +143,10 @@ async def execute_flow_prompt(
 
         await _run_phase("finalization", run, session, services)
 
+        # bimetri yamasi: PR acilmayan kod kosusu basarili sayilmasin (listede failed gorunsun)
+        if flow.flow_type != "pr_review" and not run.pr_url:
+            raise RuntimeError("PR acilmadi: ajan degisiklik birakmadi ya da PR olusturulamadi")
+
         run.status = "completed"
         run.completed_at = datetime.now(UTC)
         await session.commit()
