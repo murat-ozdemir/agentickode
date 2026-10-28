@@ -587,6 +587,16 @@ async def _post_review_comment(
     repo_path = f"{task_run.repo_owner}/{task_run.repo_name}"
     # bimetri yamasi: incelemedeki @ yeni kosu tetiklemesin; otomatik turda yorum @agentickode ile baslar
     body = _build_review_comment(task_run.review_result).replace("@", "@​")
+    # bimetri yamasi: inceleme yorumunda da ajan, model ve kosu (kod PR'i ve test raporu gibi)
+    from backend.config import settings as _settings
+
+    _cr = task_run.coding_results or {}
+    body = body.removesuffix("*AgenticKode incelemesi*") + (
+        f"Ajan: {_cr.get('agent') or '?'}"
+        + (f" · Model: {_cr['model']}" if _cr.get("model") else "")
+        + f" · Koşu: [#{task_run.id}]({_settings.app_base_url.rstrip('/')}/runs/{task_run.id})"
+        + " · AgenticKode incelemesi"
+    )
     if oto:
         body = _BIMETRI_OTO.format(neden="İnceleme değişiklik istedi; aşağıdaki bulguları düzelt.") + body
 
