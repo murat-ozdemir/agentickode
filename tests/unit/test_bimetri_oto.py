@@ -49,6 +49,7 @@ class TestTurKarari:
         assert not await oto_tur_karari(gp, RP, 5, "testler kaldi", 12)
         assert gp.durum == {5: "status/on-hold", 1: "status/on-hold"}
         assert "3 tur doldu" in gp.yorum[5][-1]
+        assert "@agentickode" not in gp.yorum[5][-1]
         assert bekletildi_mi(12) and not bekletildi_mi(12)
 
     async def test_skipped_on_hold_or_human_pr(self):

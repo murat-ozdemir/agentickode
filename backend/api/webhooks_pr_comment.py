@@ -36,6 +36,7 @@ async def gitea_pr_comment_webhook(
 
     from backend.api._bimetri_komut import (
         DEVAM_VARSAYILAN,
+        bot_yorumu_mu,
         devam_isareti,
         inceleme_komutu,
         komut_ayikla,
@@ -72,6 +73,8 @@ async def gitea_pr_comment_webhook(
     pr_number = int(issue.get("number") or 0)
     login = (comment.get("user") or {}).get("login", "?")
     try:
+        if await bot_yorumu_mu(provider, login, comment_body):
+            return {"status": "ignored", "reason": "bot_comment"}
         yetkili = await yazma_yetkisi(provider, full, login)
     except Exception:
         logger.warning("Yetki denetlenemedi (%s, %s)", full, login, exc_info=True)

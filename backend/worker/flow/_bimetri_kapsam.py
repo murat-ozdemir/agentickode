@@ -9,6 +9,7 @@ pr_review akisi yalnizca PR diff'ini gorur; issue'da istenen ya da yasaklanan se
 disi dosyalari degistirir. Issue Gitea'dan okunur; okunamazsa yalnizca kurallar eklenir.
 """
 
+import contextlib
 import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,12 +68,19 @@ async def kapsam_eki(run: TaskRun, session: AsyncSession, tur: str) -> str:
     """Prompt'a eklenecek bagli issue bolumu + kurallar. tur: 'inceleme' | 'duzeltme'."""
     kurallar = _INCELEME_KURALLARI if tur == "inceleme" else _DUZELTME_KURALLARI
     n = _issue_no(run)
-    issue = None
+    issue, hata = None, "Gitea'da okunamadi"
     if n and run.git_provider == "gitea":
         try:
             issue = await _issue_oku(run, session, n)
-        except Exception:
-            issue = None
+        except Exception as exc:
+            issue, hata = None, exc
+    durum = (
+        f"Bağlı issue #{n} prompt'a eklendi" if issue else f"Bağlı issue eklenmedi (#{n}, {hata})"
+    )
+    with contextlib.suppress(Exception):
+        from backend.worker.broadcaster import broadcaster
+
+        await broadcaster.log(run.id, durum, phase="agent")
     if not issue:
         return kurallar
     govde = (issue.get("body") or "").strip()[:_GOVDE_SINIRI]

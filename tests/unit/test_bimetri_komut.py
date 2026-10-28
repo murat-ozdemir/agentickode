@@ -6,9 +6,15 @@
 
 import pytest
 
-from backend.api._bimetri_komut import inceleme_komutu, komut_ayikla, yazma_yetkisi
+from backend.api._bimetri_komut import (
+    bot_yorumu_mu,
+    inceleme_komutu,
+    komut_ayikla,
+    yazma_yetkisi,
+)
 from backend.api._bimetri_push import push_karari
 from backend.api._bimetri_tekrar import tekrar_baslat
+from backend.worker.phases._bimetri_oto import OTO_ISARET
 from tests.unit.bimetri_sahte import SahteGitea
 
 RP = "org/repo"
@@ -28,6 +34,14 @@ class TestKomutAyikla:
     )
     def test_parses_first_word_after_mention(self, govde, beklenen):
         assert komut_ayikla(govde) == beklenen
+
+
+class TestBotYorumu:
+    async def test_bot_comment_without_auto_marker_is_ignored(self):
+        gp = SahteGitea()
+        assert await bot_yorumu_mu(gp, "agentickode", "`@agentickode devam <yönlendirme>`")
+        assert not await bot_yorumu_mu(gp, "agentickode", f"@agentickode duzelt\n{OTO_ISARET}")
+        assert not await bot_yorumu_mu(gp, "ali", "@agentickode devam")
 
 
 class TestYazmaYetkisi:

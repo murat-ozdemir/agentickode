@@ -78,6 +78,7 @@ async def zorluk_artir(gp, rp: str, n: int, issue_no: int | None) -> str | None:
 
 
 async def _sinir_doldu(gp, rp: str, n: int, issue_no: int | None, neden: str) -> None:
+    # zero-width bosluk: ornek komutlar botun kendi yorumu olarak yeniden komut sayilmasin
     for hedef in (n, issue_no):
         if hedef:
             with contextlib.suppress(Exception):
@@ -88,9 +89,9 @@ async def _sinir_doldu(gp, rp: str, n: int, issue_no: int | None, neden: str) ->
         f"## Otomatik düzeltme durdu: {OTO_TUR_SINIRI} tur doldu\n\n"
         f"Son durum: {neden}\n\n"
         "Geri bildirimin gerekiyor. Seçenekler:\n"
-        "- `@agentickode devam <yönlendirme>`: sayaç sıfırlanır, yönlendirmenle "
+        "- `@\u200bagentickode devam <yönlendirme>`: sayaç sıfırlanır, yönlendirmenle "
         f"{OTO_TUR_SINIRI} tur daha denenir.\n"
-        "- `@agentickode <talimat>`: tek bir düzeltme turu.\n"
+        "- `@\u200bagentickode <talimat>`: tek bir düzeltme turu.\n"
         "- Kodu kendin düzeltip PR dalına push et (test kendiliğinden başlar).\n"
         "- Issue yanlışsa PR'ı kapatıp issue'yu netleştir.",
     )
