@@ -21,7 +21,11 @@ class SahteGitea:
         self.pr: dict[int, dict] = {}
         self.durum: dict[int, str] = {}
         self.yanitlar: dict[str, tuple[int, object]] = {}
-        self._client = SimpleNamespace(get=self._get)
+        self.dosya: dict[int, list[str]] = {}
+        self.ci_durum: dict[str, list[str]] = {}
+        self.dispatch: list[tuple[str, dict]] = []
+        self.dispatch_kodu = 204
+        self._client = SimpleNamespace(get=self._get, post=self._post)
 
     def _headers(self) -> dict:
         return {}
@@ -38,6 +42,11 @@ class SahteGitea:
         elif yol.endswith("/comments"):
             n = int(yol.split("/")[-2])
             kod, veri = 200, [{"body": b} for b in self.yorum.get(n, [])]
+        elif yol.endswith("/files"):
+            kod, veri = 200, [{"filename": d} for d in self.dosya.get(int(yol.split("/")[-2]), [])]
+        elif yol.endswith("/status"):
+            sha = yol.split("/")[-2]
+            kod, veri = 200, {"statuses": [{"context": c} for c in self.ci_durum.get(sha, [])]}
         elif "/pulls/" in yol:
             n = int(yol.rsplit("/", 1)[-1])
             pr = dict(self.pr.get(n, {}))
@@ -46,6 +55,10 @@ class SahteGitea:
         else:
             kod, veri = 404, {}
         return SimpleNamespace(status_code=kod, json=lambda: veri, raise_for_status=_hata(kod))
+
+    async def _post(self, url: str, json: dict | None = None, **_kw):
+        self.dispatch.append((url.removeprefix(API), json or {}))
+        return SimpleNamespace(status_code=self.dispatch_kodu)
 
     async def add_label(self, rp: str, n: int, ad: str) -> None:
         if ad not in self.etiket.setdefault(n, []):

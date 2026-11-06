@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from backend.worker.phases import finalization
-from tests.unit.bimetri_sahte import SahteGit
+from tests.unit.bimetri_sahte import SahteGit, SahteGitea
 
 _META = {
     "pr_head_branch": "feature/x",
@@ -29,7 +29,9 @@ class TestDuzeltmeKosusu:
         )
         await db_session.commit()
 
-    async def _calistir(self, db_session, make_task_run, mock_services, git: SahteGit, gp=None):
+    async def _calistir(
+        self, db_session, make_task_run, mock_services, git: SahteGit, gp=None, dosyalar=("A.java",)
+    ):
         run = make_task_run(
             pr_url=None,
             task_source_meta=dict(_META),
@@ -42,6 +44,15 @@ class TestDuzeltmeKosusu:
         db_session.add(run)
         await db_session.commit()
         gp = gp or AsyncMock()
+        # PR dosyalari ve CI dispatch istekleri sahte Gitea'dan
+        gp.sahte = SahteGitea()
+        gp.sahte.dosya[5] = list(dosyalar)
+        gp.sahte.pr[5] = {"head": {"sha": "abc123", "ref": "f"}}
+        gp._client, gp._base_url, gp._headers = (
+            gp.sahte._client,
+            gp.sahte._base_url,
+            gp.sahte._headers,
+        )
         push = AsyncMock()
         with (
             patch(
@@ -70,6 +81,15 @@ class TestDuzeltmeKosusu:
         assert govde.startswith("## Düzeltme push edildi (1 commit)")
         alt = govde.replace("​", "").rsplit("\n", 1)[-1]
         assert alt.startswith("Ajan: agent/codex@agent-2 · Model: gpt-6-luna · Koşu: [#")
+
+    async def test_docs_only_fix_skips_test_and_starts_ci(
+        self, db_session, make_task_run, mock_services
+    ):
+        gp, _ = await self._calistir(
+            db_session, make_task_run, mock_services, SahteGit(), dosyalar=("README.md",)
+        )
+        gp.add_label.assert_not_awaited()
+        assert gp.sahte.dispatch[0][1] == {"ref": "f", "inputs": {"sha": "abc123"}}
 
     async def test_no_new_commit_posts_reason_then_fails(
         self, db_session, make_task_run, mock_services

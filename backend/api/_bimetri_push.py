@@ -2,7 +2,7 @@
 # Licensed under AGPLv3. See LICENSE file.
 # Commercial licensing: info@mechemsi.com
 
-"""bimetri yamasi: Gitea PR dalina push (synchronized) - insan push'u testi yeniden baslatir."""
+"""bimetri yamasi: Gitea PR olaylari - insan push'u zinciri yeniden baslatir, insan PR'i CI'a gider."""
 
 import contextlib
 import logging
@@ -42,9 +42,22 @@ async def mvnw_var_mi(gp, full: str, dal: str) -> bool:
     return r.status_code == 200
 
 
+async def insan_pr_ci(gp, full: str, n: int, label_names: list[str]) -> dict | None:
+    """Insanin kendi PR'i: zincir yok; inceleme ya da test istenmediyse CI kapisi hemen baslar."""
+    from backend.worker.phases._bimetri_ci import ci_baslat
+
+    if "ai-review" in label_names or "ai-test" in label_names:
+        return None  # once inceleme/test; CI zincirin sonunda
+    sonuc = await ci_baslat(gp, full, n)
+    logger.info("%s PR #%s (insan PR'i): %s", full, n, sonuc)
+    return {"status": "accepted", "reason": "human_pr_ci"}
+
+
 async def push_karari(gp, body: dict, label_names: list[str]) -> dict | None:
-    """synchronized olayi: bot push'u -> yok say (zincir etiketlerle ilerler); insan push'u
-    botun PR'inda -> ai-test (mvnw varsa). None: karar yok, normal akis devam etsin."""
+    """opened/reopened/synchronized: bot olayi -> yok say (zincir etiketlerle ilerler); insanin
+    kendi PR'i -> CI; insan push'u botun PR'inda -> ai-test (test gerekliyse), istenmisse
+    inceleme, degilse CI. None: karar yok, normal akis devam etsin."""
+    from backend.worker.phases._bimetri_ci import ajan_testi_gerekli, ci_baslat
     from backend.worker.phases._bimetri_oto import bot_login
 
     pr = body.get("pull_request") or {}
@@ -54,14 +67,21 @@ async def push_karari(gp, body: dict, label_names: list[str]) -> dict | None:
     gonderen = (body.get("sender") or {}).get("login")
     if not bot or gonderen == bot:
         return {"status": "ignored", "reason": "bot_push"}
-    if (pr.get("user") or {}).get("login") != bot:
-        return None  # insanin kendi PR'i: eski davranis
-    if "ai-test" in label_names or "status/on-hold" in label_names:
-        return {"status": "ignored", "reason": "test_not_on_push"}
     if pr.get("state") != "open" or pr.get("merged"):
         return {"status": "ignored", "reason": "pr_not_open"}
-    if not await mvnw_var_mi(gp, full, (pr.get("head") or {}).get("ref", "")):
-        return None
+    if (pr.get("user") or {}).get("login") != bot:
+        return await insan_pr_ci(gp, full, n, label_names)
+    if body.get("action") != "synchronized":
+        return None  # botun PR'i acildi: zincir etiketlerle ilerler
+    if "ai-test" in label_names or "status/on-hold" in label_names:
+        return {"status": "ignored", "reason": "test_not_on_push"}
+    dal = (pr.get("head") or {}).get("ref", "")
+    if not await ajan_testi_gerekli(gp, full, n, await mvnw_var_mi(gp, full, dal)):
+        if "ai-review" in label_names:
+            return None  # synchronized + ai-review -> inceleme kosusu; CI sonra
+        sonuc = await ci_baslat(gp, full, n)
+        logger.info("%s PR #%s: insan push'u (%s), %s", full, n, gonderen, sonuc)
+        return {"status": "accepted", "reason": "human_push_ci"}
     for e in ("test/passed", "test/failed", "ai-tested"):
         with contextlib.suppress(Exception):
             await gp.remove_label(full, n, e)

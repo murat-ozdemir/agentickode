@@ -228,8 +228,9 @@ async def handle_pr_event(
         return {"status": "ignored", "reason": "unknown_project"}
 
     label_names = [lbl.get("name", "") for lbl in pr.get("labels", [])]
-    # bimetri yamasi: bot push'u yok sayilir; insan push'u botun PR'inda testi yeniden baslatir
-    if source == "gitea" and action == "synchronized":
+    # bimetri yamasi: bot push'u yok sayilir; insan push'u botun PR'inda zinciri yeniden
+    # baslatir; insanin kendi PR'i acilinca/push'ta CI kapisina gider
+    if source == "gitea" and action in ("opened", "reopened", "synchronized"):
         try:
             from backend.api._bimetri_push import proje_saglayici, push_karari
 

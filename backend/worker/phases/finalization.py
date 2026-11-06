@@ -23,6 +23,7 @@ from backend.services.http_client import get_http_client
 from backend.services.workspace.sandbox import RemoteSandbox
 from backend.services.workspace.worktree import WorktreeManager, WorktreePaths
 from backend.worker.broadcaster import broadcaster
+from backend.worker.phases._bimetri_ci import ajan_testi_gerekli, ci_baslat
 from backend.worker.phases._bimetri_duzeltme import DEGISIKLIK_YOK_NOTU, duzeltme_govdesi
 from backend.worker.phases._bimetri_etiket import (
     etiketler,
@@ -115,11 +116,15 @@ async def run(
                     + "\n\nTest dosyalarını değiştirmek insan onayı ister; zincir durdu (`status/on-hold`). "
                     "Uygunsa `status/on-hold`'u kaldırıp `ai-test` koy.",
                 )
-            elif _mvnw:
+            elif await ajan_testi_gerekli(_gp, _rp, int(pr_number), _mvnw):
                 await _gp.add_label(_rp, int(pr_number), "ai-test")
-            # bimetri yamasi: mvnw yoksa AI incelemesi yalnizca istendiyse (issue/PR'da ai-review)
+            # bimetri yamasi: test yoksa AI incelemesi yalnizca istendiyse (issue/PR'da ai-review)
             elif await inceleme_istendi(_gp, _rp, int(pr_number), meta.get("issue_number")):
                 await _gp.add_label(_rp, int(pr_number), "ai-review")
+            else:  # test ve inceleme yok -> CI kapisi
+                await broadcaster.log(
+                    task_run.id, await ci_baslat(_gp, _rp, int(pr_number)), phase="finalization"
+                )
         except Exception as exc:
             await broadcaster.log(
                 task_run.id, f"PR test/inceleme etiketleri ayarlanamadi: {exc}", level="warning", phase="finalization"
@@ -146,6 +151,19 @@ async def run(
         # SHA remains the source of truth the poller dedupes on).
         if review_mode == "comment":
             await _flip_review_label(task_run, pr_number, session)
+            # bimetri yamasi: istenen inceleme "Birleştirilebilir" dedi -> zincirin sonu, CI kapisi
+            if (
+                task_run.git_provider == "gitea"
+                and "Birleştirilebilir" in str(task_run.review_result.get("summary") or "")[-400:]
+            ):
+                try:
+                    _gp = get_git_provider(
+                        task_run.git_provider, get_http_client(), access_token=await get_project_token(task_run, session)
+                    )
+                    _sonuc = await ci_baslat(_gp, f"{task_run.repo_owner}/{task_run.repo_name}", int(pr_number))
+                except Exception as exc:
+                    _sonuc = f"CI baslatilamadi: {exc}"
+                await broadcaster.log(task_run.id, _sonuc, phase="finalization")
 
     # bimetri yamasi: ajan commit/push etmediyse degisiklikleri commit'leyip push et; bos kosuda PR yok
     bos_kosu = False
@@ -248,17 +266,25 @@ async def run(
                     _mvnw = await RemoteGitOps(await get_ssh_for_run(task_run, session)).run_git(
                         ["ls-files", "mvnw"], cwd=task_run.workspace_path
                     )
+                    _rp = f"{task_run.repo_owner}/{task_run.repo_name}"
+                    _n = int(task_run.pr_url.rstrip("/").rsplit("/", 1)[-1])
                     _konan = await pr_acilis_etiketleri(
                         provider,
-                        f"{task_run.repo_owner}/{task_run.repo_name}",
-                        int(task_run.pr_url.rstrip("/").rsplit("/", 1)[-1]),
+                        _rp,
+                        _n,
                         issue_no,
                         _cr.get("agent"),
-                        bool(_mvnw.stdout.strip()),
+                        # bimetri yamasi: yalnizca belge degistiyse test ajani kosmaz
+                        await ajan_testi_gerekli(provider, _rp, _n, bool(_mvnw.stdout.strip())),
                     )
                     await broadcaster.log(
                         task_run.id, f"PR etiketleri: {', '.join(_konan) or 'yok'}", phase="finalization"
                     )
+                    # bimetri yamasi: test ve inceleme yoksa zincir burada biter -> CI kapisi
+                    if "ai-test" not in _konan and "ai-review" not in _konan:
+                        await broadcaster.log(
+                            task_run.id, await ci_baslat(provider, _rp, _n), phase="finalization"
+                        )
                 except Exception as exc:
                     await broadcaster.log(
                         task_run.id, f"PR etiketleri konamadi: {exc}", level="warning", phase="finalization"
@@ -501,8 +527,8 @@ async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta
         # bimetri yamasi: AI incelemesi istege bagli; istenmediyse PR status/review'da insani bekler
         if pr_ai_review or await inceleme_istendi(gp, rp, n, meta.get("issue_number")):
             await inceleme_baslat(gp, rp, n)  # label_updated -> inceleme
-        else:
-            await broadcaster.log(task_run.id, "AI incelemesi istenmedi; insan incelemesi bekleniyor", phase="finalization")
+        else:  # bimetri yamasi: inceleme istenmedi -> zincirin sonu, CI kapisi
+            await broadcaster.log(task_run.id, await ci_baslat(gp, rp, n), phase="finalization")
     elif sonuc == "Testler kaldı":
         await gp.add_label(rp, n, "test/failed")
     else:  # Test edilemedi / kural ihlali: kosu basarisiz -> status/on-hold

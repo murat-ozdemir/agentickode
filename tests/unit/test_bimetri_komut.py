@@ -95,11 +95,17 @@ class TestTekrar:
         assert "sürüyor" in await tekrar_baslat(db_session, gp, RP, "proj-1", 7, False)
 
 
-def _push(gonderen: str, yazar: str = "agentickode") -> dict:
+def _push(gonderen: str, yazar: str = "agentickode", eylem: str = "synchronized") -> dict:
     return {
+        "action": eylem,
         "sender": {"login": gonderen},
         "repository": {"full_name": RP},
-        "pull_request": {"number": 5, "state": "open", "user": {"login": yazar}, "head": {"ref": "f"}},
+        "pull_request": {
+            "number": 5,
+            "state": "open",
+            "user": {"login": yazar},
+            "head": {"ref": "f"},
+        },
     }
 
 
@@ -115,8 +121,28 @@ class TestPushKarari:
         assert karar["reason"] == "human_push_test"
         assert gp.etiket[5] == ["ai-test"]
 
-    async def test_human_pr_or_on_hold_untouched(self):
-        gp = SahteGitea()
-        assert await push_karari(gp, _push("mozdemir", yazar="mozdemir"), []) is None
-        karar = await push_karari(gp, _push("mozdemir"), ["status/on-hold"])
+    async def test_on_hold_untouched(self):
+        karar = await push_karari(SahteGitea(), _push("mozdemir"), ["status/on-hold"])
         assert karar["reason"] == "test_not_on_push"
+
+    async def test_human_pr_goes_to_ci_unless_review_requested(self):
+        gp = SahteGitea()
+        gp.pr[5] = {"head": {"sha": "abc123", "ref": "f"}}
+        for eylem in ("opened", "synchronized"):
+            karar = await push_karari(gp, _push("mozdemir", "mozdemir", eylem), [])
+            assert karar["reason"] == "human_pr_ci"
+        assert len(gp.dispatch) == 2
+        assert await push_karari(gp, _push("mozdemir", "mozdemir"), ["ai-review"]) is None
+
+    async def test_bot_pr_opened_left_to_label_chain(self):
+        assert await push_karari(SahteGitea(), _push("mozdemir", eylem="opened"), []) is None
+
+    async def test_human_push_on_doc_only_bot_pr_goes_to_ci(self):
+        gp = SahteGitea()
+        gp.yanitlar[f"/repos/{RP}/contents/mvnw"] = (200, {})
+        gp.dosya[5] = ["README.md"]
+        gp.pr[5] = {"head": {"sha": "abc123", "ref": "f"}}
+        karar = await push_karari(gp, _push("mozdemir"), ["ai-reviewed"])
+        assert karar["reason"] == "human_push_ci"
+        assert gp.dispatch[0][1] == {"ref": "f", "inputs": {"sha": "abc123"}}
+        assert await push_karari(gp, _push("mozdemir"), ["ai-review"]) is None
