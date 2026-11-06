@@ -36,6 +36,12 @@ class TestPrAcilisEtiketleri:
         assert konan == ["difficulty/medium", "test-agent/codex", "ai-test"]
         assert gp.etiket[5][-1] == "ai-test"
 
+    async def test_copies_effort_from_issue(self):
+        gp = SahteGitea()
+        gp.etiket[1] = ["difficulty/hard", "effort/xhigh"]
+        konan = await pr_acilis_etiketleri(gp, RP, 5, 1, "codex", False)
+        assert konan == ["difficulty/hard", "effort/xhigh"]
+
     async def test_issue_test_agent_wins_over_opposite(self):
         gp = SahteGitea()
         gp.etiket[1] = ["test-agent/claude"]

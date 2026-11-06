@@ -53,13 +53,14 @@ async def etiketler(gp, rp: str, n: int | None) -> list[str]:
 async def pr_acilis_etiketleri(
     gp, rp: str, pr_no: int, issue_no: int | None, yazan: str | None, mvnw: bool
 ) -> list[str]:
-    """Yeni PR'a: difficulty/* issue'dan, test-agent/* issue'dan ya da yazanin tersi, sonra
-    ai-test (mvnw varsa) ya da issue'da ai-review varsa ai-review. Konan etiketleri dondurur."""
+    """Yeni PR'a: difficulty/* ve effort/* issue'dan, test-agent/* issue'dan ya da yazanin tersi,
+    sonra ai-test (mvnw varsa) ya da issue'da ai-review varsa ai-review. Konan etiketleri dondurur."""
     issue_et = await etiketler(gp, rp, issue_no)
     konan = []
-    zorluk = grup_degeri(issue_et, "difficulty/")
-    if zorluk:
-        konan.append(f"difficulty/{zorluk}")
+    for onek in ("difficulty/", "effort/"):
+        deger = grup_degeri(issue_et, onek)
+        if deger:
+            konan.append(f"{onek}{deger}")
     if mvnw:
         test_ajani = grup_degeri(issue_et, "test-agent/") or _KARSI_AJAN.get(ajan_adi(yazan) or "")
         if test_ajani:

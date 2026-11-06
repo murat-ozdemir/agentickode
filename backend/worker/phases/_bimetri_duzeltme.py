@@ -27,5 +27,6 @@ def duzeltme_govdesi(task_run: TaskRun, baslik: str, ek: str = "") -> str:
         + ek
         + f"\n\n---\nAjan: {cr.get('agent') or '?'}"
         + (f" · Model: {cr['model']}" if cr.get("model") else "")
+        + (f" · Efor: {cr['effort']}" if cr.get("effort") else "")
         + f" · Koşu: [#{task_run.id}]({kosu}) · AgenticKode"
     ).replace("@", "@​")  # kendi yorumu yeni kosu tetiklemesin

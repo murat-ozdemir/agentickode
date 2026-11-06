@@ -223,6 +223,7 @@ async def run(
             + "\n\n---\n"
             + f"Ajan: {_cr.get('agent') or '?'}"
             + (f" · Model: {_cr['model']}" if _cr.get("model") else "")
+            + (f" · Efor: {_cr['effort']}" if _cr.get("effort") else "")
             + f" · Koşu: [#{task_run.id}]({_kosu})\n\n"
             + "AgenticKode tarafından açıldı."
         )
@@ -481,6 +482,7 @@ async def _bimetri_test_finalize(task_run: TaskRun, n: int, pr_branch: str, meta
         + "\n\n---\n"
         + f"Ajan: {(task_run.coding_results or {}).get('agent') or '?'}"
         + (f" · Model: {task_run.coding_results['model']}" if (task_run.coding_results or {}).get("model") else "")
+        + (f" · Efor: {task_run.coding_results['effort']}" if (task_run.coding_results or {}).get("effort") else "")
         + f" · Koşu: [#{task_run.id}]({_kosu}) · AgenticKode"
     ).replace("@", "@​")
     oto = sonuc == "Testler kaldı" and await oto_tur_karari(
@@ -591,6 +593,7 @@ async def _post_review_comment(
     body = body.removesuffix("*AgenticKode incelemesi*") + (
         f"Ajan: {_cr.get('agent') or '?'}"
         + (f" · Model: {_cr['model']}" if _cr.get("model") else "")
+        + (f" · Efor: {_cr['effort']}" if _cr.get("effort") else "")
         + f" · Koşu: [#{task_run.id}]({_settings.app_base_url.rstrip('/')}/runs/{task_run.id})"
         + " · AgenticKode incelemesi"
     )

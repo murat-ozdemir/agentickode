@@ -287,10 +287,23 @@ async def execute_flow_prompt(
         )
         env = (resolved.agent_settings.environment_vars if resolved.agent_settings else None) or {}
         model = env.get(f"MODEL_FOR_DIFFICULTY_{tier}") or env.get(f"MODEL_FOR_{tier}") or None
+        # bimetri yamasi: efor effort/ etiketinden, yoksa zorluga gore EFFORT_FOR_DIFFICULTY_*
+        effort = next((lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("effort/")), None)
+        effort = (
+            effort
+            or env.get(f"EFFORT_FOR_DIFFICULTY_{tier}")
+            or env.get(f"EFFORT_FOR_{tier}")
+            or ""
+        ).lower()
+        if effort and effort not in ("low", "medium", "high", "xhigh", "max"):
+            await broadcaster.log(
+                run.id, f"Bilinmeyen efor: {effort}", level="warning", phase="agent"
+            )
+            effort = ""
         await broadcaster.log(
             run.id,
             f"Ajan: {getattr(resolved.adapter, 'agent_name', agent_name)}, difficulty: {tier.lower()}, "
-            f"model: {model or 'ajanin varsayilani'}",
+            f"model: {model or 'ajanin varsayilani'}, effort: {effort or 'modelin varsayilani'}",
             phase="agent",
         )
 
@@ -309,8 +322,13 @@ async def execute_flow_prompt(
                 run,
                 session,
                 services,
-                # bimetri yamasi: etiketten gelen ajan ve model
-                {"agent": agent_name, "model": model, "params": {"prompt": prompt, "mode": flow.agent_mode}},
+                # bimetri yamasi: etiketten gelen ajan, model ve efor
+                {
+                    "agent": agent_name,
+                    "model": model,
+                    "effort": effort or None,
+                    "params": {"prompt": prompt, "mode": flow.agent_mode},
+                },
             )
         except Exception as _exc:
             _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, None, _exc)
@@ -326,8 +344,9 @@ async def execute_flow_prompt(
             "agent": result.get("agent"),
             "mode": result.get("mode"),
             "response": result.get("response"),
-            # bimetri yamasi: PR aciklamasi icin secilen model
+            # bimetri yamasi: PR aciklamasi icin secilen model ve efor
             "model": model,
+            "effort": effort or None,
         }
         # PR-review flows: surface the response as review_result so finalization
         # posts it as a PR comment + flips the label (parity with the template path).

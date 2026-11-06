@@ -229,6 +229,64 @@ class TestAgentStep:
         assert observed["worker_user_during_call"] == "domas"
         assert adapter.worker_user == "coder"
 
+    @pytest.mark.parametrize(
+        ("agent", "beklenen"),
+        [
+            ("claude", "claude --model m1 --effort high --dangerously-skip-permissions"),
+            ("codex", "codex --model m1 -c model_reasoning_effort=high -p"),
+        ],
+    )
+    async def test_model_and_effort_flags_added_to_cli_command(
+        self, db_session, mock_services, make_task_run, agent, beklenen
+    ):
+        project = ProjectConfig(
+            project_id=f"proj-ef-{agent}", project_slug=f"ef{agent}", repo_owner="o", repo_name="r"
+        )
+        db_session.add(project)
+        run = make_task_run(project_id=f"proj-ef-{agent}", workspace_path="/w")
+        db_session.add(run)
+        await db_session.commit()
+
+        ssh = MagicMock()
+        ssh.username = "root"
+        adapter = CLIAdapter(ssh_service=ssh, agent_name=agent, worker_user="coder")
+        adapter.run_task = AsyncMock(return_value={"exit_code": 0})  # type: ignore[method-assign]
+        mock_services.agent_resolver.resolve_agent = AsyncMock(return_value=_make_resolved(adapter))
+
+        phase_config = {
+            "model": "m1",
+            "effort": "high",
+            "params": {"prompt": "x", "mode": "task"},
+        }
+        await run_agent_step(run, db_session, mock_services, phase_config)
+
+        assert beklenen in str(adapter._commands["task"])
+        assert str(adapter._commands["check"]) == f"command -v {agent}"
+
+    async def test_effort_without_model_adds_only_effort(
+        self, db_session, mock_services, make_task_run
+    ):
+        project = ProjectConfig(
+            project_id="proj-ef-only", project_slug="efonly", repo_owner="o", repo_name="r"
+        )
+        db_session.add(project)
+        run = make_task_run(project_id="proj-ef-only")
+        db_session.add(run)
+        await db_session.commit()
+
+        ssh = MagicMock()
+        ssh.username = "root"
+        adapter = CLIAdapter(ssh_service=ssh, agent_name="claude", worker_user="coder")
+        adapter.generate = AsyncMock(return_value="ok")  # type: ignore[method-assign]
+        mock_services.agent_resolver.resolve_agent = AsyncMock(return_value=_make_resolved(adapter))
+
+        await run_agent_step(
+            run, db_session, mock_services, {"effort": "max", "params": {"prompt": "x"}}
+        )
+
+        assert "claude --effort max --print" in str(adapter._commands["generate"])
+        assert "--model" not in str(adapter._commands["generate"])
+
     async def test_run_as_restored_even_when_call_raises(
         self, db_session, mock_services, make_task_run
     ):

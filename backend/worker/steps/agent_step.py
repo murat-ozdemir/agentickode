@@ -74,12 +74,22 @@ async def run_agent_step(
         project_id=task_run.project_id,
     )
     adapter = resolved.adapter
-    # bimetri yamasi: etiketten gelen modeli komut sablonuna ekle (runuser sarmalayicisinin icine)
-    if phase_config.get("model") and isinstance(adapter, CLIAdapter):
+    # bimetri yamasi: etiketten gelen model ve eforu komut sablonuna ekle (runuser sarmalayicisinin icine)
+    if (phase_config.get("model") or phase_config.get("effort")) and isinstance(
+        adapter, CLIAdapter
+    ):
         import re
         import shlex
 
-        flag = " --model " + shlex.quote(str(phase_config["model"]))
+        flag = ""
+        if phase_config.get("model"):
+            flag += " --model " + shlex.quote(str(phase_config["model"]))
+        if phase_config.get("effort"):
+            efor = shlex.quote(str(phase_config["effort"]))
+            flag += {
+                "claude": f" --effort {efor}",
+                "codex": f" -c model_reasoning_effort={efor}",
+            }.get(adapter.agent_name, "")
         pattern = rf"(?<![\w/.-]){re.escape(adapter.agent_name)}( exec)?(?=\s|$)"
         adapter.apply_command_overrides(
             {
