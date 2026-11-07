@@ -126,3 +126,30 @@ async def trigger_pr_review(
 
     logger.info("Created run #%d from CI pr-review trigger: %s", run.id, run.title)
     return {"status": "accepted", "run_id": run.id}
+
+
+# bimetri yamasi: Gitea "status" webhook'u - kirmizi ci-kapisi botun PR'inda duzeltme turu acar
+@router.post("/webhooks/gitea-ci")
+async def gitea_ci_status_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    repo: ProjectConfigRepository = Depends(_get_repo),
+):
+    from backend.api._bimetri_push import proje_saglayici
+    from backend.api._pr_webhook_helpers import read_verified_body
+    from backend.worker.phases._bimetri_ci import CI_BAGLAM
+    from backend.worker.phases._bimetri_ci_kirmizi import ci_kirmizi
+
+    body = await read_verified_body(request, settings.gitea_webhook_secret, "X-Gitea-Signature")
+    if body.get("context") != CI_BAGLAM or body.get("state") not in ("failure", "error"):
+        return {"status": "ignored", "reason": "not_red_gate"}
+    full = (body.get("repository") or {}).get("full_name", "")
+    owner, name = full.split("/", 1) if "/" in full else ("", full)
+    project = await repo.get_by_git_repo("gitea", owner, name)
+    if not project:
+        return {"status": "ignored", "reason": "unknown_project"}
+    sonuc = await ci_kirmizi(
+        await proje_saglayici(project, db), full, body.get("sha", ""), body.get("target_url") or ""
+    )
+    logger.info("Kirmizi CI %s %s: %s", full, str(body.get("sha", ""))[:8], sonuc)
+    return {"status": "accepted", "reason": sonuc}

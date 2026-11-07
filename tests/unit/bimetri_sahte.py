@@ -54,7 +54,10 @@ class SahteGitea:
             kod, veri = (200, pr) if n in self.pr else (404, {})
         else:
             kod, veri = 404, {}
-        return SimpleNamespace(status_code=kod, json=lambda: veri, raise_for_status=_hata(kod))
+        metin = veri if isinstance(veri, str) else ""
+        return SimpleNamespace(
+            status_code=kod, json=lambda: veri, text=metin, raise_for_status=_hata(kod)
+        )
 
     async def _post(self, url: str, json: dict | None = None, **_kw):
         self.dispatch.append((url.removeprefix(API), json or {}))
