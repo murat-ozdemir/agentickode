@@ -51,5 +51,7 @@ Out of scope:
 - [x] Unit/integration tests for the search split, tools, bearer guard, proposals API, script
 - [x] Frontend shows Agent/Merge source and the run link
 - [x] Records tab pages 50 at a time; kind filter lists every kind of the project
-- [ ] Deployed on dev-1; `claude mcp list` / `codex mcp list` show `bimetri-memory` on the workers
-- [ ] A real run log shows the agent calling a memory tool
+- [x] Deployed on dev-1; `claude mcp list` / `codex mcp list` show `bimetri-memory` on the workers
+- [x] A real run log shows the agent calling a memory tool (run #70, platform-backend PR #54: two
+  `search_project_memory` calls, one `propose_memory`; run #68 called none because everything it
+  needed was already in the run-start section)
