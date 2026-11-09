@@ -99,6 +99,31 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
    docker logs agentickode-backend-1 2>&1 | grep 'ozellik gecmisi'
    ```
    `... (Org/repo): yazildi`, `: var` (already recorded) or `: kapali` (MEM0_* empty).
+9. Memory proposals on merge (yama 74b). After the record above, gpt-5-mini reads the merged
+   PR's discussion (PR body, linked issue, comments, review bodies: AI review findings, fix-run
+   reports, CI failures) and proposes 0-3 `lesson` / `pitfall` / `decision` records. They wait as
+   `pending` rows in `bimetri_memory_proposals` (migration `b045_memory_proposals`, applied on
+   backend start). Nothing reaches mem0 until someone approves it on the **Memory** page
+   (`/memory`); approval writes it with `infer=False` as `tur` = `ders` / `tuzak` / `karar`,
+   `kaynak=proposal`. Off while `MEM0_OPENAI_API_KEY` is empty; a PR without comments makes no
+   LLM call. Setup, as root (`.env` change, so `up -d`, then the frontend rebuild):
+   ```bash
+   scripts/bimetri/mem0-backend-key.sh
+   ```
+   ```bash
+   docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d backend
+   ```
+   ```bash
+   docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d --build frontend
+   ```
+   The script copies `OPENAI_API_KEY` from `.env.mem0` into `.env` as `MEM0_OPENAI_API_KEY`
+   (not `OPENAI_API_KEY`, so no other tool picks it up) without printing it. Optional `.env`:
+   `MEMORY_PROPOSAL_MODEL` (default `gpt-5-mini`), `MEMORY_PROPOSAL_LANGUAGE` (default
+   `Turkish`). Check after a merge:
+   ```bash
+   docker logs agentickode-backend-1 2>&1 | grep 'memory proposals'
+   ```
+   `... : N proposals`, `: no-discussion`, `: exists` (PR already has proposals) or `: disabled`.
 
 Rollback (data written after the migration is lost):
 ```bash
@@ -126,5 +151,9 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Runs still log `Proje hafızasında kayıt yok` after upload | Project name differs from the run's `<owner>/<repo>` (case). Re-upload with `--project` |
 | `PR #N ozellik gecmisi yazilamadi` | Traceback follows. `401` from mem0: see the key row above; `404` on `/pulls/N/commits` or `/files`: the project token cannot read the repo |
 | No `ozellik gecmisi` line after a merge | The PR webhook (pull_request events) is not set on the Gitea repo, or the backend log level hides INFO |
+| `PR #N memory proposals failed` | Traceback follows. `401` from api.openai.com: `MEM0_OPENAI_API_KEY` wrong (remove the line, rerun the key script, `up -d backend`); `403`/IP: same allowlist as mem0 |
+| `memory proposals ...: disabled` | `MEM0_OPENAI_API_KEY` missing in `.env` or backend not recreated with `up -d backend` |
+| Memory page: `Approve failed: mem0 write failed` (502) | mem0 down or key revoked; the proposal stays `pending`, approve again later |
+| No **Memory** item in the menu | Frontend not rebuilt: `up -d --build frontend` |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |

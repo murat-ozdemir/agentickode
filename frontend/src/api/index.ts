@@ -13,4 +13,4 @@ export * from "./ssh";
 export * from "./backup";
 export * from "./instructions";
 export * from "./gitConnections";
-export * from "./sessions";
+export * from "./sessions";export * from "./memoryProposals";

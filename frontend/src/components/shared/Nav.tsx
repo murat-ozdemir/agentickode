@@ -7,6 +7,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Activity,
   Bot,
+  Brain,
   Cpu,
   FolderKanban,
   LayoutDashboard,
@@ -26,6 +27,7 @@ const links = [
   { to: "/workspace-servers", label: "Servers", icon: Server },
   { to: "/gpu-dashboard", label: "GPU", icon: Activity },
   { to: "/agents", label: "Agents", icon: Bot },
+  { to: "/memory", label: "Memory", icon: Brain },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
