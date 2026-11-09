@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     # App
     app_base_url: str = "http://localhost:5173"
 
+    # bimetri yamasi: mem0 proje hafizasi (ikisi de doluysa kosu basinda prompt'a eklenir)
+    mem0_url: str = ""
+    mem0_api_key: str = ""
+
     # Redis
     redis_url: str = "redis://redis:6379/0"
 

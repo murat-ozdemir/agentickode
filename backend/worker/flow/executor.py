@@ -27,6 +27,7 @@ from backend.models import TaskRun
 from backend.repositories.flow_prompt_repo import FlowPromptRepository
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
+from backend.worker.flow._bimetri_hafiza import hafiza_eki
 from backend.worker.flow._bimetri_kapsam import kapsam_eki
 from backend.worker.flow.data_sources import fetch_flow_data
 from backend.worker.phases._bimetri_hata import hata_bildir, limit_nedeni
@@ -234,6 +235,8 @@ async def execute_flow_prompt(
             )
             if (run.task_source_meta or {}).get("review_mode") == "fix":
                 prompt += await kapsam_eki(run, session, "duzeltme")
+        # bimetri yamasi: mem0 proje hafizasi (kapali ya da erisilemezse bos)
+        prompt += await hafiza_eki(run)
 
         run.current_phase = "agent"
         await broadcaster.event(run.id, "phase_changed", {"phase": "agent"})

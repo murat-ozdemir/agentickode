@@ -13,6 +13,11 @@
 #   Vektorler "mem0" DB'sinde, kullanici/anahtar kayitlari "mem0_app" DB'sinde.
 
 services:
+  backend:
+    environment:
+      # Kosu basinda proje hafizasi; MEM0_API_KEY .env'de (bossa ozellik kapali).
+      MEM0_URL: ${MEM0_URL:-http://mem0:8000}
+
   postgres:
     image: pgvector/pgvector:pg16
     volumes:

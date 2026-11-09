@@ -61,4 +61,4 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [Database Migration](runbooks/database-migration.md) | How to create, test, and deploy Alembic migrations in Docker |
 | [Release Checklist](runbooks/release-checklist.md) | Steps for tagging, building, and shipping a release |
 | [Platform host execution](runbooks/platform-host-execution.md) | Enable `PLATFORM_USER` (run-as) and `PLATFORM_SSH_HOST` (SSH-to-host) for the platform server |
-| [bimetri: pgvector + mem0](runbooks/bimetri-mem0-pgvector.md) | Migrate Postgres to pgvector, add mem0, daily DB backup cron |
+| [bimetri: pgvector + mem0](runbooks/bimetri-mem0-pgvector.md) | Migrate Postgres to pgvector, add mem0, daily DB backup cron, backend mem0 key (project memory in run prompts) |
