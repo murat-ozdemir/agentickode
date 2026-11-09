@@ -41,6 +41,8 @@ services:
       HISTORY_DB_PATH: /app/history/history.db
       AUTH_DISABLED: "false"
       MEM0_TELEMETRY: "false"
+      # CORS: the dashboard's browser calls the API directly.
+      DASHBOARD_URL: http://${MEM0_BIND:-127.0.0.1}:8891
     volumes:
       - mem0history:/app/history
     ports:
@@ -55,6 +57,30 @@ services:
       start_period: 120s
     depends_on:
       postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # mem0's own web dashboard, LAN only (not behind SWAG: its Bearer JWT header clashes with
+  # the crew basic auth). Log in with the mem0 admin created by scripts/bimetri/mem0-backend-key.sh.
+  mem0-dashboard:
+    build:
+      context: https://github.com/mem0ai/mem0.git#v2.2.1:server/dashboard
+    image: bimetri-mem0-dashboard:v2.2.1
+    environment:
+      # Baked into the browser bundle at container start; must be reachable from the browser.
+      NEXT_PUBLIC_API_URL: http://${MEM0_BIND:-127.0.0.1}:8890
+      NEXT_PUBLIC_INSTANCE_NAME: bimetri
+      API_INTERNAL_URL: http://mem0:8000
+    ports:
+      - "${MEM0_BIND:-127.0.0.1}:8891:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      mem0:
         condition: service_healthy
     restart: unless-stopped
 
