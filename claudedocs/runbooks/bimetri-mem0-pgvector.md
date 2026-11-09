@@ -126,9 +126,11 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
    `... : N proposals`, `: no-discussion`, `: exists` (PR already has proposals) or `: disabled`.
 10. Browsing records (yama 76). Two read-only views of what mem0 holds:
     - **Memory > Records** tab (`/memory?tab=records`, behind the crew password): pick a
-      project, filter by `tur`; shows text, PR, `kaynak` and date. API:
-      `GET /api/bimetri/memories?project=<owner>/<repo>[&kind=<tur>]` (503 when mem0 is off,
-      502 when mem0 fails).
+      project, filter by `tur`; shows text, PR, `kaynak` and date, 50 per page. API:
+      `GET /api/bimetri/memories?project=<owner>/<repo>[&kind=<tur>][&offset=&limit=]` returns
+      `{items, total, offset, limit, kinds}` (`limit` max 200; 503 when mem0 is off, 502 when
+      mem0 fails). mem0 has no offset, so each page reads the whole project (`top_k` 1000) and
+      the backend slices it (yama 75).
     - mem0's own dashboard, LAN only, at `http://<MEM0_BIND>:8891` (service `mem0-dashboard`,
       built from the v2.2.1 tag). Not behind SWAG: its `Authorization: Bearer` header clashes
       with the crew basic auth, and the browser calls the mem0 API (`:8890`) directly. Log in
@@ -139,6 +141,34 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
     docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d --build mem0 mem0-dashboard backend frontend
     ```
     Check: `curl -s http://<MEM0_BIND>:8891/api/health` returns JSON.
+
+11. Agent memory tools (yama 75). The run-start section now runs three searches (`proje`;
+    knowledge kinds `modul/karar/ders/tuzak/calisma`; `ozellik_gecmisi`) so PR history cannot
+    crowd out decisions and pitfalls. The `memory-mcp` service (`backend/mcp/bimetri_memory_server.py`,
+    port 8892 on `MEM0_BIND`, streamable HTTP at `/mcp`) gives agents three tools:
+    `search_project_memory(project, query, scope=knowledge|history|all)`,
+    `list_project_memory(project, kind)` and `propose_memory(project, kind, text, run_id)`.
+    Proposals land in `bimetri_memory_proposals` with `source=agent` (migration
+    `b046_memory_proposal_source`, applied on backend start; `pr_number` becomes nullable) and wait
+    on the **Memory** page like merge proposals (max 3 per run, duplicates of a pending text are
+    skipped). Every request needs `Authorization: Bearer <BIMETRI_MEMORY_MCP_TOKEN>`; with the token
+    empty the service refuses everything and the run prompt shows no tool hint. It is a separate
+    service because the admin MCP mounted on the backend at `/mcp` has no auth. Setup, as root:
+    ```bash
+    grep -q '^BIMETRI_MEMORY_MCP_TOKEN=.' .env || echo "BIMETRI_MEMORY_MCP_TOKEN=$(openssl rand -hex 32)" >> .env
+    ```
+    ```bash
+    docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d --build memory-mcp backend frontend
+    ```
+    Then write the worker users' Claude (`~/.claude.json`, user scope) and Codex
+    (`~/.codex/config.toml`, `http_headers`) config; the token goes over SSH stdin, never printed:
+    ```bash
+    scripts/bimetri/agent-memory-mcp.sh 192.168.20.10 192.168.20.11 192.168.20.12
+    ```
+    Each host prints `codex: written`, `claude: written` and the `bimetri-memory` lines of
+    `codex mcp list` / `claude mcp list` (Claude: `✓ Connected`). Check the service:
+    `curl -s http://<MEM0_BIND>:8892/health` = `ok`, `curl -s -o /dev/null -w '%{http_code}' -X POST http://<MEM0_BIND>:8892/mcp` = `401`.
+    In a run log the agent's tool calls show as `mcp__bimetri-memory__...` (Claude).
 
 Rollback (data written after the migration is lost):
 ```bash
@@ -177,3 +207,7 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Records tab: `Failed to load records: mem0 is not configured` | `MEM0_API_KEY` empty in `.env`; see step 6 |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |
+| `agent-memory-mcp.sh`: `.../health does not answer` | `memory-mcp` not running or `MEM0_BIND` not set: `up -d memory-mcp`, `docker logs agentickode-memory-mcp-1` |
+| `claude mcp list` shows `bimetri-memory ... ✗ Failed to connect` | Worker cannot reach `<MEM0_BIND>:8892` (firewall) or the token in `.env` changed; rerun `agent-memory-mcp.sh` after a token change |
+| Run prompt has no "Hafıza araçları" lines | `BIMETRI_MEMORY_MCP_TOKEN` missing in `.env` or backend not recreated with `up -d backend` |
+| Agent proposal refused: `run N does not belong to org/repo` | The agent passed another project's name or a wrong `run_id`; the values are in the prompt's memory section |

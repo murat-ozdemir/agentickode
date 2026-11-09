@@ -15,8 +15,16 @@ export interface MemoryRecord {
   created_at: string | null;
 }
 
-export const getMemoryRecords = (project: string, kind?: string) => {
-  const params = new URLSearchParams({ project });
+export interface MemoryRecordPage {
+  items: MemoryRecord[];
+  total: number;
+  offset: number;
+  limit: number;
+  kinds: string[];
+}
+
+export const getMemoryRecords = (project: string, kind = "", offset = 0, limit = 50) => {
+  const params = new URLSearchParams({ project, offset: String(offset), limit: String(limit) });
   if (kind) params.set("kind", kind);
-  return get<MemoryRecord[]>(`/bimetri/memories?${params}`);
+  return get<MemoryRecordPage>(`/bimetri/memories?${params}`);
 };

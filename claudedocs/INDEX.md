@@ -15,6 +15,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [Multiple workspace folders on platform server](plans/2026-06-08-multi-workspace-folders.md) | implemented | 2026-06-08 | Add `workspace_folders` JSONB to WorkspaceServer; multi-root scan/discovery; platform server UI |
 | [Terminal + Chat Agent Launch as Selected User](plans/2026-06-08-launch-as-user.md) | implemented | 2026-06-08 | Terminal PTY + chat agent + tmux sessions + LaunchAgentModal all run as `worker_user` via `runuser` (no-op when unset); migration 042 |
 | [Host machine as default platform workspace](plans/2026-06-08-host-default-workspace.md) | partial | 2026-06-08 | `gh` check + run-as-user seeding + SSH-to-host switch (all OFF by default via `PLATFORM_*`); host-side sshd setup is operator's step |
+| [bimetri: project-memory MCP for agents](plans/2026-11-09-bimetri-memory-mcp.md) | implemented | 2026-11-09 | Run-start memory search split (knowledge vs history), `memory-mcp` service with search/list/propose tools, agent proposals on the Memory page (yama 75) |
 | *Plans are in `docs/plans/` — migrate here as they are updated* | | | |
 
 ## Implementations
@@ -61,4 +62,4 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [Database Migration](runbooks/database-migration.md) | How to create, test, and deploy Alembic migrations in Docker |
 | [Release Checklist](runbooks/release-checklist.md) | Steps for tagging, building, and shipping a release |
 | [Platform host execution](runbooks/platform-host-execution.md) | Enable `PLATFORM_USER` (run-as) and `PLATFORM_SSH_HOST` (SSH-to-host) for the platform server |
-| [bimetri: pgvector + mem0](runbooks/bimetri-mem0-pgvector.md) | Migrate Postgres to pgvector, add mem0, daily DB backup cron, backend mem0 key (project memory in run prompts), initial memory fill with `mem0-bootstrap.py`, `ozellik_gecmisi` written on PR merge, memory proposals from the PR discussion approved on the Memory page, read-only Records tab and LAN-only mem0 dashboard |
+| [bimetri: pgvector + mem0](runbooks/bimetri-mem0-pgvector.md) | Migrate Postgres to pgvector, add mem0, daily DB backup cron, backend mem0 key (project memory in run prompts), initial memory fill with `mem0-bootstrap.py`, `ozellik_gecmisi` written on PR merge, memory proposals from the PR discussion approved on the Memory page, read-only Records tab and LAN-only mem0 dashboard, `memory-mcp` service with agent search and proposal tools |

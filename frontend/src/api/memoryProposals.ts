@@ -2,16 +2,19 @@
 // Licensed under AGPLv3. See LICENSE file.
 // Commercial licensing: info@mechemsi.com
 
-// bimetri patch: memory proposals made on PR merge, reviewed before they reach mem0.
+// bimetri patch: memory proposals made on PR merge or by agents, reviewed before they reach mem0.
 import { BASE, get, post } from "./client";
 
 export type MemoryProposalKind = "lesson" | "pitfall" | "decision";
 export type MemoryProposalStatus = "pending" | "approved" | "rejected";
+export type MemoryProposalSource = "merge" | "agent";
 
 export interface MemoryProposal {
   id: number;
   project: string;
-  pr_number: number;
+  pr_number: number | null;
+  source: MemoryProposalSource;
+  run_id: number | null;
   kind: MemoryProposalKind;
   text: string;
   status: MemoryProposalStatus;

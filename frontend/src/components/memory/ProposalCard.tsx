@@ -3,6 +3,7 @@
 // Commercial licensing: info@mechemsi.com
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Check, Loader2, X } from "lucide-react";
 import type { MemoryProposal, MemoryProposalKind } from "../../api";
 
@@ -59,7 +60,13 @@ export default function ProposalCard({ proposal, onApprove, onReject }: Props) {
           </span>
         )}
         <span className="font-mono">{proposal.project}</span>
-        <span>PR #{proposal.pr_number}</span>
+        <span>{proposal.source === "agent" ? "Agent" : "Merge"}</span>
+        {proposal.pr_number !== null && <span>PR #{proposal.pr_number}</span>}
+        {proposal.run_id !== null && (
+          <Link to={`/runs/${proposal.run_id}`} className="text-blue-400 hover:underline">
+            Run #{proposal.run_id}
+          </Link>
+        )}
         {proposal.created_at && <span>{new Date(proposal.created_at).toLocaleString()}</span>}
       </div>
       {pending ? (

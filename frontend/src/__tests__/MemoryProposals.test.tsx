@@ -8,10 +8,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/shared/Toast";
 import MemoryProposals from "../pages/MemoryProposals";
 
-const proposal = (id: number, project: string, text: string) => ({
+const proposal = (
+  id: number,
+  project: string,
+  text: string,
+  extra: { pr_number?: number | null; source?: string; run_id?: number | null } = {},
+) => ({
   id,
   project,
   pr_number: 7,
+  source: "merge",
+  run_id: null,
+  ...extra,
   kind: "lesson",
   text,
   status: "pending",
@@ -88,6 +96,23 @@ describe("MemoryProposals", () => {
     fireEvent.click(within(card).getByText("Reject"));
     expect(await screen.findByText(/Reject failed: Proposal is already approved/)).toBeInTheDocument();
     expect(screen.getByTestId("proposal-1")).toBeInTheDocument();
+  });
+
+  it("shows the source and run of agent proposals without a PR", async () => {
+    mockGet.mockResolvedValue([
+      proposal(3, "Org/repo", "Flyway needs the baseline", {
+        pr_number: null,
+        source: "agent",
+        run_id: 42,
+      }),
+    ]);
+    renderPage();
+    const card = await screen.findByTestId("proposal-3");
+    expect(within(card).getByText("Agent")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Run #42" })).toHaveAttribute("href", "/runs/42");
+    expect(within(card).queryByText(/PR #/)).not.toBeInTheDocument();
+    fireEvent.click(within(card).getByText("Approve"));
+    expect(await screen.findByText("Saved to project memory")).toBeInTheDocument();
   });
 
   it("loads another status when its tab is clicked", async () => {

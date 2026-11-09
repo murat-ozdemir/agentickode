@@ -120,6 +120,12 @@ class TestProposeForMerge:
     async def test_stores_pending_rows_and_sends_known_records(self, enabled, session_factory):
         async with session_factory() as s:
             s.add(MemoryProposal(project=PROJECT, pr_number=1, kind="pitfall", text="Old idea"))
+            # An agent's proposal on the same PR must not count as "already proposed".
+            s.add(
+                MemoryProposal(
+                    project=PROJECT, pr_number=7, kind="lesson", text="Agent", source="agent"
+                )
+            )
             await s.commit()
         known = [
             {"memory": "Use uv", "metadata": {"tur": "ders"}},
@@ -145,8 +151,9 @@ class TestProposeForMerge:
             rows = await MemoryProposalRepository(s).list_proposals(
                 status="pending", project=PROJECT
             )
-        assert [(r.pr_number, r.kind, r.text) for r in rows if r.pr_number == 7] == [
-            (7, "lesson", "Run ruff before push")
+        assert [(r.pr_number, r.kind, r.text) for r in rows if r.source == "merge"] == [
+            (7, "lesson", "Run ruff before push"),
+            (1, "pitfall", "Old idea"),
         ]
 
     async def test_skips_pr_that_already_has_proposals(self, enabled, session_factory):

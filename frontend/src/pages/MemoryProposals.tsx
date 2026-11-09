@@ -49,7 +49,11 @@ export default function MemoryProposals() {
     try {
       if (kind !== p.kind || text !== p.text) await updateMemoryProposal(p.id, { kind, text });
       await approveMemoryProposal(p.id);
-      toast.success(`Saved to project memory (PR #${p.pr_number})`);
+      toast.success(
+        p.pr_number !== null
+          ? `Saved to project memory (PR #${p.pr_number})`
+          : "Saved to project memory",
+      );
       setItems((all) => all.filter((x) => x.id !== p.id));
     } catch (e) {
       toast.error(`Approve failed: ${(e as Error).message}`);
@@ -74,7 +78,7 @@ export default function MemoryProposals() {
             Memory proposals
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Lessons, pitfalls and decisions proposed from merged PRs. Approved ones are saved
+            Lessons, pitfalls and decisions proposed from merged PRs or by agents during a run. Approved ones are saved
             to the project memory (mem0) and used in future runs.
           </p>
         </div>

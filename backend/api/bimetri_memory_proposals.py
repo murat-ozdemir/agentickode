@@ -2,7 +2,7 @@
 # Licensed under AGPLv3. See LICENSE file.
 # Commercial licensing: info@mechemsi.com
 
-"""bimetri patch: review the memory proposals made on PR merges.
+"""bimetri patch: review the memory proposals made on PR merges or by agents.
 
 Approving writes the (possibly edited) text to mem0 under the project's user_id; rejecting
 only marks the row. Decided proposals are kept so the LLM does not propose them again.
@@ -34,7 +34,9 @@ class MemoryProposalResponse(BaseModel):
 
     id: int
     project: str
-    pr_number: int
+    pr_number: int | None = None
+    source: str = "merge"
+    run_id: int | None = None
     kind: str
     text: str
     status: str
@@ -90,10 +92,11 @@ async def approve_proposal(
     now = datetime.now(UTC)
     metadata = {
         "tur": KIND_TO_TUR[str(proposal.kind)],
-        "kaynak": "proposal",
-        "pr": proposal.pr_number,
+        "kaynak": "agent" if proposal.source == "agent" else "proposal",
         "tarih": now.date().isoformat(),
     }
+    if proposal.pr_number is not None:
+        metadata["pr"] = proposal.pr_number
     try:
         mem0_id = await add_memory(str(proposal.project), str(proposal.text), metadata)
     except Exception as e:

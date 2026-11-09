@@ -6,6 +6,7 @@
 
 Records are stored by the merge webhook, approved proposals and scripts/bimetri tooling;
 ``metadata`` keys (tur, kaynak, pr, tarih) are kept as written and exposed under English names.
+mem0's ``GET /memories`` has no offset, so every page reads the whole project and slices it here.
 """
 
 import logging
@@ -29,7 +30,15 @@ class MemoryRecordResponse(BaseModel):
     created_at: str | None = None
 
 
-def _to_record(raw: dict) -> MemoryRecordResponse:
+class MemoryRecordPage(BaseModel):
+    items: list[MemoryRecordResponse]
+    total: int
+    offset: int
+    limit: int
+    kinds: list[str]
+
+
+def to_record(raw: dict) -> MemoryRecordResponse:
     meta = raw.get("metadata") or {}
     pr = meta.get("pr")
     return MemoryRecordResponse(
@@ -47,8 +56,13 @@ def _to_record(raw: dict) -> MemoryRecordResponse:
 async def list_records(
     project: str = Query(min_length=1),
     kind: str | None = None,
-) -> list[MemoryRecordResponse]:
-    """Newest first; ``kind`` filters on ``metadata.tur`` (e.g. karar, tuzak)."""
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> MemoryRecordPage:
+    """Newest first; ``kind`` filters on ``metadata.tur`` (e.g. karar, tuzak).
+
+    ``kinds`` lists every kind of the project, so the filter stays complete on any page.
+    """
     if not mem0_enabled():
         raise HTTPException(status_code=503, detail="mem0 is not configured")
     try:
@@ -56,7 +70,15 @@ async def list_records(
     except Exception as e:
         logger.warning("mem0 read failed for %s", project, exc_info=True)
         raise HTTPException(status_code=502, detail=f"mem0 read failed: {e}") from e
-    records = [_to_record(r) for r in rows]
+    records = [to_record(r) for r in rows]
+    kinds = sorted({r.kind for r in records if r.kind})
     if kind:
         records = [r for r in records if r.kind == kind]
-    return sorted(records, key=lambda r: r.created_at or "", reverse=True)
+    records.sort(key=lambda r: r.created_at or "", reverse=True)
+    return MemoryRecordPage(
+        items=records[offset : offset + limit],
+        total=len(records),
+        offset=offset,
+        limit=limit,
+        kinds=kinds,
+    )

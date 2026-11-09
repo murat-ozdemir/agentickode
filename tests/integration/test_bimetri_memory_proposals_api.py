@@ -54,6 +54,20 @@ class TestMemoryProposalsApi:
         assert (project, text) == ("Org/repo", "Use uv")
         assert metadata["tur"] == "karar" and metadata["pr"] == 7
         assert metadata["kaynak"] == "proposal"
+        assert data["source"] == "merge" and data["run_id"] is None
+
+    async def test_agent_proposal_without_pr_is_saved_without_pr(self, client, db_session, mem0_on):
+        row = MemoryProposal(
+            project="Org/repo", kind="pitfall", text="Flyway baseline", source="agent", run_id=42
+        )
+        db_session.add(row)
+        await db_session.commit()
+        listed = (await client.get(BASE, params={"project": "Org/repo"})).json()
+        assert {"pr_number": None, "source": "agent", "run_id": 42}.items() <= listed[0].items()
+        assert (await client.post(f"{BASE}/{row.id}/approve")).status_code == 200
+        metadata = mem0_on.call_args.args[2]
+        assert metadata["kaynak"] == "agent" and metadata["tur"] == "tuzak"
+        assert "pr" not in metadata
 
     async def test_decided_proposal_cannot_change(self, client, proposal):
         assert (await client.post(f"{BASE}/{proposal.id}/reject")).json()["status"] == "rejected"

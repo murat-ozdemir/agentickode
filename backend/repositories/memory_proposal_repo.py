@@ -4,7 +4,7 @@
 
 """bimetri patch: repository for project-memory proposals."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import MemoryProposal
@@ -29,12 +29,31 @@ class MemoryProposalRepository:
         return await self._session.get(MemoryProposal, proposal_id)
 
     async def exists_for_pr(self, project: str, pr_number: int) -> bool:
+        """Whether the merge of this PR was already handled; agent proposals do not count."""
         result = await self._session.execute(
             select(MemoryProposal.id)
-            .where(MemoryProposal.project == project, MemoryProposal.pr_number == pr_number)
+            .where(
+                MemoryProposal.project == project,
+                MemoryProposal.pr_number == pr_number,
+                MemoryProposal.source == "merge",
+            )
             .limit(1)
         )
         return result.scalar_one_or_none() is not None
+
+    async def count_for_run(self, run_id: int) -> int:
+        result = await self._session.execute(
+            select(func.count()).select_from(MemoryProposal).where(MemoryProposal.run_id == run_id)
+        )
+        return int(result.scalar_one())
+
+    async def pending_texts(self, project: str) -> set[str]:
+        result = await self._session.execute(
+            select(MemoryProposal.text).where(
+                MemoryProposal.project == project, MemoryProposal.status == "pending"
+            )
+        )
+        return set(result.scalars().all())
 
     async def add_all(self, proposals: list[MemoryProposal]) -> None:
         self._session.add_all(proposals)

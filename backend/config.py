@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     mem0_api_key: str = ""
     # bimetri patch: memory proposals on PR merge (off while the key is empty)
     mem0_openai_api_key: str = ""
+    # bimetri patch: bearer token of the read-only memory MCP (memory-mcp service); also turns
+    # on the tool hints in the run-start memory section. Off while empty.
+    bimetri_memory_mcp_token: str = ""
     memory_proposal_model: str = "gpt-5-mini"
     memory_proposal_language: str = "Turkish"
 

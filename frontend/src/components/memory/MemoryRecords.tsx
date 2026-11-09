@@ -3,10 +3,14 @@
 // Commercial licensing: info@mechemsi.com
 
 // bimetri patch: read-only list of the selected project's mem0 records.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMemoryRecords, getProjects } from "../../api";
-import type { MemoryRecord } from "../../api";
+import type { MemoryRecordPage } from "../../api";
+import Pagination from "../shared/Pagination";
 import { useToast } from "../shared/Toast";
+
+const PAGE_SIZE = 50;
+const EMPTY: MemoryRecordPage = { items: [], total: 0, offset: 0, limit: PAGE_SIZE, kinds: [] };
 
 const SELECT =
   "bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200";
@@ -18,7 +22,8 @@ export default function MemoryRecords() {
   const [projects, setProjects] = useState<string[]>([]);
   const [project, setProject] = useState("");
   const [kind, setKind] = useState("");
-  const [records, setRecords] = useState<MemoryRecord[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<MemoryRecordPage>(EMPTY);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,22 +38,30 @@ export default function MemoryRecords() {
 
   useEffect(() => {
     if (!project) return;
+    let stale = false;
     setLoading(true);
-    setKind("");
-    getMemoryRecords(project)
-      .then(setRecords)
+    getMemoryRecords(project, kind, offset, PAGE_SIZE)
+      .then((p) => !stale && setPage(p))
       .catch((e) => {
-        setRecords([]);
+        if (stale) return;
+        setPage(EMPTY);
         toastRef.current.error(`Failed to load records: ${(e as Error).message}`);
       })
-      .finally(() => setLoading(false));
-  }, [project]);
+      .finally(() => !stale && setLoading(false));
+    return () => {
+      stale = true;
+    };
+  }, [project, kind, offset]);
 
-  const kinds = useMemo(
-    () => [...new Set(records.map((r) => r.kind).filter((k): k is string => !!k))].sort(),
-    [records],
-  );
-  const shown = kind ? records.filter((r) => r.kind === kind) : records;
+  const selectProject = (value: string) => {
+    setProject(value);
+    setKind("");
+    setOffset(0);
+  };
+  const selectKind = (value: string) => {
+    setKind(value);
+    setOffset(0);
+  };
 
   return (
     <div className="space-y-4">
@@ -56,7 +69,7 @@ export default function MemoryRecords() {
         <select
           aria-label="Project"
           value={project}
-          onChange={(e) => setProject(e.target.value)}
+          onChange={(e) => selectProject(e.target.value)}
           className={SELECT}
         >
           {projects.map((p) => (
@@ -68,25 +81,25 @@ export default function MemoryRecords() {
         <select
           aria-label="Kind"
           value={kind}
-          onChange={(e) => setKind(e.target.value)}
+          onChange={(e) => selectKind(e.target.value)}
           className={SELECT}
         >
           <option value="">All kinds</option>
-          {kinds.map((k) => (
+          {page.kinds.map((k) => (
             <option key={k} value={k}>
               {k}
             </option>
           ))}
         </select>
         <span className="ml-auto text-sm text-gray-500">
-          {loading ? "Loading..." : `${shown.length} records`}
+          {loading ? "Loading..." : `${page.total} records`}
         </span>
       </div>
-      {!loading && project && shown.length === 0 && (
+      {!loading && project && page.items.length === 0 && (
         <p className="text-gray-500 text-sm">No records.</p>
       )}
       <ul className="space-y-2">
-        {shown.map((r) => (
+        {page.items.map((r) => (
           <li
             key={r.id}
             data-testid={`record-${r.id}`}
@@ -104,6 +117,7 @@ export default function MemoryRecords() {
           </li>
         ))}
       </ul>
+      <Pagination total={page.total} offset={offset} limit={PAGE_SIZE} onPageChange={setOffset} />
     </div>
   );
 }

@@ -115,7 +115,10 @@ async def propose_for_merge(
     if proposals:
         async with session_factory() as session:
             await MemoryProposalRepository(session).add_all(
-                [MemoryProposal(project=project, pr_number=number, **p) for p in proposals]
+                [
+                    MemoryProposal(project=project, pr_number=number, source="merge", **p)
+                    for p in proposals
+                ]
             )
             await session.commit()
     return f"{len(proposals)} proposals"

@@ -34,7 +34,10 @@ class TestMemoriesApi:
         ):
             resp = await client.get(BASE, params={"project": "Org/repo"})
         assert resp.status_code == 200
-        data = resp.json()
+        body = resp.json()
+        assert body["total"] == 2
+        assert body["kinds"] == ["karar", "modul"]
+        data = body["items"]
         assert [r["id"] for r in data] == ["b", "a"]
         assert data[0] == {
             "id": "b",
@@ -54,7 +57,28 @@ class TestMemoriesApi:
             patch.object(api, "list_memories", AsyncMock(return_value=ROWS)),
         ):
             resp = await client.get(BASE, params={"project": "Org/repo", "kind": "modul"})
-        assert [r["id"] for r in resp.json()] == ["a"]
+        body = resp.json()
+        assert [r["id"] for r in body["items"]] == ["a"]
+        assert body["total"] == 1
+        assert body["kinds"] == ["karar", "modul"]
+
+    async def test_returns_the_requested_page(self, client):
+        rows = [
+            {"id": str(i), "memory": f"m{i}", "created_at": f"2026-11-{i + 1:02d}T00:00:00+00:00"}
+            for i in range(5)
+        ]
+        with (
+            patch.object(api, "mem0_enabled", return_value=True),
+            patch.object(api, "list_memories", AsyncMock(return_value=rows)),
+        ):
+            resp = await client.get(BASE, params={"project": "Org/repo", "limit": 2, "offset": 2})
+        body = resp.json()
+        assert [r["id"] for r in body["items"]] == ["2", "1"]
+        assert (body["total"], body["offset"], body["limit"]) == (5, 2, 2)
+
+    async def test_rejects_limit_over_200(self, client):
+        resp = await client.get(BASE, params={"project": "Org/repo", "limit": 201})
+        assert resp.status_code == 422
 
     async def test_project_is_required(self, client):
         assert (await client.get(BASE)).status_code == 422
