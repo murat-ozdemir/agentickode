@@ -171,6 +171,7 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Memory page: `Approve failed: mem0 write failed` (502) | mem0 down or key revoked; the proposal stays `pending`, approve again later |
 | No **Memory** item in the menu | Frontend not rebuilt: `up -d --build frontend` |
 | Dashboard login works but pages show `Network Error` | CORS: mem0 not recreated with `DASHBOARD_URL`, or the page was opened by another host name than `MEM0_BIND`. `up -d mem0`, open `http://<MEM0_BIND>:8891` |
+| `mem0-dashboard` build: `Cannot find module '@/lib/runs'` in `./evaluation/...` | Older BuildKit puts the repo's `evaluation` submodule into the subdir context; `docker/mem0-dashboard/Dockerfile` removes it. Keep building through that Dockerfile, not the upstream one |
 | Records tab: `Failed to load records: mem0 is not configured` | `MEM0_API_KEY` empty in `.env`; see step 6 |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |
