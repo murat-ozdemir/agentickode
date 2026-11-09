@@ -86,5 +86,6 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | mem0 `401` from clients | Send `X-API-Key: <ADMIN_API_KEY>` |
 | Run log `Proje hafızası eklenmedi (mem0: HTTPStatusError: ... 401 ...)` | `MEM0_API_KEY` revoked or wrong. Remove the line from `.env`, rerun `mem0-backend-key.sh`, then `up -d backend` |
 | Run log `... 502 Bad Gateway` | mem0 could not reach OpenAI (key or quota). Check `docker logs agentickode-mem0-1` |
+| mem0 log `401 - Your IP is not authorized` | The OpenAI project has an IP allowlist. Add the server's outbound IP: `docker exec agentickode-mem0-1 python -c "import urllib.request;print(urllib.request.urlopen('https://api.ipify.org').read().decode())"` |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |
