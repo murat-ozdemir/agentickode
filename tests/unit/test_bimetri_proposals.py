@@ -120,6 +120,15 @@ class TestProposeForMerge:
     async def test_stores_pending_rows_and_sends_known_records(self, enabled, session_factory):
         async with session_factory() as s:
             s.add(MemoryProposal(project=PROJECT, pr_number=1, kind="pitfall", text="Old idea"))
+            s.add(
+                MemoryProposal(
+                    project=PROJECT,
+                    pr_number=2,
+                    kind="decision",
+                    text="PR summary",
+                    status="rejected",
+                )
+            )
             # An agent's proposal on the same PR must not count as "already proposed".
             s.add(
                 MemoryProposal(
@@ -145,7 +154,10 @@ class TestProposeForMerge:
         assert body["model"] == "gpt-5-mini"
         assert client.post.call_args.kwargs["headers"]["Authorization"] == "Bearer sk-test"
         user_msg = body["messages"][1]["content"]
-        assert "- Use uv" in user_msg and "- Old idea" in user_msg
+        known_part, rejected_part = user_msg.split("Rejected by a human earlier:")
+        assert "- Use uv" in known_part and "- Old idea" in known_part
+        assert "PR summary" not in known_part and "- PR summary" in rejected_part
+        assert "summary of what this PR changed" in body["messages"][0]["content"]
         assert "PR #6" not in user_msg
         async with session_factory() as s:
             rows = await MemoryProposalRepository(s).list_proposals(

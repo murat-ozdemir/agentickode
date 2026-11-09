@@ -42,8 +42,12 @@ Propose at most 3 records worth remembering for FUTURE work in this repository:
 - lesson: something that went wrong and how it was fixed, phrased as advice
 - pitfall: a non-obvious trap in this codebase (tooling, config, API quirk)
 - decision: a design choice made in the discussion, with its reason
-Rules: only project-specific, reusable knowledge; skip anything obvious, generic or already
-listed under "Existing records"; one or two sentences each; name files/modules when it helps.
+Rules: only project-specific, reusable knowledge; skip anything obvious, generic, already
+listed under "Existing records" or like the "Rejected" ones; one or two sentences each; name
+files/modules when it helps. Do NOT propose:
+- a summary of what this PR changed or left unchanged (the feature history records that)
+- behaviour this PR removed or fixed (it is no longer true after the merge)
+- facts readable from the code, or general practice (write tests, validate inputs)
 Proposing nothing is fine. Write the text in {language}.
 Answer with JSON only: {{"proposals": [{{"kind": "lesson|pitfall|decision", "text": "..."}}]}}"""
 
@@ -64,8 +68,11 @@ def parse_proposals(content: str) -> list[dict]:
     return result[:MAX_PROPOSALS]
 
 
-async def generate_proposals(chain: str, existing: list[str]) -> list[dict]:
+async def generate_proposals(
+    chain: str, existing: list[str], rejected: list[str] | None = None
+) -> list[dict]:
     known = "\n".join(f"- {t}" for t in existing[:100]) or "(none)"
+    refused = "\n".join(f"- {t}" for t in (rejected or [])[:30]) or "(none)"
     resp = await get_http_client().post(
         OPENAI_URL,
         headers={"Authorization": f"Bearer {settings.mem0_openai_api_key}"},
@@ -79,7 +86,11 @@ async def generate_proposals(chain: str, existing: list[str]) -> list[dict]:
                     "role": "system",
                     "content": SYSTEM_PROMPT.format(language=settings.memory_proposal_language),
                 },
-                {"role": "user", "content": f"Existing records:\n{known}\n\n{chain}"},
+                {
+                    "role": "user",
+                    "content": f"Existing records:\n{known}\n\n"
+                    f"Rejected by a human earlier:\n{refused}\n\n{chain}",
+                },
             ],
         },
         timeout=180.0,
@@ -99,9 +110,9 @@ async def propose_for_merge(
         repo = MemoryProposalRepository(session)
         if await repo.exists_for_pr(project, number):
             return "exists"
-        earlier = [
-            p.text for p in await repo.list_proposals(project=project) if p.status != "approved"
-        ]
+        earlier = await repo.list_proposals(project=project)
+        pending = [p.text for p in earlier if p.status == "pending"]
+        rejected = [p.text for p in earlier if p.status == "rejected"]
     chain = await collect_pr_chain(provider, repo_path, pr)
     if not chain:
         return "no-discussion"
@@ -111,7 +122,7 @@ async def propose_for_merge(
         for m in await list_memories(project)
         if (m.get("metadata") or {}).get("tur") in tur_values
     ]
-    proposals = await generate_proposals(chain, existing + earlier)
+    proposals = await generate_proposals(chain, existing + pending, rejected)
     if proposals:
         async with session_factory() as session:
             await MemoryProposalRepository(session).add_all(
