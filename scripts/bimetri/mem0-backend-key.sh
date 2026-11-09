@@ -13,7 +13,10 @@ set -euo pipefail
 umask 077
 cd "$(dirname "$0")/../.."
 
-bind=$(grep -oP '^MEM0_BIND=\K.*' .env 2>/dev/null || true)
+# KEY=deger satirinin son ornegi; tirnak, bosluk ve CR (Windows satir sonu) atilir.
+deger() { { grep -oP "^$1=\K.*" "$2" 2>/dev/null || true; } | tail -n1 | tr -d "\r\"' "; }
+
+bind=$(deger MEM0_BIND .env)
 MEM0=${MEM0:-http://${bind:-127.0.0.1}:8890}
 
 alan() { python3 -c "import json, sys; print(json.load(sys.stdin).get('$1', ''))"; }
@@ -23,7 +26,9 @@ if grep -q '^MEM0_API_KEY=.' .env 2>/dev/null; then
   exit 0
 fi
 
-if [[ $(curl -fsS "$MEM0/auth/setup-status" | alan needsSetup) == True ]]; then
+durum=$(curl -fsS -m 10 "$MEM0/auth/setup-status") ||
+  { echo "HATA: mem0'a ulasilamadi ($MEM0)"; exit 1; }
+if [[ $(alan needsSetup <<<"$durum") == True ]]; then
   read -rp "mem0 yonetici e-postasi: " email
   read -rsp "mem0 yonetici parolasi (en az 8 karakter): " parola
   echo
@@ -37,7 +42,8 @@ if [[ $(curl -fsS "$MEM0/auth/setup-status" | alan needsSetup) == True ]]; then
 fi
 
 # Anahtarlar komut satirina (ps) dusmesin: basliklar stdin'den.
-admin=$(grep -oP '^ADMIN_API_KEY=\K.*' .env.mem0)
+admin=$(deger ADMIN_API_KEY .env.mem0)
+[[ -n $admin ]] || { echo "HATA: .env.mem0'da ADMIN_API_KEY yok"; exit 1; }
 anahtar=$(printf 'X-API-Key: %s\n' "$admin" |
   curl -fsS -X POST "$MEM0/api-keys" -H @- -H 'Content-Type: application/json' \
     -d '{"label": "agentickode-backend"}' | alan key)
