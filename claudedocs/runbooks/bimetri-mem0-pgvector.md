@@ -41,6 +41,16 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
    install -m 644 scripts/bimetri/agentickode-backup.cron /etc/cron.d/agentickode-backup
    scripts/bimetri/pg-backup.sh
    ```
+   Off-site copy (Hetzner Storage Box sub-account; skipped while `STORAGEBOX` is unset):
+   ```bash
+   ssh-keygen -t ed25519 -N '' -f /root/.ssh/storagebox_ed25519 -C agentickode-backup@$(hostname)
+   ssh-keyscan -p 23 -t ed25519 <sub>.your-storagebox.de > /root/.ssh/storagebox_known_hosts
+   ssh-keygen -lf /root/.ssh/storagebox_known_hosts   # compare with Hetzner's published fingerprint
+   ssh -p 23 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de install-ssh-key < /root/.ssh/storagebox_ed25519.pub
+   echo 'STORAGEBOX=<sub>@<sub>.your-storagebox.de' > /etc/default/agentickode-backup
+   ```
+   The script rsyncs `*.dump` + `mem0-history-*.db` into `agentickode/` (sub-account root) and deletes
+   remote files older than `REMOTE_KEEP_DAYS` (60) by the date in the file name; `*-premigrate-*` is kept.
 5. From now on every compose command needs the extra file:
    `-f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml`.
 
@@ -62,4 +72,4 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Row counts differ | Script stops; follow the printed rollback, keep the dump, investigate |
 | `port is already allocated` / `address already in use` on 8890 | Change the host port in `docker-compose.bimetri.yml` |
 | mem0 `401` from clients | Send `X-API-Key: <ADMIN_API_KEY>` |
-| Backups only on the same disk | Copy `/var/backups/agentickode` off-host separately (not covered here) |
+| `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |

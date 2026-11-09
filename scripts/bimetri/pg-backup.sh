@@ -7,10 +7,22 @@
 #   BACKUP_DIR       varsayilan: /var/backups/agentickode
 #   KEEP_DAYS        varsayilan: 14
 #   DATABASES        varsayilan: "agentickode mem0 mem0_app" (olmayan DB atlanir)
-#
-# Not: yedek ayni makinede durur; disk kaybina karsi koruma degildir.
+#   STORAGEBOX       uzak kopya hedefi, ornek: u173026-sub1@u173026-sub1.your-storagebox.de
+#                    (bossa uzaga yuklenmez)
+#   STORAGEBOX_PORT  varsayilan: 23
+#   STORAGEBOX_DIR   varsayilan: agentickode (alt hesabin kokune gore)
+#   STORAGEBOX_KEY   varsayilan: /root/.ssh/storagebox_ed25519
+#   STORAGEBOX_KNOWN_HOSTS  varsayilan: /root/.ssh/storagebox_known_hosts
+#   REMOTE_KEEP_DAYS varsayilan: 60 (premigrate dokumleri uzakta da silinmez)
+# Ayarlar /etc/default/agentickode-backup dosyasindan da okunur (BACKUP_CONF ile degisir).
 set -euo pipefail
 umask 077
+
+BACKUP_CONF=${BACKUP_CONF:-/etc/default/agentickode-backup}
+if [[ -r $BACKUP_CONF ]]; then
+  # shellcheck source=/dev/null
+  . "$BACKUP_CONF"
+fi
 
 COMPOSE_PROJECT=${COMPOSE_PROJECT:-agentickode}
 BACKUP_DIR=${BACKUP_DIR:-/var/backups/agentickode}
@@ -68,4 +80,45 @@ fi
 
 find "$BACKUP_DIR" -maxdepth 1 -type f \( -name '*.dump' -o -name 'mem0-history-*.db' \) \
   ! -name '*-premigrate-*' -mtime +"$KEEP_DAYS" -print -delete
+
+# Uzak kopya (storage box): rsync ile ekler, eskileri dosya adindaki tarihe gore sftp ile siler.
+if [[ -n ${STORAGEBOX:-} ]]; then
+  STORAGEBOX_PORT=${STORAGEBOX_PORT:-23}
+  STORAGEBOX_DIR=${STORAGEBOX_DIR:-agentickode}
+  STORAGEBOX_KEY=${STORAGEBOX_KEY:-/root/.ssh/storagebox_ed25519}
+  STORAGEBOX_KNOWN_HOSTS=${STORAGEBOX_KNOWN_HOSTS:-/root/.ssh/storagebox_known_hosts}
+  REMOTE_KEEP_DAYS=${REMOTE_KEEP_DAYS:-60}
+  ssh_opts=(-i "$STORAGEBOX_KEY" -o BatchMode=yes -o IdentitiesOnly=yes
+    -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$STORAGEBOX_KNOWN_HOSTS")
+
+  if rsync -rt --include='*.dump' --include='mem0-history-*.db' --exclude='*' \
+    -e "ssh -p $STORAGEBOX_PORT ${ssh_opts[*]}" "$BACKUP_DIR/" "$STORAGEBOX:$STORAGEBOX_DIR/"; then
+    log "uzak kopya -> $STORAGEBOX:$STORAGEBOX_DIR/"
+    cutoff=$(date -d "-$REMOTE_KEEP_DAYS days" +%Y%m%d)
+    sftp_run() { sftp -q -b - -P "$STORAGEBOX_PORT" "${ssh_opts[@]}" "$STORAGEBOX"; }
+    if listing=$(echo "ls -1 $STORAGEBOX_DIR" | sftp_run); then
+      old=()
+      while read -r path; do
+        name=${path##*/}
+        [[ $name == *-premigrate-* ]] && continue
+        [[ $name =~ -([0-9]{8})-[0-9]{6}\.(dump|db)$ ]] || continue
+        [[ ${BASH_REMATCH[1]} < $cutoff ]] && old+=("$name")
+      done <<<"$listing"
+      if ((${#old[@]})); then
+        if printf "rm $STORAGEBOX_DIR/%s\n" "${old[@]}" | sftp_run >/dev/null; then
+          log "uzakta silindi (${REMOTE_KEEP_DAYS} gunden eski): ${old[*]}"
+        else
+          log "HATA: uzaktaki eski yedekler silinemedi"
+          failed=1
+        fi
+      fi
+    else
+      log "HATA: uzak klasor listelenemedi"
+      failed=1
+    fi
+  else
+    log "HATA: uzak kopya yuklenemedi"
+    failed=1
+  fi
+fi
 exit "$failed"
