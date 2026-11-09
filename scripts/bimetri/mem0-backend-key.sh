@@ -6,7 +6,9 @@
 #      Hesap olusana kadar /auth/register herkese aciktir; bu adim onu kapatir.
 #   2. .env.mem0'daki ADMIN_API_KEY ile "agentickode-backend" etiketli anahtar uretir.
 #   3. Anahtari ekrana yazmadan .env'e MEM0_API_KEY olarak ekler.
-# .env'de MEM0_API_KEY zaten doluysa hicbir sey yapmaz.
+#   4. (patch 74b) Copies OPENAI_API_KEY from .env.mem0 into .env as MEM0_OPENAI_API_KEY,
+#      used for the memory proposals on PR merge. Never printed.
+# Steps whose key is already set in .env are skipped.
 # Sonra backend yeniden olusturulmali (restart .env'i yeniden okumaz):
 #   docker compose -p agentickode -f ... -f docker-compose.bimetri.yml up -d backend
 set -euo pipefail
@@ -20,6 +22,25 @@ bind=$(deger MEM0_BIND .env)
 MEM0=${MEM0:-http://${bind:-127.0.0.1}:8890}
 
 alan() { python3 -c "import json, sys; print(json.load(sys.stdin).get('$1', ''))"; }
+
+# Appends KEY=value to .env without echoing the value (patch 74b).
+append_env() {
+  [[ -z $(tail -c1 .env 2>/dev/null) ]] || echo >>.env
+  printf '%s=%s\n' "$1" "$2" >>.env
+}
+
+if grep -q '^MEM0_OPENAI_API_KEY=.' .env 2>/dev/null; then
+  echo "MEM0_OPENAI_API_KEY is already in .env; left unchanged."
+else
+  openai_key=$(deger OPENAI_API_KEY .env.mem0)
+  if [[ -n $openai_key ]]; then
+    append_env MEM0_OPENAI_API_KEY "$openai_key"
+    echo "MEM0_OPENAI_API_KEY added to .env (copied from .env.mem0)."
+  else
+    echo "WARNING: no OPENAI_API_KEY in .env.mem0; memory proposals stay off."
+  fi
+  unset openai_key
+fi
 
 if grep -q '^MEM0_API_KEY=.' .env 2>/dev/null; then
   echo "MEM0_API_KEY zaten .env'de; degisiklik yapilmadi."
@@ -50,7 +71,6 @@ anahtar=$(printf 'X-API-Key: %s\n' "$admin" |
 unset admin
 [[ -n $anahtar ]] || { echo "HATA: mem0 anahtari uretilemedi"; exit 1; }
 
-[[ -z $(tail -c1 .env 2>/dev/null) ]] || echo >>.env
-printf 'MEM0_API_KEY=%s\n' "$anahtar" >>.env
+append_env MEM0_API_KEY "$anahtar"
 unset anahtar
 echo "MEM0_API_KEY .env'e eklendi (etiket: agentickode-backend)."

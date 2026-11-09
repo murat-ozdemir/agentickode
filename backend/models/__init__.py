@@ -10,6 +10,7 @@ from backend.models.agents import (
     ScheduledTask,
 )
 from backend.models.base import Base
+from backend.models.bimetri_memory import MemoryProposal
 from backend.models.chat import ChatSession
 from backend.models.episodes import Episode
 from backend.models.flow_prompts import FlowPrompt
@@ -40,6 +41,7 @@ __all__ = [
     "Episode",
     "FlowPrompt",
     "GitConnection",
+    "MemoryProposal",
     "MonitoringRule",
     "NotificationChannel",
     "NotificationSource",

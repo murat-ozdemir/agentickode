@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     # bimetri yamasi: mem0 proje hafizasi (ikisi de doluysa kosu basinda prompt'a eklenir)
     mem0_url: str = ""
     mem0_api_key: str = ""
+    # bimetri patch: memory proposals on PR merge (off while the key is empty)
+    mem0_openai_api_key: str = ""
+    memory_proposal_model: str = "gpt-5-mini"
+    memory_proposal_language: str = "Turkish"
 
     # Redis
     redis_url: str = "redis://redis:6379/0"

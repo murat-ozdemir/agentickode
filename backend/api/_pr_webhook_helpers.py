@@ -136,8 +136,11 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
     provider = get_git_provider("gitea", get_http_client(), access_token=token)
     if pr.get("number"):  # mem0'a ozellik_gecmisi; arka planda, yaniti geciktirmez
         from backend.worker.flow._bimetri_ozellik import arka_planda_yaz
+        from backend.worker.flow._bimetri_proposals import schedule_proposals
 
         arka_planda_yaz(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
+        # memory proposals from the PR discussion; pending until approved in the UI
+        schedule_proposals(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
     done = []
     for n in issues:
         try:

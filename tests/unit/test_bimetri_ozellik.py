@@ -122,6 +122,7 @@ class TestMergeWebhook:
             patch("backend.worker.phases._helpers.get_project_token", AsyncMock(return_value="t")),
             patch("backend.services.git.get_git_provider", return_value=gp),
             patch.object(ozellik, "arka_planda_yaz") as yaz,
+            patch("backend.worker.flow._bimetri_proposals.schedule_proposals"),
         ):
             sonuc = await yardimci._bimetri_pr_merged(govde, MagicMock(), repo)
         assert sonuc == {"status": "accepted", "completed": [7]}

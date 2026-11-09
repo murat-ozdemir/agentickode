@@ -21,6 +21,7 @@ from backend.api import (
     app_settings,
     automation_rules,
     backup,
+    bimetri_memory_proposals,
     chat,
     git_connections,
     health,
@@ -467,6 +468,7 @@ app.include_router(webhooks_monitoring.router, prefix="/api")
 app.include_router(webhooks_linear.router, prefix="/api")
 app.include_router(webhooks_pr_comment.router, prefix="/api")
 app.include_router(memory.router, prefix="/api")
+app.include_router(bimetri_memory_proposals.router, prefix="/api")  # bimetri patch
 app.include_router(webhooks_slack.router, prefix="/api")
 app.include_router(webhooks_discord.router, prefix="/api")
 app.include_router(ws.router)
