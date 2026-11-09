@@ -65,6 +65,32 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
    `.env` without printing it. Use `up -d`, not `restart`: `restart` does not re-read `.env`.
    Each run logs `Proje hafızasından N kayıt eklendi`, `Proje hafızasında kayıt yok` or
    `Proje hafızası eklenmedi (...)`. In the last case the run continues without memory.
+7. Initial fill of a project's memory (yama 73), once per repo. Run as root (`sudo -i`) so the
+   script reads `OPENAI_API_KEY` from `.env.mem0` and `MEM0_API_KEY`/`MEM0_BIND` from `.env`; as
+   another user it asks for them with a hidden prompt. It needs a full clone (history is read),
+   outside `/opt/agentickode`:
+   ```bash
+   mkdir -p /root/mem0-bootstrap && cd /root/mem0-bootstrap && git clone https://<gitea>/<owner>/<repo>.git
+   ```
+   ```bash
+   /opt/agentickode/scripts/bimetri/mem0-bootstrap.py --repo <repo>
+   ```
+   ```bash
+   /opt/agentickode/scripts/bimetri/mem0-bootstrap.py --repo <repo> --generate
+   ```
+   ```bash
+   /opt/agentickode/scripts/bimetri/mem0-bootstrap.py --upload mem0-taslak-<owner>-<repo>.jsonl
+   ```
+   - The first command calls nothing: it lists the files that would go to OpenAI (values of
+     password/secret/token/api_key lines are masked) and the estimated cost.
+   - `--generate`: gpt-5-mini writes `proje`, `modul`, `karar`, `ders`, `tuzak` records; one
+     `ozellik_gecmisi` record per merged PR is built from git without the LLM. Output is a JSONL
+     draft; edit or delete lines before uploading. It never overwrites an existing draft.
+   - `--upload` writes with `infer=False` (no LLM, one embedding per record), then deletes the
+     previous `kaynak=bootstrap` records, so it can be rerun. `ozellik_gecmisi` is never deleted;
+     a PR that already has one is skipped.
+   - The printed project name must match the AgenticKode project's `<owner>/<repo>` exactly
+     (case-sensitive); otherwise pass `--project`.
 
 Rollback (data written after the migration is lost):
 ```bash
@@ -87,5 +113,8 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Run log `Proje hafızası eklenmedi (mem0: HTTPStatusError: ... 401 ...)` | `MEM0_API_KEY` revoked or wrong. Remove the line from `.env`, rerun `mem0-backend-key.sh`, then `up -d backend` |
 | Run log `... 502 Bad Gateway` | mem0 could not reach OpenAI (key or quota). Check `docker logs agentickode-mem0-1` |
 | mem0 log `401 - Your IP is not authorized` | The OpenAI project has an IP allowlist. Add the server's outbound IP: `docker exec agentickode-mem0-1 python -c "import urllib.request;print(urllib.request.urlopen('https://api.ipify.org').read().decode())"` |
+| `mem0-bootstrap.py ... zaten var` | A draft (maybe your edited one) exists. Upload it, move it, or pass `--out` |
+| `mem0-bootstrap.py` `HATA: ...:N: 'tur' ...` | Line N of the edited draft is invalid JSON or has an unknown `tur`/empty `memory` |
+| Runs still log `Proje hafızasında kayıt yok` after upload | Project name differs from the run's `<owner>/<repo>` (case). Re-upload with `--project` |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |
