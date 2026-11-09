@@ -124,6 +124,21 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
    docker logs agentickode-backend-1 2>&1 | grep 'memory proposals'
    ```
    `... : N proposals`, `: no-discussion`, `: exists` (PR already has proposals) or `: disabled`.
+10. Browsing records (yama 76). Two read-only views of what mem0 holds:
+    - **Memory > Records** tab (`/memory?tab=records`, behind the crew password): pick a
+      project, filter by `tur`; shows text, PR, `kaynak` and date. API:
+      `GET /api/bimetri/memories?project=<owner>/<repo>[&kind=<tur>]` (503 when mem0 is off,
+      502 when mem0 fails).
+    - mem0's own dashboard, LAN only, at `http://<MEM0_BIND>:8891` (service `mem0-dashboard`,
+      built from the v2.2.1 tag). Not behind SWAG: its `Authorization: Bearer` header clashes
+      with the crew basic auth, and the browser calls the mem0 API (`:8890`) directly. Log in
+      with the mem0 admin from step 6 (`mem0-backend-key.sh`). It can edit and delete records
+      and change mem0's LLM/embedder settings (**Configuration**); treat it as an admin tool.
+    Setup, as root (new service + CORS env on mem0, so `up -d`, then the frontend rebuild):
+    ```bash
+    docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d --build mem0 mem0-dashboard backend frontend
+    ```
+    Check: `curl -s http://<MEM0_BIND>:8891/api/health` returns JSON.
 
 Rollback (data written after the migration is lost):
 ```bash
@@ -155,5 +170,7 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | `memory proposals ...: disabled` | `MEM0_OPENAI_API_KEY` missing in `.env` or backend not recreated with `up -d backend` |
 | Memory page: `Approve failed: mem0 write failed` (502) | mem0 down or key revoked; the proposal stays `pending`, approve again later |
 | No **Memory** item in the menu | Frontend not rebuilt: `up -d --build frontend` |
+| Dashboard login works but pages show `Network Error` | CORS: mem0 not recreated with `DASHBOARD_URL`, or the page was opened by another host name than `MEM0_BIND`. `up -d mem0`, open `http://<MEM0_BIND>:8891` |
+| Records tab: `Failed to load records: mem0 is not configured` | `MEM0_API_KEY` empty in `.env`; see step 6 |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |

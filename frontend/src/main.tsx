@@ -11,7 +11,7 @@ import { ToastProvider } from "./components/shared/Toast";
 import AgentSettingsPage from "./pages/AgentSettings";
 import Dashboard from "./pages/Dashboard";
 import GpuDashboard from "./pages/GpuDashboard";
-import MemoryProposals from "./pages/MemoryProposals";
+import Memory from "./pages/Memory";
 import NewRun from "./pages/NewRun";
 import Projects from "./pages/Projects";
 import RunDetail from "./pages/RunDetail";
@@ -38,7 +38,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/workspace-servers" element={<WorkspaceServers />} />
                 <Route path="/gpu-dashboard" element={<GpuDashboard />} />
                 <Route path="/agents" element={<AgentSettingsPage />} />
-                <Route path="/memory" element={<MemoryProposals />} />
+                <Route path="/memory" element={<Memory />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/chat/:sessionId" element={<Chat />} />
                 <Route path="/settings" element={<Settings />} />
