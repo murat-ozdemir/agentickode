@@ -74,6 +74,9 @@ services:
       NEXT_PUBLIC_API_URL: http://${MEM0_BIND:-127.0.0.1}:8890
       NEXT_PUBLIC_INSTANCE_NAME: bimetri
       API_INTERNAL_URL: http://mem0:8000
+      # Without it the refresh cookie is marked Secure (NODE_ENV=production) and the browser
+      # drops it over plain HTTP, so every login bounces back to /login.
+      DASHBOARD_URL: http://${MEM0_BIND:-127.0.0.1}:8891
     ports:
       - "${MEM0_BIND:-127.0.0.1}:8891:3000"
     healthcheck:

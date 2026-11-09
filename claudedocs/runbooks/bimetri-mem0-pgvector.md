@@ -171,6 +171,8 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Memory page: `Approve failed: mem0 write failed` (502) | mem0 down or key revoked; the proposal stays `pending`, approve again later |
 | No **Memory** item in the menu | Frontend not rebuilt: `up -d --build frontend` |
 | Dashboard login works but pages show `Network Error` | CORS: mem0 not recreated with `DASHBOARD_URL`, or the page was opened by another host name than `MEM0_BIND`. `up -d mem0`, open `http://<MEM0_BIND>:8891` |
+| Dashboard login succeeds (mem0 log: `POST /auth/login` 200) but returns to `/login` | Refresh cookie marked `Secure` over plain HTTP: `mem0-dashboard` lacks `DASHBOARD_URL=http://...:8891`. Set it, `up -d mem0-dashboard` |
+| Forgotten mem0 admin password | No reset mail. On the host: `read -rp 'Email: ' EMAIL; read -rsp 'Password: ' PASSWORD; export EMAIL PASSWORD`, then `docker exec -e EMAIL -e PASSWORD -w /app agentickode-mem0-1 python scripts/reset_admin_password.py; unset PASSWORD` (min 8 chars) |
 | `mem0-dashboard` build: `Cannot find module '@/lib/runs'` in `./evaluation/...` | Older BuildKit puts the repo's `evaluation` submodule into the subdir context; `docker/mem0-dashboard/Dockerfile` removes it. Keep building through that Dockerfile, not the upstream one |
 | Records tab: `Failed to load records: mem0 is not configured` | `MEM0_API_KEY` empty in `.env`; see step 6 |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
