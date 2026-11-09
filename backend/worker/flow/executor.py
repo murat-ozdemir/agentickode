@@ -137,6 +137,11 @@ async def _run_phase(name: str, run: TaskRun, session: AsyncSession, services: S
     await module.run(run, session, services, None)
 
 
+# bimetri yamasi: bitis/hata olayinda da proje adi gitsin (Slack "Run Completed:  #63" bos kaliyordu)
+def _olay_yuku(run: TaskRun) -> dict[str, Any]:
+    return {"run_id": run.id, "title": run.title, "project_id": run.project_id}
+
+
 async def execute_flow_prompt(
     run: TaskRun, session: AsyncSession, services: ServiceContainer
 ) -> None:
@@ -148,7 +153,7 @@ async def execute_flow_prompt(
         run.completed_at = datetime.now(UTC)
         await session.commit()
         await broadcaster.event(
-            run.id, "run_failed", {"run_id": run.id, "error": run.error_message}
+            run.id, "run_failed", {**_olay_yuku(run), "error": run.error_message}
         )
         return
 
@@ -388,7 +393,7 @@ async def execute_flow_prompt(
         await broadcaster.event(
             run.id,
             "run_completed",
-            {"status": "completed", "run_id": run.id, "title": run.title},
+            {**_olay_yuku(run), "status": "completed"},
         )
     except Exception as e:
         logger.exception("Flow run #%s failed", run.id)
@@ -397,7 +402,7 @@ async def execute_flow_prompt(
         run.completed_at = datetime.now(UTC)
         await session.commit()
         await broadcaster.event(
-            run.id, "run_failed", {"run_id": run.id, "error": str(e), "title": run.title}
+            run.id, "run_failed", {**_olay_yuku(run), "error": str(e)}
         )
         with contextlib.suppress(Exception):
             await close_run_session(run, session)
