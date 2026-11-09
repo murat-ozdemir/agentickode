@@ -1,0 +1,5 @@
+# /etc/cron.d/agentickode-backup — bimetri yamasi: gunluk DB yedegi (03:15).
+# Kurulum: sudo install -m 644 scripts/bimetri/agentickode-backup.cron /etc/cron.d/agentickode-backup
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+15 3 * * * root /opt/agentickode/scripts/bimetri/pg-backup.sh >>/var/log/agentickode-backup.log 2>&1

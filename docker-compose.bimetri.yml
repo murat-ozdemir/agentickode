@@ -1,0 +1,60 @@
+# docker-compose.bimetri.yml — bimetri yamasi: pgvector'lu Postgres + mem0 (ortak hafiza).
+#
+# Diger compose dosyalarinin USTUNE eklenir (dev-1):
+#   docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml \
+#     -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d
+#
+# - postgres: ayni ana surum (16), pgvector eklentili imaj. Veri yeni volume'da
+#   (agentickode-app_pgvdata); eski alpine volume'u (agentickode-app_pgdata) geri donus icin
+#   kalir. Gecis: scripts/bimetri/migrate-to-pgvector.sh (dump/restore; alpine -> debian
+#   siralama farki yuzunden volume dogrudan tasinmaz).
+# - mem0: resmi sunucu, v2.2.1 etiketinden derlenir. Gizli degerler .env.mem0'da
+#   (POSTGRES_PASSWORD, OPENAI_API_KEY, ADMIN_API_KEY, JWT_SECRET); ornek: .env.mem0.example.
+#   Vektorler "mem0" DB'sinde, kullanici/anahtar kayitlari "mem0_app" DB'sinde.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    volumes:
+      - pgvdata:/var/lib/postgresql/data
+
+  mem0:
+    build:
+      context: https://github.com/mem0ai/mem0.git#v2.2.1:server
+    image: bimetri-mem0:v2.2.1
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    env_file:
+      - path: .env.mem0
+        required: true
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: mem0
+      POSTGRES_USER: mem0
+      POSTGRES_COLLECTION_NAME: memories
+      APP_DB_NAME: mem0_app
+      HISTORY_DB_PATH: /app/history/history.db
+      AUTH_DISABLED: "false"
+      MEM0_TELEMETRY: "false"
+    volumes:
+      - mem0history:/app/history
+    ports:
+      # Ajan makineleri (MCP) icin LAN'a acilir; dev-1'de MEM0_BIND=192.168.20.50 (.env).
+      # 8888 degil: dev-1'de tinyproxy orada.
+      - "${MEM0_BIND:-127.0.0.1}:8890:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgvdata:
+    name: agentickode-app_pgvdata
+  mem0history:
+    name: agentickode-app_mem0history
