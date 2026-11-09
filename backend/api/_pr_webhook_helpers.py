@@ -134,6 +134,10 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
         db,
     )
     provider = get_git_provider("gitea", get_http_client(), access_token=token)
+    if pr.get("number"):  # mem0'a ozellik_gecmisi; arka planda, yaniti geciktirmez
+        from backend.worker.flow._bimetri_ozellik import arka_planda_yaz
+
+        arka_planda_yaz(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
     done = []
     for n in issues:
         try:

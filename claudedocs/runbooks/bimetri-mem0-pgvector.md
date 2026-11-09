@@ -91,6 +91,14 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
      a PR that already has one is skipped.
    - The printed project name must match the AgenticKode project's `<owner>/<repo>` exactly
      (case-sensitive); otherwise pass `--project`.
+8. New merges (yama 74a) need no step. When the Gitea PR webhook reports a merge, the backend
+   writes one `ozellik_gecmisi` record in the same format (`kaynak=merge`, `infer=False`) in the
+   background, under the project's `<repo_owner>/<repo_name>`. A PR that already has one is
+   skipped. Check:
+   ```bash
+   docker logs agentickode-backend-1 2>&1 | grep 'ozellik gecmisi'
+   ```
+   `... (Org/repo): yazildi`, `: var` (already recorded) or `: kapali` (MEM0_* empty).
 
 Rollback (data written after the migration is lost):
 ```bash
@@ -116,5 +124,7 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | `mem0-bootstrap.py ... zaten var` | A draft (maybe your edited one) exists. Upload it, move it, or pass `--out` |
 | `mem0-bootstrap.py` `HATA: ...:N: 'tur' ...` | Line N of the edited draft is invalid JSON or has an unknown `tur`/empty `memory` |
 | Runs still log `Proje hafızasında kayıt yok` after upload | Project name differs from the run's `<owner>/<repo>` (case). Re-upload with `--project` |
+| `PR #N ozellik gecmisi yazilamadi` | Traceback follows. `401` from mem0: see the key row above; `404` on `/pulls/N/commits` or `/files`: the project token cannot read the repo |
+| No `ozellik gecmisi` line after a merge | The PR webhook (pull_request events) is not set on the Gitea repo, or the backend log level hides INFO |
 | No memory log line at all | `MEM0_API_KEY` empty, or backend not recreated (`up -d backend`) |
 | `HATA: uzak kopya yuklenemedi` | Key not installed, wrong host key in `storagebox_known_hosts`, or port 23 blocked. Test: `ssh -p 23 -i /root/.ssh/storagebox_ed25519 -o UserKnownHostsFile=/root/.ssh/storagebox_known_hosts <sub>@<sub>.your-storagebox.de ls` |
