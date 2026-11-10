@@ -159,10 +159,20 @@ the plan is closed as `abandoned`, with the numbers.
   existing graph. Updating at every session start keeps the graph on the run's checkout, even
   when the previous run left the clone on its feature branch.
 - Measured locally on agentickode-bimetri (768 files): Graphify first build 12.8–18.4 s,
-  graperoot 1.1–1.7 s; no-change update about 1 s for each. Platform-backend timings come from
-  `install` on the workers.
+  graperoot 1.1–1.7 s; no-change update about 1 s for each.
+- platform-backend (1225 code files), first build on each of .10/.11/.12 (`install`, 10 Nov):
+  Graphify 45.9–46.7 s (about 13,850 nodes, 37,470 edges); graperoot 6.5 s (about 1,223 files,
+  8,860 symbols, 18,370 edges). The worker clones sat on different feature branches, hence the
+  small count differences.
 - Graphify's PR tools (`list_prs`, `get_pr_impact`, `triage_prs`) call the `gh` CLI, which the
   workers do not have, so they fail. Graphify does not use the network otherwise.
+- `agent-graph-mcp.sh stats RUN_ID HOST...` fills the gap left by AgenticKode's cost tracking,
+  which stores neither tool calls nor the cache split. It sends `_agent_run_stats.py` to each
+  worker and, as the worker user, finds the Claude transcript
+  (`~/.claude/projects/*/*.jsonl`) whose first prompt carries "`run_id` = N" (from the mem0
+  block). Output: tool calls by name, graph calls apart, distinct files read, tokens (input,
+  cache write, cache read, output, deduplicated per API response), duration. Subagent
+  transcripts are included; the Codex test run is not read.
 - Measurement issue and procedure: `ajan-ekibi` docs folder, `d2-graf-olcum-issue.md`.
 
 ## Technical Approach

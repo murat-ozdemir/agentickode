@@ -6,11 +6,15 @@
 #   scripts/bimetri/agent-graph-mcp.sh install 192.168.20.10 192.168.20.11 192.168.20.12
 #   scripts/bimetri/agent-graph-mcp.sh mode graperoot 192.168.20.10 192.168.20.11 192.168.20.12
 #   scripts/bimetri/agent-graph-mcp.sh update 192.168.20.10 ...
+#   scripts/bimetri/agent-graph-mcp.sh stats 74 192.168.20.10 192.168.20.11 192.168.20.12
 # install: pinned venvs under ~/.local/share/bimetri-graph of the worker user, then a first build
 #          of both graphs for --repo with timings. Mode stays as it was (none on a new worker).
 # mode none|graphify|graperoot: registers (or removes) the stdio MCP server bimetri-graph for
 #          Claude (~/.claude.json) and Codex (~/.codex/config.toml); shows `claude mcp list`.
 # update:  incremental update of both graphs for --repo, with timings.
+# stats RUN_ID: tool calls (graph calls apart), tokens with the cache split and duration of that
+#          run's Claude transcript, which only the worker user can read (_agent_run_stats.py).
+#          Ask every worker; those that did not run it say so.
 # Options: --user <worker user> (default coder), --key <SSH key> (default .ssh/id_ed25519),
 #          --repo <clone on the worker> (default /workspaces/Bienport-IoT/platform-backend),
 #          --dry-run (print the SSH commands, run nothing). Safe to run again.
@@ -22,7 +26,7 @@ key=.ssh/id_ed25519
 repo=/workspaces/Bienport-IoT/platform-backend
 dry_run=0
 action=""
-mode=""
+arg=""
 hosts=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -33,20 +37,22 @@ while [ $# -gt 0 ]; do
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *)
       if [ -z "$action" ]; then action=$1
-      elif [ "$action" = mode ] && [ -z "$mode" ]; then mode=$1
+      elif { [ "$action" = mode ] || [ "$action" = stats ]; } && [ -z "$arg" ]; then arg=$1
       else hosts+=("$1"); fi
       shift ;;
   esac
 done
-usage="usage: $0 [--user U] [--key FILE] [--repo PATH] [--dry-run] install|update|mode MODE HOST..."
+usage="usage: $0 [--user U] [--key FILE] [--repo PATH] [--dry-run] install|update|mode MODE|stats RUN_ID HOST..."
 case "$action" in
   install | update) ;;
-  mode) case "$mode" in none | graphify | graperoot) ;; *) echo "$usage" >&2; exit 2 ;; esac ;;
+  mode) case "$arg" in none | graphify | graperoot) ;; *) echo "$usage" >&2; exit 2 ;; esac ;;
+  stats) case "$arg" in "" | *[!0-9]*) echo "$usage" >&2; exit 2 ;; esac ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
 [ ${#hosts[@]} -gt 0 ] || { echo "$usage" >&2; exit 2; }
 
 program_file=scripts/bimetri/_agent_graph_mcp.py
+if [ "$action" = stats ]; then program_file=scripts/bimetri/_agent_run_stats.py; fi
 program=$(cat "$program_file")
 # install reads its own source plus the frozen locks from stdin (see _agent_graph_mcp.py).
 bundle() {
@@ -60,8 +66,9 @@ as_worker="runuser -u $worker_user -- python3 -c $(printf %q "$program")"
 case "$action" in
   install) commands=("$as_worker install" "$as_worker update all $(printf %q "$repo")") ;;
   update) commands=("$as_worker update all $(printf %q "$repo")") ;;
-  mode) commands=("$as_worker mode $mode"
+  mode) commands=("$as_worker mode $arg"
                   "runuser -l $worker_user -c 'claude mcp list' 2>&1 | grep bimetri-graph || true") ;;
+  stats) commands=("$as_worker stats $arg") ;;
 esac
 
 for host in "${hosts[@]}"; do
