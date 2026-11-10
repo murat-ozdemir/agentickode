@@ -3,7 +3,9 @@
 agent-graph-mcp.sh ships this file first in the worker program; `mode graphify` writes the hooks.
     pre    deny every tool until graph_continue ran in the session. After that, each search
            (Grep, Glob, fallback_rg, or a shell command that starts with rg/grep/find...) draws
-           on the grep budget graph_continue returned; at zero, searches are denied.
+           on the grep budget graph_continue returned. The first search past it is denied with a
+           pointer to graph_callers; after that searches go through (run #95: a hard stop made
+           the agent give up on listing every caller).
     mark   after graph_continue: write its max_supplementary_greps to the session's marker.
 Stdlib only.
 """
@@ -22,6 +24,7 @@ GATE_OPEN = ("ToolSearch",)
 SEARCH_TOOLS = ("Grep", "Glob", "mcp__bimetri-graph__fallback_rg")
 SEARCH_COMMANDS = ("rg", "grep", "egrep", "fgrep", "ag", "ack", "find", "fd", "locate")
 DEFAULT_GREPS = 4  # graph_continue's reply unreadable (it failed): the low-confidence cap
+OPEN = "open"  # marker text once the budget was spent and the agent was told
 # Command positions in a shell line; a single `|` is not one (`mvn test | grep FAIL` filters).
 _COMMANDS = re.compile(r"&&|\|\||[;\n&(`]|\$\(")
 GATE_DENY = (
@@ -30,8 +33,9 @@ GATE_DENY = (
 )
 GATE_SPENT = (
     "Arama sınırı doldu: `graph_continue`'nun verdiği arama hakkı (Grep, Glob, fallback_rg, "
-    "kabukta rg/grep/find) bitti. `graph_callers` ve `graph_read` ile devam et, düzenlemeye geç "
-    "ya da yeni bir alt görev için yeniden `graph_continue` çağır."
+    "kabukta rg/grep/find) bitti. Çağıranlar için `graph_callers` her kullanımı satırı ve kodu "
+    "ile verir. Yine de arama gerekiyorsa (ör. listenin tam olduğunu doğrulamak) tekrar dene, "
+    "bu kez geçer."
 )
 
 
@@ -52,17 +56,17 @@ def searches(command: str) -> bool:
 
 
 def _spend(marker: Path) -> bool:
-    """Take one search from the session's budget; False when none is left."""
+    """Take one search from the session's budget; False once, for the first search past it."""
     with open(marker, "r+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)  # parallel tool calls run their hooks at once
         text = f.read().strip()
+        if text == OPEN:
+            return True
         left = int(text) if text.isdigit() else DEFAULT_GREPS
-        if left <= 0:
-            return False
         f.seek(0)
         f.truncate()
-        f.write(str(left - 1))
-    return True
+        f.write(str(left - 1) if left > 0 else OPEN)
+    return left > 0
 
 
 def gate(step: str, payload: str, marker_dir: Path) -> int:

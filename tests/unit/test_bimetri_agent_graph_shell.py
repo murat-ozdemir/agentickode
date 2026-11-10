@@ -66,7 +66,7 @@ class TestShellScript:
         assert ran.returncode == 2 and "usage" in ran.stderr
         # So does the flow server, core first; mcp and graphify are imported only in main.
         flow = files["graph_flow.py"]
-        assert "from _graph_flow import" not in flow and "def continue_flow" in flow
+        assert "from _graph_" not in flow and "def continue_flow" in flow and "def read" in flow
         compile(flow, "graph_flow.py", "exec")
         ran = subprocess.run(
             [sys.executable, "-I", "-c", flow.replace('if __name__ == "__main__":', "if 0:")],

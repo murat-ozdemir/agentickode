@@ -1,19 +1,20 @@
 """bimetri patch (D2 phase 2): the agents' context flow over Graphify's graph.json.
 
 Modelled on GrapeRoot's Dual-Graph flow (graph_continue first, then capped fallbacks), over
-Graphify's graph, whose Java edges reach the calling files (Phase 1c). Served by
+Graphify's graph, whose Java edges reach the calling files (Phase 1c). Use sites come with their
+statement (run #95: reading whole methods for one-line call sites cost 2x). Served by
 _graph_flow_server.py; no networkx import here.
 """
 
 import re
 from pathlib import Path
 
+from _graph_read import Sources  # bundle: drop
+
 USE_RELATIONS = ("calls", "references", "implements", "inherits", "imports")
 MAX_NAMES = 30
 MAX_SEEDS_PER_NAME = 2
 MAX_RECOMMENDED = 15
-FILE_LINES = 400
-SYMBOL_LINES = 250
 OUTPUT_LINES = 80  # graph_callers and fallback_rg
 # confidence -> (fallback_rg calls, extra files to read) allowed before writing code.
 CAPS = {"high": (1, 2), "medium": (2, 3), "low": (4, 5)}
@@ -21,8 +22,7 @@ CAPS = {"high": (1, 2), "medium": (2, 3), "low": (4, 5)}
 _NAME = re.compile(r"\b[A-Za-z_]\w*(?=\()|\b[A-Za-z_]*[a-z0-9][A-Z_]\w*")
 _WORD = re.compile(r"\b[A-Z][a-z0-9]{3,}\b")  # Device, Gateway: only if the graph has it
 _PATH = re.compile(r"[\w./-]+\.(?:java|kt|py|ts|tsx|js|xml|sql|ya?ml|properties)\b")
-_LITERAL = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])'|//.*$")
-_NOT_DECL = re.compile(r"\b(?:return|new|throw|else|yield|await)\s+$")
+SITE_RELATIONS = ("calls", "references")  # recommended as path:LINE, not the whole caller
 
 
 def norm(label: str) -> str:
@@ -87,17 +87,21 @@ def continue_flow(graph, task: str, root: Path, fallback=None) -> dict:
     why = dict.fromkeys(paths, "named in the task")
     for nid in seeds:
         why.setdefault(entry(graph, nid), "named in the task")
-    more = 0
+    more, sources = 0, Sources(root)
     # Method seeds first: their callers are closer to the task than the class's users.
     for nid in sorted(seeds, key=lambda n: not graph.nodes[n]["label"].endswith("()")):
         for src, relation, line in users(graph, nid):
-            item = entry(graph, src)
+            rel = graph.nodes[src].get("source_file", "")
+            site = relation in SITE_RELATIONS and line
+            item = f"{rel}:{line}" if site else entry(graph, src)
             if item in why:
                 continue
             if len(why) >= MAX_RECOMMENDED:
                 more += 1
                 continue
             why[item] = f"{relation} {graph.nodes[nid]['label']} at L{line}"
+            code = sources.at(rel, line) if site else ""
+            why[item] += f": {code}" if code else ""
     greps, files = CAPS[confidence]
     result = {
         "confidence": confidence,
@@ -113,88 +117,32 @@ def continue_flow(graph, task: str, root: Path, fallback=None) -> dict:
     return result
 
 
-def _code_only(text: str, in_comment: bool) -> tuple:
-    """text without string literals and comments, and whether a /* comment is still open."""
-    text, out = _LITERAL.sub('""', text), ""
-    while text:
-        if in_comment:
-            end = text.find("*/")
-            text, in_comment = ("", True) if end < 0 else (text[end + 2 :], False)
-        else:
-            begin = text.find("/*")
-            if begin < 0:
-                return out + text, False
-            out, text, in_comment = out + text[:begin], text[begin + 2 :], True
-    return out, in_comment
+def _owned_by(source_file: str, owner: str) -> bool:
+    """owner is the node's file path, or its class: the file stem (Class::method, Class.method)."""
+    return not owner or owner in (source_file, Path(source_file).stem)
 
 
-def block_end(lines: list, start: int) -> int:
-    """Last line (0-based) of the declaration at lines[start]: its brace block, or up to `;`."""
-    depth, opened, in_comment = 0, False, False
-    stop = min(len(lines), start + SYMBOL_LINES)
-    for i in range(start, stop):
-        text, in_comment = _code_only(lines[i], in_comment)
-        if not opened and ";" in text.split("{", 1)[0]:
-            return i  # abstract/interface method or field
-        depth += text.count("{") - text.count("}")
-        opened = opened or "{" in text
-        if opened and depth <= 0:
-            return i
-    return stop - 1
-
-
-def declarations(lines: list, name: str) -> list:
-    """0-based lines that declare name: a type, or a method/constructor after a type or modifier."""
-    word = re.escape(name)
-    kind = re.compile(rf"\b(?:class|interface|enum|record|@interface)\s+(?P<n>{word})\b")
-    method = re.compile(rf"[\w>\]?]\s+(?P<n>{word})\s*\(")
-    found, in_comment = [], False
-    for i, text in enumerate(lines):
-        code, in_comment = _code_only(text, in_comment)
-        match = kind.search(code) or method.search(code)
-        if match and not _NOT_DECL.search(code[: match.start("n")]):
-            found.append(i)
-    return found
-
-
-def read(root: Path, target: str) -> str:
-    """graph_read: a file (first FILE_LINES lines) or `file::Symbol` (each declaration)."""
-    rel, _, symbol = target.partition("::")
-    path = (root / rel).resolve()
-    if not path.is_relative_to(root) or not path.is_file():
-        return f"no such file in the clone: {rel}"
-    lines = path.read_text(errors="replace").splitlines()
-    if not symbol:
-        out = "\n".join(f"{i + 1}: {t}" for i, t in enumerate(lines[:FILE_LINES]))
-        rest = len(lines) - FILE_LINES
-        return out + (f"\n... {rest} more lines; read a symbol with file::Name" if rest > 0 else "")
-    name = symbol.split(".")[-1].removesuffix("()")
-    parts, covered = [], -1
-    for start in declarations(lines, name)[:4]:
-        if start <= covered:
-            continue  # a constructor inside the class block already shown
-        covered = block_end(lines, start)
-        body = "\n".join(f"{i + 1}: {lines[i]}" for i in range(start, covered + 1))
-        parts.append(f"{rel}:{start + 1}-{covered + 1}\n{body}")
-    return "\n\n".join(parts) or f"{name} is not declared in {rel}; read the file instead"
-
-
-def callers(graph, target: str) -> str:
-    """graph_callers: every use of `Symbol` or `file::Symbol`, with the use-site line."""
-    rel, _, name = target.rpartition("::")
-    key = norm(name.split(".")[-1] if "." in name.removesuffix("()") else name)
+def callers(graph, target: str, root: Path | None = None) -> str:
+    """graph_callers: every use of `Symbol`, `Class.Symbol`, `Class::Symbol` or `file::Symbol`,
+    with the use-site line and, given the clone root, its statement."""
+    owner, _, name = target.rpartition("::")
+    head, _, last = name.removesuffix("()").rpartition(".")
+    owner = owner or head
     ids = [
-        n for n in code_nodes(graph).get(key, []) if not rel or graph.nodes[n]["source_file"] == rel
+        n
+        for n in code_nodes(graph).get(norm(last), [])
+        if _owned_by(graph.nodes[n]["source_file"], owner)
     ]
     if not ids:
         return f"{name} is not in the graph"
-    out = sorted(
-        {
-            f"{graph.nodes[src]['source_file']}:{line} {graph.nodes[src].get('label', '')} {relation} "
-            f"{graph.nodes[nid].get('label', '')}"
-            for nid in ids
-            for src, relation, line in users(graph, nid)
-        }
-    )
+    sources, out = Sources(root), set()
+    for nid in ids:
+        for src, relation, line in users(graph, nid):
+            rel = graph.nodes[src]["source_file"]
+            code = sources.at(rel, line)
+            text = f"{rel}:{line} {graph.nodes[src].get('label', '')} {relation} "
+            text += graph.nodes[nid].get("label", "") + (f": {code}" if code else "")
+            out.add((rel, line, text))
+    out = [text for _rel, _line, text in sorted(out)]
     cut = [f"... {len(out) - OUTPUT_LINES} more"] if len(out) > OUTPUT_LINES else []
     return "\n".join(out[:OUTPUT_LINES] + cut) or f"nothing in the graph uses {name}"

@@ -41,12 +41,16 @@ Bu makinede `{NAME}` MCP sunucusu deponun kod grafiğini sunar. Kodu keşfederke
 1. Her görevin ya da yeni bir alt görevin başında önce `graph_continue` çağır; görevi kendi
    sözlerinle, ilgili sınıf ve metot adlarıyla yaz. Ondan önce başka araç kullanma.
 2. `recommended_files` içindeki girdileri `graph_read` ile oku, her dosya için ayrı çağrı.
-   `yol::Sembol` girdisi yalnızca o sembolün satırlarını getirir; `why` neden önerildiğini söyler.
-3. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil.
+   `yol::Sembol` yalnızca o sembolün satırlarını getirir. `yol:SATIR` bir kullanım yeridir: `why`
+   o satırın kodunu zaten gösterir; yetmezse `graph_read yol:SATIR` çevresindeki satırları verir.
+   Çağıran metodun tamamını okuma.
+3. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil:
+   her kullanımı dosya, satır ve o satırdaki kodla verir.
 4. `confidence` ne olursa olsun önerilenler yetmezse en çok `max_supplementary_greps` kez
    `fallback_rg` çağır ve en çok `max_supplementary_files` ek dosya oku; sonra dur, yazmaya geç.
    `high` ise önerilen dosyalarla yetinmeye çalış. Arama sınırı Grep, Glob ve kabukta
-   `rg`/`grep`/`find` ile yapılan aramaları da kapsar ve uygulanır: hak bitince reddedilir.
+   `rg`/`grep`/`find` ile yapılan aramaları da kapsar: hak bitince ilk arama reddedilir;
+   gerçekten gerekiyorsa (ör. listenin tam olduğunu doğrulamak) tekrarla, geçer.
 5. Sınırlar yalnızca keşif içindir: değiştireceğin dosyayı okumak, düzenleme, derleme, test ve
    git komutları serbest.
 

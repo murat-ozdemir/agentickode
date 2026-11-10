@@ -80,7 +80,8 @@ bundle() {
   echo "### lock: graphify"
   cat scripts/bimetri/agent-graph-locks/graphify.txt
   echo "### file: graph_flow.py"
-  cat scripts/bimetri/_graph_flow.py
+  cat scripts/bimetri/_graph_read.py
+  grep -v '# bundle: drop$' scripts/bimetri/_graph_flow.py
   grep -v '# bundle: drop$' scripts/bimetri/_graph_flow_server.py
 }
 as_worker="runuser -u $worker_user -- python3 -c $(printf %q "$program")"

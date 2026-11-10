@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _graph_flow import OUTPUT_LINES, callers, continue_flow, read  # bundle: drop
+from _graph_flow import OUTPUT_LINES, callers, continue_flow  # bundle: drop
+from _graph_read import read  # bundle: drop
 
 TOOLS = {
     "graph_continue": (
@@ -23,15 +24,17 @@ TOOLS = {
         {"task": "the task in your own words, with the class/method names it involves"},
     ),
     "graph_read": (
-        "Read one recommended file, or only one symbol's lines with path::Symbol.",
-        {"file": "repo-relative path, optionally ::Symbol"},
+        "Read one recommended entry: a file, one symbol's lines (path::Symbol), or the lines "
+        "around a use site (path:LINE, or path:START-END).",
+        {"file": "repo-relative path, optionally ::Symbol or :LINE"},
     ),
     "graph_callers": (
-        "Every call, reference, implementation and import of a symbol, with file and line.",
-        {"symbol": "Symbol or path::Symbol"},
+        "Every call, reference, implementation and import of a symbol, with file, line and the "
+        "statement at that line; usually enough to edit without reading the caller.",
+        {"symbol": "Symbol, Class.Symbol, Class::Symbol or path::Symbol"},
     ),
     "fallback_rg": (
-        "ripgrep in the clone, only after graph_continue and within its max_supplementary_greps.",
+        "ripgrep in the clone, after graph_continue; keep to its max_supplementary_greps.",
         {"pattern": "a ripgrep regex", "glob": "optional file glob, e.g. *.java"},
     ),
 }
@@ -70,17 +73,13 @@ class Flow:
         if name == "graph_read":
             return read(self.root, args["file"]), False
         if name == "graph_callers":
-            return callers(self.graph(), args["symbol"]), False
+            return callers(self.graph(), args["symbol"], self.root), False
         if name == "fallback_rg":
             if self.greps is None:
                 return "call graph_continue first", True
-            if self.greps <= 0:
-                return (
-                    "fallback_rg budget used up; read the recommended files, use "
-                    "graph_callers, or call graph_continue again for a new subtask"
-                ), True
-            self.greps -= 1
-            return rg(self.root, args["pattern"], str(args.get("glob", ""))), False
+            self.greps -= 1  # over budget it still runs (run #95): a note, not a refusal
+            note = "\n(over graph_continue's max_supplementary_greps)" if self.greps < 0 else ""
+            return rg(self.root, args["pattern"], str(args.get("glob", ""))) + note, False
         return f"unknown tool {name}", True
 
 

@@ -48,12 +48,15 @@ class TestFirstCall:
 
 
 class TestBudget:
-    def test_searches_are_denied_once_the_budget_is_spent(self, tmp_path, capsys):
+    def test_the_first_search_past_the_budget_is_denied_then_they_pass(self, tmp_path, capsys):
         mark(tmp_path, 2)
         assert call(tmp_path, "pre", "Grep") == 0
         assert bash(tmp_path, "rg -n update core/") == 0
         assert call(tmp_path, "pre", "Glob") == 2
         assert gate_module.GATE_SPENT in capsys.readouterr().err
+        # Run #95: a hard stop made the agent give up on a complete caller list.
+        assert call(tmp_path, "pre", "Glob") == 0
+        assert bash(tmp_path, "grep -rn update .") == 0
         # Reading and editing go on; a new graph_continue gives a new budget.
         assert call(tmp_path, "pre", "mcp__bimetri-graph__graph_read") == 0
         assert bash(tmp_path, "mvn -q test") == 0

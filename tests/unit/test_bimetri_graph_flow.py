@@ -80,10 +80,10 @@ class TestContinue:
             fake, "ResourceStatusService.update() içinde null kontrolü", tmp_path
         )
         assert result["confidence"] == "high"
-        # Callers of the named method come before the users of its class.
-        assert result["recommended_files"][2] == "api/StatusController.java::refresh"
+        # Call sites of the named method, as path:LINE, come before the users of its class.
+        assert result["recommended_files"][2] == "api/StatusController.java:57"
         assert result["recommended_files"][:2] == [SVC, f"{SVC}::update"]
-        assert result["why"]["api/StatusController.java::refresh"] == "calls .update() at L57"
+        assert result["why"]["api/StatusController.java:57"] == "calls .update() at L57"
         # The file node and the class named after its file both read as the bare path.
         assert result["why"]["jobs/StatusJob.java"].startswith("imports ResourceStatusService")
         assert (result["max_supplementary_greps"], result["max_supplementary_files"]) == (1, 2)
@@ -97,6 +97,14 @@ class TestContinue:
         assert result["confidence"] == "low" and result["max_supplementary_greps"] == 4
         assert result["recommended_files"][0] == "api/StatusController.java::refresh"
 
+    def test_call_sites_carry_their_statement(self, fake, tmp_path):
+        (tmp_path / "api").mkdir()
+        lines = ["x"] * 60
+        lines[56] = "        service.update(id);"
+        (tmp_path / "api/StatusController.java").write_text("\n".join(lines))
+        why = flow.continue_flow(fake, "update()", tmp_path)["why"]
+        assert why["api/StatusController.java:57"] == "calls .update() at L57: service.update(id);"
+
     def test_paths_named_in_the_task_are_recommended_if_present(self, fake, tmp_path):
         (tmp_path / "a").mkdir()
         (tmp_path / "a" / "B.java").write_text("")
@@ -109,43 +117,6 @@ class TestContinue:
         assert len(result["recommended_files"]) == 2 and result["more_users"].startswith("1 more")
 
 
-class TestRead:
-    @pytest.fixture
-    def root(self, tmp_path):
-        (tmp_path / "core/src").mkdir(parents=True)
-        (tmp_path / SVC).write_text(JAVA)
-        return tmp_path
-
-    def test_symbol_reads_only_its_block(self, root):
-        text = flow.read(root, f"{SVC}::update")
-        assert text.splitlines()[0] == f"{SVC}:8-12"
-        assert text.splitlines()[-1] == "12:     }"
-
-    def test_declarations_skip_calls_and_comments(self):
-        lines = JAVA.splitlines()
-        assert [lines[i].strip()[:20] for i in flow.declarations(lines, "update")] == [
-            "public void update(S"
-        ]
-
-    def test_body_less_declaration_ends_at_its_semicolon(self, root):
-        assert flow.read(root, f"{SVC}::close").splitlines()[0] == f"{SVC}:14-14"
-
-    def test_class_block_ignores_braces_in_strings_and_comments(self, root):
-        assert flow.read(root, f"{SVC}::ResourceStatusService").splitlines()[0] == f"{SVC}:3-17"
-
-    def test_whole_file_is_capped(self, root, monkeypatch):
-        monkeypatch.setattr(flow, "FILE_LINES", 2)
-        assert flow.read(root, SVC).splitlines() == [
-            "1: package x;",
-            "2: ",
-            "... 15 more lines; read a symbol with file::Name",
-        ]
-
-    def test_stays_inside_the_clone(self, root):
-        assert flow.read(root, "../etc/passwd").startswith("no such file")
-        assert "not declared" in flow.read(root, f"{SVC}::missing")
-
-
 class TestCallersAndRg:
     def test_callers_list_use_sites(self, fake):
         assert flow.callers(fake, "update()").splitlines() == [
@@ -153,6 +124,26 @@ class TestCallersAndRg:
             "jobs/StatusJob.java:12 .run() calls .update()",
         ]
         assert flow.callers(fake, "Nope") == "Nope is not in the graph"
+
+    @pytest.mark.parametrize(
+        "target",
+        ["ResourceStatusService::update", "ResourceStatusService.update", f"{SVC}::update"],
+    )
+    def test_callers_take_the_class_or_file_as_owner(self, fake, target):
+        assert len(flow.callers(fake, target).splitlines()) == 2
+        assert flow.callers(fake, "Other::update") == "update is not in the graph"
+
+    def test_callers_show_the_statement_sorted_by_line(self, fake, tmp_path):
+        (tmp_path / "jobs").mkdir()
+        fake.nodes["job2"] = node(".stop()", "jobs/StatusJob.java", 3)
+        fake._links.append(("job2", "upd", {"relation": "calls", "source_location": "L9"}))
+        lines = ["x"] * 12
+        lines[8], lines[9], lines[11] = "a.update(", "  1);", "b.update(1);"
+        (tmp_path / "jobs/StatusJob.java").write_text("\n".join(lines))
+        assert flow.callers(fake, "update", tmp_path).splitlines()[1:] == [
+            "jobs/StatusJob.java:9 .stop() calls .update(): a.update( 1);",
+            "jobs/StatusJob.java:12 .run() calls .update(): b.update(1);",
+        ]
 
     def test_rg_output_is_capped(self, monkeypatch, tmp_path):
         out = SimpleNamespace(stdout="a:1:x\n" * 5, stderr="")
@@ -181,7 +172,15 @@ class TestServerFlow:
         text, error = made.call("graph_continue", {"task": "update()"})
         assert not error and json.loads(text)["graph_commit"] == "abc"
         assert made.call("fallback_rg", {"pattern": "x"}) == ("hit x", False)
-        assert "budget used up" in made.call("fallback_rg", {"pattern": "y"})[0]
+        # Past the budget it still searches, with a note (run #95).
+        text, error = made.call("fallback_rg", {"pattern": "y"})
+        assert not error and text.startswith("hit y\n(over graph_continue")
+
+    def test_graph_callers_reads_the_clone(self, fake, tmp_path):
+        made, _ = self.make(fake, tmp_path)
+        (tmp_path / "jobs").mkdir()
+        (tmp_path / "jobs/StatusJob.java").write_text("x\n" * 11 + "update(1);\n")
+        assert made.call("graph_callers", {"symbol": "update"})[0].endswith(": update(1);")
 
     def test_missing_argument_is_an_error(self, fake, tmp_path):
         made, _ = self.make(fake, tmp_path)
