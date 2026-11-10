@@ -6,10 +6,23 @@
 
 from typing import ClassVar
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import AgentInvocation, TaskRun
+
+
+def _search_filter(search: str):
+    """bimetri patch: every word must match the title, description, project or run number."""
+    words = []
+    for word in search.split():
+        pattern = "%" + word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        cols = [TaskRun.title, TaskRun.description, TaskRun.project_id]
+        match = [c.ilike(pattern, escape="\\") for c in cols]
+        if word.lstrip("#").isdigit():
+            match.append(TaskRun.id == int(word.lstrip("#")))
+        words.append(or_(*match))
+    return and_(*words) if words else None
 
 
 class TaskRunRepository:
@@ -51,9 +64,9 @@ class TaskRunRepository:
             filters.append(TaskRun.status == status)
         if project_id:
             filters.append(TaskRun.project_id == project_id)
-        if search:
-            pattern = f"%{search}%"
-            filters.append(TaskRun.title.ilike(pattern) | TaskRun.description.ilike(pattern))
+        search_filter = _search_filter(search) if search else None
+        if search_filter is not None:
+            filters.append(search_filter)
 
         # Count query
         count_q = select(func.count()).select_from(TaskRun)

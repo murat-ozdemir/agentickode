@@ -79,6 +79,53 @@ class TestTaskRunRepository:
         assert len(pending) == 1
 
 
+class TestTaskRunSearch:
+    async def _seed(self, db_session, make_task_run):
+        db_session.add(
+            ProjectConfig(
+                project_id="proj-1",
+                project_slug="test",
+                repo_owner="org",
+                repo_name="repo",
+                default_branch="main",
+            )
+        )
+        await db_session.commit()
+        repo = TaskRunRepository(db_session)
+        titles = ["Rename updateByNetworkId", "Fix 50%_done label", "Update docs"]
+        runs = [make_task_run(task_id=f"T-{i}", title=t) for i, t in enumerate(titles)]
+        for run in runs:
+            repo.add(run)
+        await repo.commit()
+        return repo, runs
+
+    async def test_every_word_must_match(self, db_session, make_task_run):
+        repo, _ = await self._seed(db_session, make_task_run)
+        runs, total = await repo.list_runs(search="update proj-1")
+        assert total == 2
+        runs, total = await repo.list_runs(search="rename docs")
+        assert total == 0
+
+    async def test_matches_run_number(self, db_session, make_task_run):
+        repo, seeded = await self._seed(db_session, make_task_run)
+        runs, _ = await repo.list_runs(search=f"#{seeded[1].id}")
+        assert [r.id for r in runs] == [seeded[1].id]
+
+    async def test_wildcards_are_literal(self, db_session, make_task_run):
+        repo, _ = await self._seed(db_session, make_task_run)
+        runs, total = await repo.list_runs(search="50%_")
+        assert total == 1
+        assert runs[0].title == "Fix 50%_done label"
+        _, total = await repo.list_runs(search="%")
+        assert total == 1
+
+    async def test_count_follows_search_with_paging(self, db_session, make_task_run):
+        repo, _ = await self._seed(db_session, make_task_run)
+        runs, total = await repo.list_runs(search="update", limit=1, offset=1)
+        assert total == 2
+        assert len(runs) == 1
+
+
 class TestProjectConfigRepository:
     async def test_list_all_empty(self, db_session):
         repo = ProjectConfigRepository(db_session)

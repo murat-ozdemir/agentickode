@@ -4,6 +4,17 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-10 — bimetri: runs table paging and multi-word search (fork)
+
+**Tests**: 1277 backend unit, 281 frontend passing; ruff, eslint, tsc clean
+
+- `frontend/src/components/shared/Pagination.tsx`, `utils/pageItems.ts` — first/last, numbered
+  pages (`1 … 4 5 6 … 12`) and "Go to" page; also on Memory › Records
+- `backend/repositories/task_run_repo.py` — search splits into words; each must match the title,
+  description, project or run number (`96`/`#96`); `%`/`_` are literal
+- `frontend/src/pages/Dashboard.tsx` — a live update that empties the current page moves to the
+  last page
+
 ## 2026-11-10 — bimetri: OpenAI API spend card (fork)
 
 **Tests**: 1273 backend unit, 276 frontend passing; ruff, pyright, eslint, tsc clean

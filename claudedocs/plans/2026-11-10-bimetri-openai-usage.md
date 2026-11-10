@@ -1,6 +1,6 @@
 ---
 title: "bimetri: OpenAI API spend, credit balance and quota alert card"
-status: in-progress
+status: implemented
 date: 2026-11-10
 related: [runbooks/bimetri-mem0-pgvector.md, plans/2026-11-09-bimetri-memory-mcp.md, implementations/2026-11-10-bimetri-openai-usage.md]
 ---
@@ -53,10 +53,10 @@ OpenAI stops answering for lack of credit.
 
 ## Success Criteria
 
-- [ ] Month spend on the card equals platform.openai.com/usage for the same month, to the cent
-- [ ] Remaining equals the billing page's credit balance after the opening entry
+- [x] Month spend on the card equals platform.openai.com/usage for the same month, to the cent
+- [x] Remaining equals the billing page's credit balance after the opening entry
 - [x] Credit add / edit / delete from the popup; the date defaults to today
 - [x] Sync runs every 15 min; last update and any sync error visible on the card
-- [ ] Quota error → card red, one Slack message; a new credit entry clears it
+- [ ] Quota error → card red, one Slack message; a new credit entry clears it (unit-tested; not yet seen live, checked when a real quota error happens)
 - [x] Unit + frontend tests; ruff, pyright clean
 - [x] Deployed to dev-1 with the Admin key in `.env`

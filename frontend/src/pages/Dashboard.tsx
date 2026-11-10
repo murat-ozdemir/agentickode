@@ -69,6 +69,11 @@ export default function Dashboard() {
       getStats(),
       getAnalytics(),
     ]);
+    // bimetri: the result shrank below this page (live update): move to the last page
+    if (offset > 0 && offset >= r.total) {
+      setOffset(Math.max(0, Math.ceil(r.total / pageSize) - 1) * pageSize);
+      return;
+    }
     setRuns(r.items);
     setTotal(r.total);
     setStats(s);
