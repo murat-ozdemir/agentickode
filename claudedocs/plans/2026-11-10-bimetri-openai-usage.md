@@ -18,7 +18,7 @@ OpenAI stops answering for lack of credit.
 **In scope**
 - This month's spend (UTC calendar month) from the OpenAI Costs API, the same source as the
   platform's usage page; never computed from tokens × price
-- Credits entered by hand ("Kredi ekle": amount + date, default today); list with edit/delete;
+- Credits entered by hand ("Add credit": amount + date, default today); list with edit/delete;
   the first entry is the balance on the billing page at that time
 - Remaining = credits − spend from the first entry's UTC day on
 - "Son güncelleme" time; sync every 15 min and on demand; a sync error is shown, not hidden
@@ -40,7 +40,7 @@ OpenAI stops answering for lack of credit.
 | 15-min scheduler | `backend/worker/bimetri_openai_usage_scheduler.py` |
 | Quota alert state (`app_settings`) + notification | `backend/services/bimetri_openai_alert.py` |
 | `/api/bimetri/openai/{summary,sync,credits}` | `backend/api/bimetri_openai.py` |
-| Card + credit popup | `frontend/src/components/shared/OpenAIUsageCard.tsx`, `OpenAICreditsModal.tsx` |
+| Balance card + spend chart (in the analytics rows) + credit popup | `frontend/src/components/shared/OpenAIBalanceCard.tsx`, `OpenAISpendChart.tsx`, `OpenAICreditsModal.tsx` |
 
 - Costs API: `GET /v1/organization/costs`, Admin key (`OPENAI_ADMIN_KEY`, read-only
   Usage scope), `bucket_width=1d`, `limit=180`, `start_time` inclusive / `end_time` exclusive,

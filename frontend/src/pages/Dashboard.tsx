@@ -8,10 +8,12 @@ import { getAnalytics, getRuns, getStats } from "../api";
 import { BASE } from "../api/client";
 import AnalyticsCharts from "../components/shared/AnalyticsCharts";
 import FilterBar from "../components/shared/FilterBar";
-import OpenAIUsageCard from "../components/shared/OpenAIUsageCard";
+import OpenAIBalanceCard from "../components/shared/OpenAIBalanceCard";
+import OpenAISpendChart from "../components/shared/OpenAISpendChart";
 import Pagination from "../components/shared/Pagination";
 import StatsBar from "../components/shared/StatsBar";
 import TaskRunTable from "../components/runs/TaskRunTable";
+import useOpenAIUsage from "../hooks/useOpenAIUsage";
 import type { AnalyticsSummary, Stats, TaskRun } from "../types";
 
 // bimetri: sayfa basina kosu sayisi secilebilir; secim tarayicida hatirlanir
@@ -33,6 +35,7 @@ export default function Dashboard() {
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState<Stats | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+  const openai = useOpenAIUsage();
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -121,8 +124,11 @@ export default function Dashboard() {
         Dashboard
       </h1>
       <StatsBar stats={stats} />
-      <OpenAIUsageCard />
-      <AnalyticsCharts data={analytics} />
+      <AnalyticsCharts
+        data={analytics}
+        extraMetric={<OpenAIBalanceCard usage={openai} />}
+        extraChart={<OpenAISpendChart data={openai.data} />}
+      />
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />

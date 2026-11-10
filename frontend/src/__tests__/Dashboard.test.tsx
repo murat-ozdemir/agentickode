@@ -28,7 +28,7 @@ vi.mock("../api", () => ({
     runs_over_time: [],
   }),
   getOpenAIUsageSummary: vi.fn().mockResolvedValue({
-    enabled: false, month_start: "2026-11-01", month_spend_usd: 0, credits_total_usd: 0,
+    enabled: false, month_start: "2026-11-01", month_spend_usd: 0, month_days: [], credits_total_usd: 0,
     first_credit_on: null, spent_since_first_credit_usd: 0, remaining_usd: null,
     last_sync_at: null, sync_error: null, alert: null,
   }),

@@ -9,10 +9,12 @@ related: [plans/2026-11-10-bimetri-openai-usage.md, runbooks/bimetri-mem0-pgvect
 
 ## What Was Built
 
-A Dashboard card (under the stats bar) for the OpenAI API spend of mem0 and the memory
-proposals: this month's spend read from the OpenAI Costs API, the credits entered by hand, the
-remaining balance, the last update time and any sync error. "Kredi ekle" opens a popup (amount +
-date, default today) with the list of entries to edit or delete. When OpenAI refuses a call for
+Two Dashboard widgets for the OpenAI API spend of mem0 and the memory proposals, placed in the
+analytics rows: an **OpenAI Balance** metric card next to "Est. Total Cost" (credits entered by
+hand minus Costs API spend, last update; sync error and alert reason in the tooltip, refresh and
+"Add credit" icon buttons) and an **OpenAI Spend ($)** chart next to "Cost by Agent ($)" (this
+month per UTC day, month total in the title). "Add credit" opens a popup (amount + date, default
+today) with the list of entries to edit or delete. The UI text is English. When OpenAI refuses a call for
 lack of credit the card turns red and the enabled notification channels get one message.
 
 ## Key Files
@@ -25,7 +27,7 @@ lack of credit the card turns red and the enabled notification channels get one 
 | `backend/worker/bimetri_openai_usage_scheduler.py` | Sync every `OPENAI_USAGE_POLL_SECONDS` (900) while `OPENAI_ADMIN_KEY` is set |
 | `backend/services/bimetri_openai_alert.py` | Quota error detection, alert state in `app_settings`, one notification |
 | `backend/api/bimetri_openai.py` | `GET /summary`, `POST /sync`, `GET/POST /credits`, `PATCH/DELETE /credits/{id}` under `/api/bimetri/openai` |
-| `frontend/src/components/shared/OpenAIUsageCard.tsx`, `OpenAICreditsModal.tsx` | Card + popup |
+| `frontend/src/components/shared/OpenAIBalanceCard.tsx`, `OpenAISpendChart.tsx`, `OpenAICreditsModal.tsx`, `hooks/useOpenAIUsage.ts` | Balance card, spend chart, popup, shared 60 s poll (slots `extraMetric`/`extraChart` in `AnalyticsCharts`) |
 
 ## How It Works
 

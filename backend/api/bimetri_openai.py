@@ -29,10 +29,16 @@ class QuotaAlert(BaseModel):
     at: str
 
 
+class DailySpend(BaseModel):
+    day: date
+    cost_usd: float
+
+
 class OpenAIUsageSummary(BaseModel):
     enabled: bool
     month_start: date
     month_spend_usd: float
+    month_days: list[DailySpend] = []
     credits_total_usd: float
     first_credit_on: date | None = None
     spent_since_first_credit_usd: float | None = None

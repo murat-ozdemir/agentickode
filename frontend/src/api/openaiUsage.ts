@@ -11,13 +11,19 @@ export interface OpenAIQuotaAlert {
   at: string;
 }
 
+export interface OpenAIDailySpend {
+  day: string;
+  cost_usd: number;
+}
+
 export interface OpenAIUsageSummary {
   enabled: boolean;
   month_start: string;
   month_spend_usd: number;
+  month_days: OpenAIDailySpend[];
   credits_total_usd: number;
   first_credit_on: string | null;
-  spent_since_first_credit_usd: number;
+  spent_since_first_credit_usd: number | null;
   remaining_usd: number | null;
   last_sync_at: string | null;
   sync_error: string | null;

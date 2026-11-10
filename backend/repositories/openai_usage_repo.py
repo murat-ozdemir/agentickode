@@ -54,6 +54,15 @@ class OpenAIUsageRepository:
         )
         return sum((Decimal(str(v)) for v in result.scalars().all()), Decimal(0))
 
+    async def days_since(self, day: date) -> list[tuple[date, Decimal]]:
+        """Stored UTC days from ``day`` on, oldest first."""
+        result = await self._session.execute(
+            select(OpenAIDailyCost.day, OpenAIDailyCost.amount_usd)
+            .where(OpenAIDailyCost.day >= day)
+            .order_by(OpenAIDailyCost.day)
+        )
+        return [(d, Decimal(str(v))) for d, v in result.all()]
+
     async def store_days(self, days: dict[date, Decimal], fetched_at: datetime) -> None:
         """Overwrite the given days with what the Costs API reported now."""
         for day, amount in days.items():

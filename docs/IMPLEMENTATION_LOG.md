@@ -14,8 +14,9 @@ Persistent record of what was built, when, and by whom.
 - `backend/services/bimetri_openai_alert.py` — `insufficient_quota`/`credit_balance_exhausted` from
   mem0 or the proposal call → red card + one notification; cleared by a credit entry
 - `backend/api/bimetri_openai.py` — summary, sync, credit CRUD
-- `frontend/src/components/shared/OpenAIUsageCard.tsx`, `OpenAICreditsModal.tsx` — Dashboard card
-  and "Kredi ekle" popup
+- `frontend/src/components/shared/OpenAIBalanceCard.tsx`, `OpenAISpendChart.tsx`,
+  `OpenAICreditsModal.tsx` — balance card and daily spend chart in the analytics rows, "Add credit"
+  popup (English UI)
 
 ## 2026-11-10 — bimetri: graph gate budget, merge-time graph refresh, D2 trial (fork)
 

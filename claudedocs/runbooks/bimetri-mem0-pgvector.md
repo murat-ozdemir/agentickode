@@ -185,10 +185,10 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
     docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d --build frontend
     ```
     The backend code is mounted from the repo, so it needs no image build (`--build backend`
-    reinstalls apt and pip packages for minutes). Migration `b047_openai_usage` runs on backend start. On the card, **Kredi ekle**: first entry =
+    reinstalls apt and pip packages for minutes). Migration `b047_openai_usage` runs on backend start. On the **OpenAI Balance** card, **+** (Add credit): first entry =
     the credit balance on `platform.openai.com/settings/organization/billing` right now, dated
     today; later entries = each top-up. Sync runs every 15 min (`OPENAI_USAGE_POLL_SECONDS`) and on
-    **Yenile**.
+    the refresh icon.
 
 Rollback (data written after the migration is lost):
 ```bash
@@ -233,7 +233,7 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Backend port open but every request times out | Pre-fix symptom: with `--reload` a crashed worker left the reloader holding the port. `docker-compose.bimetri.yml` now sets `UVICORN_RELOAD: ""` so a crash exits the container and Docker restarts it; `PYTHONFAULTHANDLER` prints the stack. Native crashes show in the host's `kern.log` as `segfault ... libpython3.12` |
 | Agent proposal refused: `run N does not belong to org/repo` | The agent passed another project's name or a wrong `run_id`; the values are in the prompt's memory section |
 | Card: `OPENAI_ADMIN_KEY tanımlı değil` | Key missing in `.env` or backend not recreated with `up -d backend` |
-| Card: `Senkron hatası: OpenAI 403: ... Missing scopes: api.usage.read` | A project key, or an Admin key without Usage read. Create an Admin key with Usage read, rewrite the `.env` line, `up -d backend` |
-| Card: `Senkron hatası: OpenAI 401 ...` | Key revoked or mistyped; rewrite the `.env` line, `up -d backend` |
-| Card month spend differs from the usage page | Compare the same UTC month; press **Yenile** (late cost is picked up on each sync) |
+| Balance card red dot, tooltip `OpenAI 403: ... Missing scopes: api.usage.read` | A project key, or an Admin key without Usage read. Create an Admin key with Usage read, rewrite the `.env` line, `up -d backend` |
+| Balance card red dot, tooltip `OpenAI 401 ...` | Key revoked or mistyped; rewrite the `.env` line, `up -d backend` |
+| Spend chart month total differs from the usage page | Compare the same UTC month; press the refresh icon (late cost is picked up on each sync) |
 | Card remaining differs from the billing page | Edit the opening entry (spend earlier that UTC day is counted against it) |

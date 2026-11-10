@@ -102,6 +102,7 @@ async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     repo = OpenAIUsageRepository(session)
     month_start = now.date().replace(day=1)
+    month_days = await repo.days_since(month_start)
     credits = await repo.list_credits()
     first = min((c.credited_on for c in credits), default=None)
     total = sum((Decimal(str(c.amount_usd)) for c in credits), Decimal(0))
@@ -112,7 +113,8 @@ async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
     return {
         "enabled": usage_enabled(),
         "month_start": month_start,
-        "month_spend_usd": cents(await repo.spend_since(month_start)),
+        "month_spend_usd": cents(sum((v for _, v in month_days), Decimal(0))),
+        "month_days": [{"day": d, "cost_usd": cents(v)} for d, v in month_days],
         "credits_total_usd": cents(total),
         "first_credit_on": first,
         "spent_since_first_credit_usd": cents(spent) if spent is not None else None,

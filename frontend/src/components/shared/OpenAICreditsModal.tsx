@@ -82,15 +82,15 @@ export default function OpenAICreditsModal({ onClose, onChanged }: Props) {
     >
       <div className="bg-gray-900 border border-gray-700/60 rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white">OpenAI kredileri</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white" aria-label="Kapat">
+          <h3 className="text-sm font-semibold text-white">OpenAI credits</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-2">
           <label className="text-xs text-gray-400 flex flex-col gap-1">
-            Tutar (USD)
+            Amount (USD)
             <input
               type="number" step="0.01" min="0.01" required value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -98,42 +98,42 @@ export default function OpenAICreditsModal({ onClose, onChanged }: Props) {
             />
           </label>
           <label className="text-xs text-gray-400 flex flex-col gap-1">
-            Tarih
+            Date
             <input
               type="date" required value={day} onChange={(e) => setDay(e.target.value)}
               className={field} data-testid="credit-date"
             />
           </label>
           <button type="submit" className="px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-500 rounded-lg" data-testid="credit-save">
-            {editing == null ? "Ekle" : "Kaydet"}
+            {editing == null ? "Add" : "Save"}
           </button>
           {editing != null && (
             <button type="button" onClick={reset} className="px-3 py-1.5 text-sm text-gray-400 hover:text-white">
-              Vazgeç
+              Cancel
             </button>
           )}
         </form>
         <p className="text-xs text-gray-500 mb-4">
-          İlk kayıt, faturalama sayfasındaki o anki bakiye olmalı; sonrakiler her yükleme.
+          Enter the billing page's balance first, then each top-up.
         </p>
         {error && <p className="text-xs text-red-400 mb-3" data-testid="credit-error">{error}</p>}
 
         <ul className="divide-y divide-gray-800 max-h-64 overflow-y-auto" data-testid="credit-list">
-          {credits.length === 0 && <li className="py-2 text-sm text-gray-500">Henüz kayıt yok.</li>}
+          {credits.length === 0 && <li className="py-2 text-sm text-gray-500">No entries yet.</li>}
           {credits.map((c) => (
             <li key={c.id} className="py-2 flex items-center justify-between text-sm" data-testid={`credit-${c.id}`}>
               <span className="text-gray-400">{c.credited_on}</span>
               <span className="text-white font-medium">${c.amount_usd.toFixed(2)}</span>
               <span className="flex gap-2">
-                <button onClick={() => edit(c)} aria-label="Düzenle" className="text-gray-500 hover:text-white" data-testid={`credit-edit-${c.id}`}>
+                <button onClick={() => edit(c)} aria-label="Edit" className="text-gray-500 hover:text-white" data-testid={`credit-edit-${c.id}`}>
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 {deleting === c.id ? (
                   <button onClick={() => run(() => deleteOpenAICredit(c.id))} className="text-xs text-red-400" data-testid={`credit-confirm-${c.id}`}>
-                    Silinsin mi?
+                    Delete?
                   </button>
                 ) : (
-                  <button onClick={() => setDeleting(c.id)} aria-label="Sil" className="text-gray-500 hover:text-red-400" data-testid={`credit-delete-${c.id}`}>
+                  <button onClick={() => setDeleting(c.id)} aria-label="Delete" className="text-gray-500 hover:text-red-400" data-testid={`credit-delete-${c.id}`}>
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}

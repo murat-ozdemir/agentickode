@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { ReactNode } from "react";
 import type { AnalyticsSummary } from "../../types";
 
 function MetricCard({
@@ -52,8 +53,13 @@ const tooltipStyle = {
 
 export default function AnalyticsCharts({
   data,
+  extraMetric,
+  extraChart,
 }: {
   data: AnalyticsSummary | null;
+  // bimetri patch: one more metric card and chart at the end of each row (OpenAI balance/spend)
+  extraMetric?: ReactNode;
+  extraChart?: ReactNode;
 }) {
   if (!data) return null;
 
@@ -81,7 +87,7 @@ export default function AnalyticsCharts({
   return (
     <div className="mb-6 space-y-4">
       {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-2 gap-4 ${extraMetric ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         <MetricCard
           label="Success Rate"
           value={`${data.success_rate}%`}
@@ -106,10 +112,11 @@ export default function AnalyticsCharts({
           }
           icon={<DollarSign className="w-5 h-5" />}
         />
+        {extraMetric}
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 ${extraChart ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         {/* Phase durations */}
         {phaseData.length > 0 && (
           <div className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-4">
@@ -196,6 +203,7 @@ export default function AnalyticsCharts({
             </ResponsiveContainer>
           </div>
         )}
+        {extraChart}
       </div>
     </div>
   );

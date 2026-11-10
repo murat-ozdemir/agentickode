@@ -123,6 +123,10 @@ class TestSummary:
 
         assert result["month_start"] == date(2026, 11, 1)
         assert result["month_spend_usd"] == 0.67  # 0.671 summed first, then rounded
+        assert result["month_days"] == [
+            {"day": date(2026, 11, 1), "cost_usd": 0.33},
+            {"day": date(2026, 11, 10), "cost_usd": 0.34},
+        ]
         assert result["credits_total_usd"] == 25.0
         assert result["first_credit_on"] == date(2026, 10, 31)
         assert result["spent_since_first_credit_usd"] == 1.68  # 1.675 -> half up
