@@ -5,6 +5,7 @@ Runs as the worker user (agent-graph-mcp.sh stats RUN sends it over SSH):
     stats RUN_ID    find the session whose prompt carries "`run_id` = RUN_ID" and summarise it
 The run id comes from the project-memory block of the prompt, so projects without mem0 have no
 match. Subagent transcripts of the session are counted too. Codex sessions are not read.
+Bash commands are listed one per line (whitespace collapsed, long ones cut).
 Stdlib only.
 """
 
@@ -18,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 GRAPH_PREFIX = "mcp__bimetri-graph__"
+COMMAND_WIDTH = 160
 RUN_MARK = re.compile(r"`run_id` = (\d+)\b")
 USAGE_KEYS = (
     ("input", "input_tokens"),
@@ -63,7 +65,7 @@ def find_sessions(projects: Path, run_id: int) -> list:
 
 def summarise(paths: list) -> dict:
     tools, usage, reads = collections.Counter(), {}, set()
-    times = []
+    times, commands = [], []
     for path in paths:
         for record in _records(path):
             stamp = record.get("timestamp")
@@ -78,8 +80,12 @@ def summarise(paths: list) -> dict:
             for block in message.get("content") or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     tools[block.get("name", "?")] += 1
+                    args = block.get("input") or {}
                     if block.get("name") == "Read":
-                        reads.add((block.get("input") or {}).get("file_path"))
+                        reads.add(args.get("file_path"))
+                    # Agents often search and read through the shell; Read alone misses that.
+                    elif block.get("name") == "Bash" and args.get("command"):
+                        commands.append(" ".join(str(args["command"]).split()))
     tokens = {label: sum(int(u.get(key) or 0) for u in usage.values()) for label, key in USAGE_KEYS}
     return {
         "duration": (max(times) - min(times)).total_seconds() if times else 0.0,
@@ -88,6 +94,7 @@ def summarise(paths: list) -> dict:
         "tools": dict(tools.most_common()),
         "graph_calls": sum(n for name, n in tools.items() if name.startswith(GRAPH_PREFIX)),
         "distinct_reads": len(reads - {None}),
+        "commands": commands,
     }
 
 
@@ -107,6 +114,10 @@ def report(run_id: int, projects: Path) -> int:
         print(
             f"  graph calls {stats['graph_calls']}, distinct files read {stats['distinct_reads']}"
         )
+        for command in stats["commands"]:
+            if len(command) > COMMAND_WIDTH:
+                command = command[: COMMAND_WIDTH - 3] + "..."
+            print(f"  $ {command}")
     return 0
 
 

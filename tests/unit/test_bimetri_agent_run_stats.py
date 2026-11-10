@@ -93,10 +93,26 @@ class TestSummarise:
         assert result["distinct_reads"] == 1
         assert result["duration"] == 60.0
 
+    def test_lists_bash_commands_in_order(self, tmp_path):
+        path = write(
+            tmp_path / "a.jsonl",
+            [
+                reply(
+                    "m1",
+                    [tool("Bash", command="grep -rn\n  'Cache<'  src")],
+                    "2026-11-10T10:00:01Z",
+                ),
+                reply("m2", [tool("Bash", command="sed -n 1,20p A.java")], "2026-11-10T10:00:02Z"),
+            ],
+        )
+        commands = stats.summarise([path])["commands"]
+        assert commands == ["grep -rn 'Cache<' src", "sed -n 1,20p A.java"]
+
     def test_empty_transcript(self, tmp_path):
         path = write(tmp_path / "a.jsonl", [])
         result = stats.summarise([path])
         assert result["duration"] == 0.0 and result["tools"] == {} and result["responses"] == 0
+        assert result["commands"] == []
 
 
 class TestReport:
@@ -114,6 +130,19 @@ class TestReport:
         assert f"run 5: {main} (+1 subagent transcripts)" in out
         assert "duration 30.0s, API responses 2" in out
         assert "graph calls 1" in out
+
+    def test_prints_bash_commands_cut_to_width(self, tmp_path, capsys):
+        long = "grep " + "x" * 300
+        write(
+            tmp_path / "p" / "s.jsonl",
+            [
+                prompt(run_prompt(5)),
+                reply("m1", [tool("Bash", command=long)], "2026-11-10T10:00:01Z"),
+            ],
+        )
+        stats.report(5, tmp_path)
+        line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("  $ "))
+        assert len(line) == 4 + stats.COMMAND_WIDTH and line.endswith("...")
 
     def test_says_when_this_worker_did_not_run_it(self, tmp_path, capsys):
         assert stats.report(5, tmp_path) == 0

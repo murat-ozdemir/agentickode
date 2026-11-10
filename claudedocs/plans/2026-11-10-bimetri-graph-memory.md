@@ -171,8 +171,9 @@ the plan is closed as `abandoned`, with the numbers.
   worker and, as the worker user, finds the Claude transcript
   (`~/.claude/projects/*/*.jsonl`) whose first prompt carries "`run_id` = N" (from the mem0
   block). Output: tool calls by name, graph calls apart, distinct files read, tokens (input,
-  cache write, cache read, output, deduplicated per API response), duration. Subagent
-  transcripts are included; the Codex test run is not read.
+  cache write, cache read, output, deduplicated per API response), duration, and every Bash
+  command (run A searched and read only through the shell, which "distinct files read" does
+  not see). Subagent transcripts are included; the Codex test run is not read.
 - Measurement issue and procedure: `ajan-ekibi` docs folder, `d2-graf-olcum-issue.md`.
 
 ## Technical Approach
