@@ -6,6 +6,8 @@ Writes, as the worker user:
     ~/.claude/settings.json   startup waits, claude.ai connectors off
     ~/.codex/config.toml      bimetri-graph server with its startup timeout
     ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md   a marked hint telling the agent to use the graph
+With gate, ~/.claude/settings.json also gets hooks that deny Claude every other tool until it has
+called a graph tool in that session (`gate pre|mark`, below), for a measured run.
 Mode none removes all of it except the connector switch. Stdlib only.
 """
 
@@ -15,6 +17,7 @@ import json
 import os
 import pwd
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -34,6 +37,13 @@ HINT = (
     "grep'ten önce bu sunucunun araçlarını kullan. Grafiğin sonucunu, değiştireceğin dosyayı "
     "okuyarak doğrula."
 )
+GATE_DENY = (
+    "Bu ölçümde önce `{name}` araçlarıyla değişikliğin etkisini bul (çağıranlar, kullanımlar). "
+    "Bir `{name}` aracını çağırana kadar {tool} ve öteki araçlar kapalı."
+)
+GRAPH_TOOLS = f"mcp__{NAME}__"
+# Claude's own tool search stays open: with alwaysLoad it is not needed, but it is no workaround.
+GATE_OPEN = ("ToolSearch",)
 _CODEX_TABLE = re.compile(r"^\[mcp_servers\.(?:\"bimetri-graph\"|bimetri-graph)[.\]]")
 
 
@@ -80,11 +90,41 @@ def update_claude(path: Path, entry: "list | None") -> None:
     _write_private(path, json.dumps(data, indent=2) + "\n")
 
 
-def update_claude_settings(path: Path, mode: str) -> None:
+def gate_hooks(command: list) -> dict:
+    def hook(step: str) -> list:
+        return [{"type": "command", "command": shlex.join([*command, step]), "timeout": 5}]
+
+    # PostToolUseFailure too: a graph call that errors still counts as using the graph, and the
+    # agent must not be locked out by it.
+    mark = [{"matcher": f"{GRAPH_TOOLS}.*", "hooks": hook("mark")}]
+    return {
+        "PreToolUse": [{"matcher": "*", "hooks": hook("pre")}],
+        "PostToolUse": mark,
+        "PostToolUseFailure": mark,
+    }
+
+
+def _is_gate(group: dict) -> bool:
+    return any("agent_graph.py gate " in h.get("command", "") for h in group.get("hooks", []))
+
+
+def update_claude_settings(path: Path, mode: str, gate: "list | None" = None) -> None:
+    """gate: the hook command without its step; None removes the gate hooks."""
     data = json.loads(path.read_text()) if path.exists() else {}
     env = data["env"] = {k: v for k, v in data.get("env", {}).items() if k not in CLAUDE_ENV}
     if mode in TOOLS:
         env.update(CLAUDE_ENV)
+    hooks = {
+        event: kept
+        for event, groups in data.get("hooks", {}).items()
+        if (kept := [g for g in groups if not _is_gate(g)])
+    }
+    if gate and mode in TOOLS:
+        for event, groups in gate_hooks(gate).items():
+            hooks.setdefault(event, []).extend(groups)
+    data.pop("hooks", None)
+    if hooks:
+        data["hooks"] = hooks
     # Workers log in with the operator's claude.ai subscription; keep its connectors (mail, drive,
     # calendar) away from the agents. Applies to this machine only.
     data["disableClaudeAiConnectors"] = True
@@ -110,9 +150,25 @@ def update_hint(path: Path, on: bool) -> None:
         _write_private(path, text + "\n" if text else "")
 
 
-def set_mode(mode: str) -> int:
-    entry = [sys.executable, str(base_dir() / "agent_graph.py"), "serve", mode]
-    entry = entry if mode in TOOLS else None
+def gate(step: str, payload: str) -> int:
+    """Claude hook: pre denies (exit 2, reason on stderr) until mark has run in that session."""
+    event = json.loads(payload or "{}")
+    session = re.sub(r"[^A-Za-z0-9_-]", "", str(event.get("session_id", "")))
+    marker = base_dir() / "gate" / f"{session or 'unknown'}.ok"
+    if step == "mark":
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+        return 0
+    tool = str(event.get("tool_name", ""))
+    if tool.startswith(GRAPH_TOOLS) or tool in GATE_OPEN or marker.exists():
+        return 0
+    print(GATE_DENY.format(name=NAME, tool=tool), file=sys.stderr)
+    return 2
+
+
+def set_mode(mode: str, with_gate: bool = False) -> int:
+    program = [sys.executable, str(base_dir() / "agent_graph.py")]
+    entry = [*program, "serve", mode] if mode in TOOLS else None
     if (home() / ".codex").is_dir():
         update_codex(home() / ".codex" / "config.toml", entry)
         update_hint(home() / ".codex" / "AGENTS.md", bool(entry))
@@ -120,7 +176,8 @@ def set_mode(mode: str) -> int:
     else:
         print("codex:  skipped (~/.codex missing, log in first)")
     update_claude(home() / ".claude.json", entry)
-    update_claude_settings(home() / ".claude" / "settings.json", mode)
+    gate_command = [*program, "gate"] if with_gate and entry else None
+    update_claude_settings(home() / ".claude" / "settings.json", mode, gate_command)
     update_hint(home() / ".claude" / "CLAUDE.md", bool(entry))
-    print(f"claude: {mode}, claude.ai connectors off")
+    print(f"claude: {mode}{', gate on' if gate_command else ''}, claude.ai connectors off")
     return 0

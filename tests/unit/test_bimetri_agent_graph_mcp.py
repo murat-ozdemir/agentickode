@@ -149,6 +149,8 @@ class TestUpdateAndServe:
     def test_main_rejects_bad_arguments(self, home, monkeypatch, capsys):
         monkeypatch.setattr(sys, "stdin", io.StringIO(""))
         assert graph.main(["mode", "both"]) == 2
+        assert graph.main(["mode", "graphify", "open"]) == 2
+        assert graph.main(["gate", "post"]) == 2
         assert graph.main(["update", "graphify"]) == 2
         assert graph.main(["serve", "all"]) == 2
         assert "usage" in capsys.readouterr().err

@@ -118,6 +118,10 @@ Neither the license nor the network is a blocker for either tool. The choice com
 useful each one is to the agents, so Phase 1 measures it. The rest of the plan is the same for
 both.
 
+**Decision (10 Nov, user): Graphify.** Agent runs cost the same with either tool; the direct
+quality test (Phase 1c) decided it: Graphify found every dependent file and caller, graperoot
+none. Phase 2 rolls out Graphify only; graperoot-specific items below no longer apply.
+
 ## Phase 1 — measure before choosing (9 Nov decision)
 
 No independent benchmark exists for either tool.
@@ -180,6 +184,67 @@ the plan is closed as `abandoned`, with the numbers.
     before grep (mem0 got used because the prompt names it; nothing named the graph). `mode
     none` removes it.
   `stats` now lists `ToolSearch` queries next to the Bash commands.
+- Measurement B rerun (run 78, 10 Nov, after the fix): the graph tools were in the tool list
+  and the hint in the session, yet zero graph calls and zero `ToolSearch`; the agent worked
+  with Bash only (grep, sed, a heredoc rewrite), as in A. Result as good as A (5/5, CI passed),
+  $0.2414 vs A's $0.227. On this small task (callers easy to grep) the graph went unused;
+  that is the finding, not something to force with an agent rule. graperoot counts git-ignored
+  files too (1,224 vs 1,223 on agent-2, a Maven shade leftover), no effect on the measurement.
+- Measurement C (run 80, 10 Nov, graperoot): server up in 0.7 s with 10 tools, hint in the
+  session, again zero graph calls (Bash ×5); the Codex test agent made none either. Same correct
+  result, $0.1946. Before C the clones still held earlier runs' branches (the answer), now
+  deleted; clean them before every measured run.
+- Phase 1 result: none of the four runs used a graph (A $0.227, B-invalid $0.169, B $0.241,
+  C $0.195). Run-to-run spread (~±20%) is larger than any effect one run per mode could show,
+  and this task gives no basis to pick Graphify or graperoot.
+- Phase 1b, graph use forced (10 Nov): `mode TOOL gate` (`--gate` in the script) adds Claude
+  hooks to the worker's `~/.claude/settings.json`. `PreToolUse` (`*`) runs `agent_graph.py gate
+  pre`, which exits 2 (tool denied, Turkish message to the model) until the session has called
+  a `mcp__bimetri-graph__*` tool; `PostToolUse`/`PostToolUseFailure` on those tools run `gate
+  mark`, which writes `gate/<session_id>.ok`. `ToolSearch` stays open. Works under
+  `--dangerously-skip-permissions` (smoke run: Bash denied, then a graph call, then Bash
+  allowed). `mode none` removes the hooks. One trivial graph call opens the gate.
+- Phase 1b task: rename the deprecated `ResourceStatusService.update(String[], String,
+  DTOResourceStatus)` to `updateByNetworkId` and update its five callers in another module
+  (the 4-argument overload, called from `ActionUtils`, stays). 3 modes × 2 runs, interleaved,
+  10 min apart, same base commit `7a010367`, Claude Sonnet 5.5 medium, Codex test agent. Every
+  PR was closed unmerged and its branch deleted.
+
+  | Mode | Run | Duration | Cost | Cache write | Graph calls | Result |
+  |---|---|---|---|---|---|---|
+  | graphify + gate | #82 | 37.1 s | $0.1717 | 35.0k | 1 | 5/5, tests pass |
+  | graperoot + gate | #84 | 37.1 s | $0.1778 | 34.9k | 1 | 5/5, tests pass |
+  | none | #87 | 42.7 s | $0.1345 | 24.3k | 0 | 5/5, tests pass |
+  | none | #89 | 31.1 s | $0.1227 | 21.5k | 0 | 5/5, tests pass |
+  | graperoot + gate | #91 | 40.3 s | $0.1791 | 34.6k | 1 | 5/5, tests pass |
+  | graphify + gate | #93 | 38.5 s | $0.1851 | 37.0k | 1 | 5/5, tests pass |
+
+- Phase 1b result: mean cost graphify $0.178, graperoot $0.178, none $0.129 (graph modes +39%);
+  mean duration 37.8 / 38.7 / 36.9 s. All six runs were correct. Every gated run made exactly
+  one graph call to open the gate, then found the callers with grep as before. The extra cost
+  is the graph tool schemas (`alwaysLoad`) in the prompt cache (~+12k cache write per run). On
+  this kind of task the graph adds cost and no speed or quality. A run (#86) hit the claude.ai
+  five-hour limit before its first turn and was repeated as #87.
+- Cleanup note: the gitea MCP `delete_branch` answered "Branch Deleted" but left the branches
+  (61, 63, 65, 67); they were deleted with `git push origin --delete` from a worker clone.
+- Phase 1c, graph quality without an agent (10 Nov, agent-1, clone at `7a010367`): both servers
+  were started the way the agent CLI starts them and asked the same questions over MCP; answers
+  were checked against `git grep`.
+
+  | Question (truth) | Graphify | graperoot |
+  |---|---|---|
+  | Files that depend on `ResourceStatusService` (12) | 12/12, 0 extra (`calls`/`imports`/`references` edges) | `graph_impact`: 0/12, lists only the file's own symbols |
+  | Callers of `update(String[],String,DTOResourceStatus)` (5) | 5/5, plus `ActionUtils`: both `update` overloads are one node | `graph_neighbors`: 0/5, edges only go out of the file |
+  | `graph_retrieve` / `query_graph` "which classes call ResourceStatusService update…" | 4 of 5 handlers in the first 45 nodes | 0/5 in the top 10 (keyword hits such as `InternalCallerIdProtocol`) |
+  | Files that use the `Cache` interface (11) | 11/11 incl. both `implements`; found `SnmpSequenceUtilImpl`, which a `Cache<` grep missed | `graph_impact`: 0/11 |
+
+  Cause on graperoot's side: its Java `imports` edges point at the package name
+  (`com.bimetri….ResourceStatusService`), not at the file, so there are no reverse edges and
+  `graph_impact` cannot see dependents; retrieval is keyword ranking. Graphify resolves imports
+  and calls to nodes but merges same-name overloads. With the earlier numbers (agent cost and
+  duration equal; update after a change 51 s vs 4 s; Graphify open source, graperoot a
+  compiled proprietary engine) the result is: **Graphify** answers dependency questions
+  correctly, graperoot does not on this Java code base; its only edge is update speed.
 - `mode` also sets `disableClaudeAiConnectors: true` there: the workers log in with the
   operator's claude.ai subscription, whose connectors (mail, drive, calendar) would otherwise
   reach every agent. Machine-local; claude.ai itself is unchanged.
@@ -233,15 +298,14 @@ the plan is closed as `abandoned`, with the numbers.
 
 ## Success Criteria
 
-- [ ] Phase 1 numbers (no graph / Graphify / graperoot) recorded in this doc
-- [ ] User picks the tool
+- [x] Phase 1 numbers (no graph / Graphify / graperoot) recorded in this doc
+- [x] User picks the tool (Graphify, 10 Nov)
 - [ ] Tool installed on .10/.11/.12 with a pinned version; `claude mcp list` / `codex mcp list`
   show `bimetri-graph`
 - [ ] First build time on platform-backend measured; second run-start update finishes in
   seconds
 - [ ] Graph dir not in `git status` of the clone; survives `clean -fd`
 - [ ] Merge of a PR refreshes the graph on the workers (log line with changed-file count)
-- [ ] With graperoot: no outbound connection from the MCP process during a run (checked with
-  `ss -tp` on the worker)
+- ~~With graperoot: no outbound connection from the MCP process during a run~~ (Graphify chosen)
 - [ ] A real run log shows the agent calling a graph tool
 - [ ] Unit tests; ruff and pyright clean

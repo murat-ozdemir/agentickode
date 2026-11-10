@@ -3,7 +3,9 @@
 Runs as the worker user (agent-graph-mcp.sh sends it over SSH, after _agent_graph_config.py):
     install            stdin: own source, then the frozen locks (agent-graph-locks/<tool>.txt)
     update TOOL ROOT   TOOL: graphify | graperoot | all
-    mode MODE          MODE: none | graphify | graperoot (agent CLI settings, see the config file)
+    mode MODE [gate]   MODE: none | graphify | graperoot (agent CLI settings, see the config file);
+                       gate: Claude may use other tools only after a graph call
+    gate pre|mark      Claude hook (stdin: hook event JSON), written by mode ... gate
     serve TOOL         update if needed, then stdio MCP server; the agent CLIs start it in the run
                        workspace
 One venv per tool under ~/.local/share/bimetri-graph. Graph data goes to data/<tool>/<root slug>,
@@ -17,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from _agent_graph_config import NAME, TOOLS, base_dir, home, set_mode  # bundle: drop
+from _agent_graph_config import NAME, TOOLS, base_dir, gate, home, set_mode  # bundle: drop
 
 LOCK_MARK = "### lock: "  # install stdin: source, then "### lock: <tool>" + lock lines
 # Same code path as graperoot's own graph_scan tool: incremental, writes the symbol index too.
@@ -153,11 +155,15 @@ def main(argv: list) -> int:
     if command == "update" and len(args) == 2 and args[0] in (*TOOLS, "all"):
         tools = TOOLS if args[0] == "all" else (args[0],)
         return max(update(tool, Path(args[1]).resolve()) for tool in tools)
-    if command == "mode" and len(args) == 1 and args[0] in (*TOOLS, "none"):
-        return set_mode(args[0])
+    mode, gated = (args[0], args[1:] == ["gate"]) if args else ("", False)
+    if command == "mode" and mode in (*TOOLS, "none") and len(args) == 1 + gated:
+        return set_mode(mode, with_gate=gated)
+    if command == "gate" and args in (["pre"], ["mark"]):
+        return gate(args[0], sys.stdin.read())
     if command == "serve" and len(args) == 1 and args[0] in TOOLS:
         return serve(args[0])
-    print("usage: install | update TOOL|all ROOT | mode none|TOOL | serve TOOL", file=sys.stderr)
+    usage = "install | update TOOL|all ROOT | mode none|TOOL [gate] | serve TOOL | gate pre|mark"
+    print(f"usage: {usage}", file=sys.stderr)
     return 2
 
 

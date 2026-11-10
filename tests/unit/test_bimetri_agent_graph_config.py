@@ -93,6 +93,55 @@ class TestClaudeConfig:
         }
 
 
+class TestGate:
+    COMMAND = ("/usr/bin/python3", "/h/.local/share/bimetri-graph/agent_graph.py", "gate")
+
+    def test_hooks_gate_every_tool_and_mark_on_graph_calls(self, tmp_path):
+        path = tmp_path / "settings.json"
+        config.update_claude_settings(path, "graperoot", list(self.COMMAND))
+        hooks = json.loads(path.read_text())["hooks"]
+        assert hooks["PreToolUse"] == [
+            {
+                "matcher": "*",
+                "hooks": [
+                    {"type": "command", "command": " ".join(self.COMMAND) + " pre", "timeout": 5}
+                ],
+            }
+        ]
+        for event in ("PostToolUse", "PostToolUseFailure"):
+            assert hooks[event][0]["matcher"] == "mcp__bimetri-graph__.*"
+            assert hooks[event][0]["hooks"][0]["command"].endswith("agent_graph.py gate mark")
+
+    def test_off_and_none_keep_only_other_hooks(self, tmp_path):
+        path = tmp_path / "settings.json"
+        own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "/x/audit.sh"}]}
+        path.write_text(json.dumps({"hooks": {"PreToolUse": [own]}}))
+        config.update_claude_settings(path, "graphify", list(self.COMMAND))
+        config.update_claude_settings(path, "graphify", list(self.COMMAND))
+        assert len(json.loads(path.read_text())["hooks"]["PreToolUse"]) == 2
+        config.update_claude_settings(path, "graphify")
+        assert json.loads(path.read_text())["hooks"] == {"PreToolUse": [own]}
+        path.write_text(json.dumps({}))
+        config.update_claude_settings(path, "none", list(self.COMMAND))
+        assert "hooks" not in json.loads(path.read_text())
+
+    def test_pre_denies_until_a_graph_call_is_marked(self, home, capsys):
+        event = {"session_id": "s-1", "tool_name": "Bash"}
+        assert config.gate("pre", json.dumps(event)) == 2
+        assert "Bash" in capsys.readouterr().err
+        graph_call = {"session_id": "s-1", "tool_name": "mcp__bimetri-graph__query_graph"}
+        assert config.gate("pre", json.dumps(graph_call)) == 0
+        assert config.gate("pre", json.dumps({**event, "tool_name": "ToolSearch"})) == 0
+        assert config.gate("mark", json.dumps(graph_call)) == 0
+        assert config.gate("pre", json.dumps(event)) == 0
+        # Another session is still gated.
+        assert config.gate("pre", json.dumps({**event, "session_id": "s-2"})) == 2
+
+    def test_session_id_cannot_leave_the_gate_dir(self, home):
+        config.gate("mark", json.dumps({"session_id": "../../x"}))
+        assert [p.name for p in (config.base_dir() / "gate").iterdir()] == ["x.ok"]
+
+
 class TestHint:
     def test_appends_the_hint_after_existing_text(self, tmp_path):
         path = tmp_path / "CLAUDE.md"
@@ -130,6 +179,14 @@ class TestSetMode:
         assert "bimetri-graph" in json.loads((home / ".claude.json").read_text())["mcpServers"]
         assert (home / ".claude" / "settings.json").exists()
         assert config.HINT in (home / ".claude" / "CLAUDE.md").read_text()
+
+    def test_gate_is_written_only_for_graph_modes(self, home, capsys):
+        config.set_mode("graphify", with_gate=True)
+        assert "gate on" in capsys.readouterr().out
+        settings = home / ".claude" / "settings.json"
+        assert "PreToolUse" in json.loads(settings.read_text())["hooks"]
+        config.set_mode("none", with_gate=True)
+        assert "hooks" not in json.loads(settings.read_text())
 
     def test_none_takes_the_hint_back_for_both_clis(self, home):
         (home / ".codex").mkdir()

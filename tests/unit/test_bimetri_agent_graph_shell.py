@@ -65,6 +65,12 @@ class TestShellScript:
         ran = subprocess.run([sys.executable, "-I", "-c", program], capture_output=True, text=True)
         assert ran.returncode == 2 and "usage" in ran.stderr
 
+    def test_gate_is_passed_to_the_mode_command(self):
+        done = self.run("--dry-run", "--gate", "mode", "graperoot", "h1")
+        assert "_agent_graph_mcp.py> mode graperoot gate" in done.stdout
+        refused = self.run("--dry-run", "--gate", "mode", "none", "h1")
+        assert refused.returncode == 2 and "graph mode" in refused.stderr
+
     def test_rejects_unknown_mode(self):
         done = self.run("--dry-run", "mode", "both", "h1")
         assert done.returncode == 2 and "usage" in done.stderr
