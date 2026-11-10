@@ -4,6 +4,17 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-10 — bimetri: graph gate budget, merge-time graph refresh, D2 trial (fork)
+
+**Tests**: 1397 backend passing; ruff and pyright clean
+**Plan**: `claudedocs/plans/2026-11-10-bimetri-graph-memory.md` (now `abandoned`)
+
+- `scripts/bimetri/_agent_graph_gate.py` — Claude hook: deny tools until `graph_continue`, then
+  enforce its `max_supplementary_greps` on Grep/Glob/`fallback_rg`/shell searches
+- `backend/services/bimetri_graph.py` — merge webhook refreshes clone + graph on idle workers
+  under a per-clone flock; `workspace_setup` waits on that lock
+- Trial run #95: correct (5/5, CI green) but $0.357 vs $0.129 graphless → workers `mode none`
+
 ## 2026-06-05 — Remove the roles abstraction (v0.5.2+)
 
 **Commits**: `323480a` (backend), `c9d108a` (frontend + drop migration)

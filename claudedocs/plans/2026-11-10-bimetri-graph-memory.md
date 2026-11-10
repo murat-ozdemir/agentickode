@@ -1,6 +1,6 @@
 ---
 title: bimetri — local code graph for agents on workers (D2)
-status: in-progress
+status: abandoned
 date: 2026-11-10
 related: [plans/2026-11-09-bimetri-memory-mcp.md, runbooks/bimetri-mem0-pgvector.md]
 ---
@@ -157,7 +157,53 @@ replaces them with four tools of our own over Graphify's `graph.json`, a policy 
   the 8 `update` call sites first; `graph_read …::update` returns the overloads without the
   Javadoc mention; `fallback_rg` refused before `graph_continue` and after its one grep; gate
   denies `Grep` / `graph_read` before `graph_continue`, allows after.
-- Not yet measured: whether real runs follow the flow, and its cost.
+- The gate also enforces the grep budget (`_agent_graph_gate.py`): Grep, Glob, `fallback_rg` and
+  shell lines that start with rg/grep/find (also behind `&&`, `;`, `$(`, `xargs`) draw on
+  `max_supplementary_greps`; at zero they are denied. A filter after a pipe is free.
+
+### Phase 2 trial (criteria fixed before the runs, 10 Nov)
+
+Two runs of the Phase 1b task (rename to `updateByNetworkId`), sonnet-5-5 medium, base
+`7a010367`, workers in `mode graphify` with the gate. The flow passes only if both runs meet all:
+
+| Criterion | Pass |
+|---|---|
+| Result | 5/5 callers renamed, `ActionUtils` 4-arg overload untouched, CI gate green |
+| Flow used | at least one `graph_callers` or `graph_read` call after `graph_continue` |
+| Searches | grep-type calls within the cap; denials are counted, not a failure on their own |
+| Cost | mean of the two ≤ $0.155 (graphless mean $0.129 + 20 % noise band) |
+
+Fail: workers go back to `mode none`, this plan closes `abandoned` with the numbers.
+
+Result (10 Nov): **fail on cost; plan abandoned, workers in `mode none`.**
+
+| Run | Worker | Time | Cost | Cache write / read | Output | Calls |
+|---|---|---|---|---|---|---|
+| #95 (issue #78, PR #79) | agent-1 | 56.6 s | $0.3570 | 68.4k / 441.5k | 3.9k | continue 1, callers 3, read 8, fallback_rg 2, Bash grep 1; 1 search denied |
+
+- Result: 5/5 callers renamed, `ActionUtils` untouched, test run #96 (codex) added 3 tests, CI
+  gate green. Flow used: yes.
+- Cost: 2.8× the graphless mean ($0.129), 2× the Phase 1b graph runs ($0.178). `graph_read` of
+  a caller returns its whole enclosing method (120–250 lines) to show a one-line call site;
+  cache write doubled (68k vs 35k).
+- The cap hurt the answer: after the denial the agent wrote in the PR that it could not list
+  every caller and relied on the compiler instead.
+- Run 2 was not started: with #95 at $0.357 the mean is at least $0.178 even if run 2 were
+  free, so the cost criterion fails whatever it does.
+- Cleanup: PR #79 closed unmerged, branch deleted, #78 closed, clones back on `7a010367`.
+- Kept in the fork, unused while `mode none`: `agent-graph-mcp.sh` (install, modes, gate) and
+  the merge refresh below. The install stays on the workers (`~/.local/share/bimetri-graph`).
+
+### Merge refresh (built 10 Nov, approved before the trial)
+
+`backend/services/bimetri_graph.py`: the Gitea merge webhook (`_bimetri_pr_merged`) calls
+`schedule_refresh`; for each worker of the project with no pending or running run of it, a
+background task runs over SSH, under `flock -n <clone>/.git/bimetri-graph.lock`: fetch,
+`checkout -f`/`reset --hard origin/<default>`/`clean -fd`, `chown -R` to the worker user, then
+`agent_graph.py update graphify <clone>` as that user. Workers without `agent_graph.py` and
+projects that are not `existing` or use `local_path` are skipped. `workspace_setup` waits on the
+same lock (`flock -w 600`) before it syncs the clone. Errors only log. Not yet seen on a real
+merge.
 
 ## Phase 1 — measure before choosing (9 Nov decision)
 
@@ -342,7 +388,7 @@ the plan is closed as `abandoned`, with the numbers.
 - [ ] First build time on platform-backend measured; second run-start update finishes in
   seconds
 - [x] Graph dir not in `git status` of the clone (data outside the clone); survives `clean -fd`
-- [ ] Merge of a PR refreshes the graph on the workers (log line with changed-file count)
+- [ ] Merge of a PR refreshes the graph on the workers (built 10 Nov; not seen on a real merge)
 - ~~With graperoot: no outbound connection from the MCP process during a run~~ (Graphify chosen)
-- [ ] A real run log shows the agent calling a graph tool
-- [ ] Unit tests; ruff and pyright clean
+- [x] A real run log shows the agent calling a graph tool (#95, 14 graph calls; cost failed)
+- [x] Unit tests; ruff and pyright clean

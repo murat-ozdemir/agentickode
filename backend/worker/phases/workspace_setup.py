@@ -161,6 +161,10 @@ async def run(
     elif ws_type == "existing":
         branch = str(task_run.default_branch)
 
+        # bimetri yamasi: a merge-time graph refresh may be syncing this clone; let it finish
+        from backend.services.bimetri_graph import wait_for_refresh
+
+        await wait_for_refresh(ssh, workspace)
         # Ensure clone exists and is up-to-date
         if await remote_git.has_repo(workspace):
             await _log(f"Repo found at {workspace}, pulling latest")

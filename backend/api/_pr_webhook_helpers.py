@@ -141,6 +141,12 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
         arka_planda_yaz(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
         # memory proposals from the PR discussion; pending until approved in the UI
         schedule_proposals(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
+    try:  # code graph on the idle workers, in the background (D2 phase 2)
+        from backend.services.bimetri_graph import schedule_refresh
+
+        await schedule_refresh(db, project)
+    except Exception:
+        logger.warning("graph refresh could not be scheduled", exc_info=True)
     done = []
     for n in issues:
         try:
@@ -182,7 +188,11 @@ async def _bimetri_test_run(
             f"Gitea PR #{pr_number} (**{pr.get('title', '')}**) icin testleri yaz ve calistir.\n\n"
             f"Bu PR'in dalindasin (`{branch}`); yeni dal acma. PR'daki degisiklik: "
             f"`git diff origin/{base}...HEAD`.\n"
-            + (f"Bagli issue: #{issue_no}; commit mesajinda `(#{issue_no})` kullan.\n" if issue_no else "")
+            + (
+                f"Bagli issue: #{issue_no}; commit mesajinda `(#{issue_no})` kullan.\n"
+                if issue_no
+                else ""
+            )
             + (f"\nPR aciklamasi:\n\n{pr_body}\n" if pr_body else "")
         ),
         task_source="gitea",

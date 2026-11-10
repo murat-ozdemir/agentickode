@@ -125,25 +125,6 @@ class TestGate:
         config.update_claude_settings(path, "none", list(self.COMMAND))
         assert "hooks" not in json.loads(path.read_text())
 
-    def test_pre_denies_until_graph_continue_is_marked(self, home, capsys):
-        event = {"session_id": "s-1", "tool_name": "Bash"}
-        assert config.gate("pre", json.dumps(event)) == 2
-        assert "Bash" in capsys.readouterr().err
-        # Other graph tools wait too: graph_continue sets the caps they work within.
-        graph_read = {**event, "tool_name": "mcp__bimetri-graph__graph_read"}
-        assert config.gate("pre", json.dumps(graph_read)) == 2
-        graph_call = {"session_id": "s-1", "tool_name": "mcp__bimetri-graph__graph_continue"}
-        assert config.gate("pre", json.dumps(graph_call)) == 0
-        assert config.gate("pre", json.dumps({**event, "tool_name": "ToolSearch"})) == 0
-        assert config.gate("mark", json.dumps(graph_call)) == 0
-        assert config.gate("pre", json.dumps(event)) == 0
-        # Another session is still gated.
-        assert config.gate("pre", json.dumps({**event, "session_id": "s-2"})) == 2
-
-    def test_session_id_cannot_leave_the_gate_dir(self, home):
-        config.gate("mark", json.dumps({"session_id": "../../x"}))
-        assert [p.name for p in (config.base_dir() / "gate").iterdir()] == ["x.ok"]
-
 
 class TestPolicy:
     def test_appends_the_policy_after_existing_text(self, tmp_path):

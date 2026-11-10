@@ -14,7 +14,8 @@
 #          Claude (~/.claude.json, tools loaded up front, startup waits up to 15 s) and Codex
 #          (~/.codex/config.toml, 120 s startup timeout), adds (or removes) the graph policy
 #          (graph_continue first, capped fallbacks) in ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md,
-#          Claude hooks that deny every other tool until graph_continue, and turns claude.ai
+#          Claude hooks that deny every other tool until graph_continue and keep searches within
+#          its grep budget (_agent_graph_gate.py), and turns claude.ai
 #          connectors off for Claude on the worker (_agent_graph_config.py). Then runs
 #          `claude mcp list` inside --repo, where serve can find the clone; that also brings the
 #          graph up to date.
@@ -62,13 +63,15 @@ case "$action" in
 esac
 [ ${#hosts[@]} -gt 0 ] || { echo "$usage" >&2; exit 2; }
 
-# One program from two files: the config module, then the main one without its import of it.
+# One program from three files: gate, config, then main, without their imports of each other.
 program_file=scripts/bimetri/_agent_graph_mcp.py
 if [ "$action" = stats ]; then
   program_file=scripts/bimetri/_agent_run_stats.py
   program=$(cat "$program_file")
 else
-  program=$(cat scripts/bimetri/_agent_graph_config.py; grep -v '# bundle: drop$' "$program_file")
+  program=$(cat scripts/bimetri/_agent_graph_gate.py
+    grep -v '# bundle: drop$' scripts/bimetri/_agent_graph_config.py
+    grep -v '# bundle: drop$' "$program_file")
 fi
 # install reads its own source, the frozen lock and the flow server from stdin (see
 # _agent_graph_mcp.py); the flow server is likewise one file from two.

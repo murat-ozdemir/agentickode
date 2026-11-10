@@ -1,13 +1,13 @@
 """bimetri patch (D2 phase 1-2): agent CLI settings for the code graph MCP on a worker (`mode`).
 
-agent-graph-mcp.sh ships this file and _agent_graph_mcp.py as one program, this one first.
+agent-graph-mcp.sh ships this file, _agent_graph_gate.py and _agent_graph_mcp.py as one program.
 Writes, as the worker user:
     ~/.claude.json            bimetri-graph stdio server, tools loaded up front (alwaysLoad)
     ~/.claude/settings.json   startup waits, claude.ai connectors off
     ~/.codex/config.toml      bimetri-graph server with its startup timeout
     ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md   the marked graph policy (graph_continue first, caps)
-~/.claude/settings.json also gets hooks that deny Claude every other tool until it has called
-graph_continue in that session (`gate pre|mark`, below); Codex has no hooks, only the policy.
+~/.claude/settings.json also gets the gate hooks (_agent_graph_gate.py): no other tool before
+graph_continue, searches within its grep budget. Codex has no hooks, only the policy.
 Mode none removes all of it except the connector switch. Stdlib only.
 """
 
@@ -20,6 +20,8 @@ import re
 import shlex
 import sys
 from pathlib import Path
+
+from _agent_graph_gate import GATE_FIRST  # bundle: drop
 
 NAME = "bimetri-graph"
 TOOLS = ("graphify",)
@@ -43,20 +45,12 @@ Bu makinede `{NAME}` MCP sunucusu deponun kod grafiğini sunar. Kodu keşfederke
 3. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil.
 4. `confidence` ne olursa olsun önerilenler yetmezse en çok `max_supplementary_greps` kez
    `fallback_rg` çağır ve en çok `max_supplementary_files` ek dosya oku; sonra dur, yazmaya geç.
-   `high` ise önerilen dosyalarla yetinmeye çalış. Bu sınırlar Grep, Glob ve kabukta
-   `rg`/`grep`/`find` ile yapılan keşfi de kapsar.
+   `high` ise önerilen dosyalarla yetinmeye çalış. Arama sınırı Grep, Glob ve kabukta
+   `rg`/`grep`/`find` ile yapılan aramaları da kapsar ve uygulanır: hak bitince reddedilir.
 5. Sınırlar yalnızca keşif içindir: değiştireceğin dosyayı okumak, düzenleme, derleme, test ve
    git komutları serbest.
 
 Grafik son temiz commit'e göredir; senin yaptığın değişiklikler grafikte yoktur."""
-GATE_DENY = (
-    "Önce `{first}` ile görevin dosyalarını al (bkz. CLAUDE.md, kod grafiği akışı). "
-    "O çağrıya kadar {tool} ve öteki araçlar kapalı."
-)
-GRAPH_TOOLS = f"mcp__{NAME}__"
-GATE_FIRST = f"{GRAPH_TOOLS}graph_continue"
-# Claude's own tool search stays open: with alwaysLoad it is not needed, but it is no workaround.
-GATE_OPEN = ("ToolSearch",)
 _CODEX_TABLE = re.compile(r"^\[mcp_servers\.(?:\"bimetri-graph\"|bimetri-graph)[.\]]")
 
 
@@ -160,22 +154,6 @@ def update_policy(path: Path, on: bool) -> None:
     if text or path.exists():
         path.parent.mkdir(exist_ok=True)
         _write_private(path, text + "\n" if text else "")
-
-
-def gate(step: str, payload: str) -> int:
-    """Claude hook: pre denies (exit 2, reason on stderr) until graph_continue ran in that session."""
-    event = json.loads(payload or "{}")
-    session = re.sub(r"[^A-Za-z0-9_-]", "", str(event.get("session_id", "")))
-    marker = base_dir() / "gate" / f"{session or 'unknown'}.ok"
-    if step == "mark":
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.touch()
-        return 0
-    tool = str(event.get("tool_name", ""))
-    if tool in (GATE_FIRST, *GATE_OPEN) or marker.exists():
-        return 0
-    print(GATE_DENY.format(first="graph_continue", tool=tool), file=sys.stderr)
-    return 2
 
 
 def set_mode(mode: str) -> int:

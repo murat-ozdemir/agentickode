@@ -19,7 +19,8 @@ import sys
 import time
 from pathlib import Path
 
-from _agent_graph_config import NAME, TOOLS, base_dir, gate, home, set_mode  # bundle: drop
+from _agent_graph_config import NAME, TOOLS, base_dir, home, set_mode  # bundle: drop
+from _agent_graph_gate import gate  # bundle: drop
 
 PART_MARK = "### "  # install stdin: source, then "### lock: <tool>" / "### file: <name>" parts
 FLOW = "graph_flow.py"
@@ -146,7 +147,7 @@ def main(argv: list) -> int:
     if command == "mode" and len(args) == 1 and args[0] in (*TOOLS, "none"):
         return set_mode(args[0])
     if command == "gate" and args in (["pre"], ["mark"]):
-        return gate(args[0], sys.stdin.read())
+        return gate(args[0], sys.stdin.read(), base_dir() / "gate")
     if command == "serve" and len(args) == 1 and args[0] in TOOLS:
         return serve(args[0])
     usage = "install | update TOOL|all ROOT | mode none|TOOL | serve TOOL | gate pre|mark"
