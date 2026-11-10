@@ -208,7 +208,8 @@ Next (from #95):
 - [x] Grep cap: soften it (warn, or allow searches that complete a caller list) so the agent does
   not give up on completeness. `3d2be2f`: the first search past the budget is denied with a
   pointer to `graph_callers`; after that searches pass (`fallback_rg` adds a note).
-- [ ] Deploy the merge refresh to dev-1 and watch it on a real merge.
+- [ ] Deploy the merge refresh to dev-1 and watch it on a real merge. Deployed 10 Nov (`1f9cf70`,
+  backend restarted, health 200); not yet seen on a real merge.
 
 ### Merge refresh (built 10 Nov, approved before the trial)
 
