@@ -122,6 +122,43 @@ both.
 quality test (Phase 1c) decided it: Graphify found every dependent file and caller, graperoot
 none. Phase 2 rolls out Graphify only; graperoot-specific items below no longer apply.
 
+**Decision (10 Nov, user): agents get the graph**, despite Phase 1b's +39% cost, through a
+mandatory flow modelled on GrapeRoot's Dual-Graph policy (the user's iklim.co sessions: agents
+call `graph_continue` on their own, 335 times in that log), rebuilt on Graphify's graph.
+graperoot is removed from the code and the workers.
+
+### Phase 2 flow (built, 10 Nov)
+
+Phase 1 exposed Graphify's own MCP tools with a soft hint; every run used grep instead. Phase 2
+replaces them with four tools of our own over Graphify's `graph.json`, a policy text, and a gate.
+
+| Tool | Returns |
+|---|---|
+| `graph_continue(task)` | `recommended_files` (`path` or `path::Symbol`) with `why` (relation + use-site line), `confidence`, `max_supplementary_greps` / `max_supplementary_files`, `graph_commit` |
+| `graph_read(file)` | the file (first 400 lines), or with `::Symbol` only that declaration's block (braces matched, strings/comments skipped) |
+| `graph_callers(symbol)` | every `calls` / `references` / `implements` / `inherits` / `imports` edge into the symbol, `file:line` |
+| `fallback_rg(pattern, glob)` | ripgrep in the clone; refused before `graph_continue` and once its grep budget is spent |
+
+- `graph_continue` seeds on the names in the task (camelCase / `name(` / file paths, capitalised
+  words only if in the graph), then adds their users; method callers come before class users.
+  `confidence`: high if every name was found once, medium if some are missing or ambiguous, low
+  if nothing matched and Graphify's own scorer was used. Caps (greps, files): high 1/2,
+  medium 2/3, low 4/5.
+- Policy text (Turkish) in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` between markers:
+  `graph_continue` first, read with `graph_read`, callers with `graph_callers` not grep, obey
+  the caps (Grep/Glob/`rg`/`find` count), editing/building/testing/git are free.
+- Gate (Claude only; Codex has no hooks): on by default with `mode graphify`. PreToolUse denies
+  every tool but `graph_continue` and `ToolSearch` until a `graph_continue` Post(ToolUse|Failure)
+  writes the session's marker.
+- Files: `_graph_flow.py` (logic, no networkx) + `_graph_flow_server.py` (mcp 2.x stdio server,
+  Graphify's loader and scorer), bundled into `graph_flow.py`; `serve` runs it with the Graphify
+  venv's python `-I`. The graph is reloaded when `graph.json` changes.
+- Worker check (agent-1, `ResourceStatusService.update()`): `confidence` high, 15 files with
+  the 8 `update` call sites first; `graph_read …::update` returns the overloads without the
+  Javadoc mention; `fallback_rg` refused before `graph_continue` and after its one grep; gate
+  denies `Grep` / `graph_read` before `graph_continue`, allows after.
+- Not yet measured: whether real runs follow the flow, and its cost.
+
 ## Phase 1 — measure before choosing (9 Nov decision)
 
 No independent benchmark exists for either tool.
@@ -300,11 +337,11 @@ the plan is closed as `abandoned`, with the numbers.
 
 - [x] Phase 1 numbers (no graph / Graphify / graperoot) recorded in this doc
 - [x] User picks the tool (Graphify, 10 Nov)
-- [ ] Tool installed on .10/.11/.12 with a pinned version; `claude mcp list` / `codex mcp list`
-  show `bimetri-graph`
+- [x] Tool installed on .10/.11/.12 with a pinned version; `claude mcp list` shows
+  `bimetri-graph` connected (10 Nov, `mode graphify`, gate on)
 - [ ] First build time on platform-backend measured; second run-start update finishes in
   seconds
-- [ ] Graph dir not in `git status` of the clone; survives `clean -fd`
+- [x] Graph dir not in `git status` of the clone (data outside the clone); survives `clean -fd`
 - [ ] Merge of a PR refreshes the graph on the workers (log line with changed-file count)
 - ~~With graperoot: no outbound connection from the MCP process during a run~~ (Graphify chosen)
 - [ ] A real run log shows the agent calling a graph tool

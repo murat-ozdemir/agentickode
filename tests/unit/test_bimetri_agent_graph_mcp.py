@@ -2,7 +2,7 @@
 # Licensed under AGPLv3. See LICENSE file.
 # Commercial licensing: info@mechemsi.com
 
-"""bimetri patch (D2 phase 1): local code graph MCP setup on the workers."""
+"""bimetri patch (D2 phase 1-2): local code graph MCP setup on the workers."""
 
 import io
 import sys
@@ -32,14 +32,11 @@ class TestPaths:
         data = graph.data_dir("graphify", ROOT)
         assert data == home / ".local/share/bimetri-graph/data/graphify/workspaces__Org__repo"
 
-    def test_tool_env_points_each_tool_at_its_data_dir(self, home):
+    def test_tool_env_points_graphify_at_its_data_dir(self, home):
         data = str(graph.data_dir("graphify", ROOT))
         env = graph.tool_env("graphify", ROOT)
         assert env["GRAPHIFY_OUT"] == data
         assert env["GRAPHIFY_QUERY_LOG_DISABLE"] == "1"
-        env = graph.tool_env("graperoot", ROOT)
-        assert env["DG_DATA_DIR"] == str(graph.data_dir("graperoot", ROOT))
-        assert env["DUAL_GRAPH_PROJECT_ROOT"] == str(ROOT)
 
     def test_commands_use_the_tool_venv(self, home):
         venv = home / ".local/share/bimetri-graph"
@@ -48,29 +45,31 @@ class TestPaths:
             "update",
             str(ROOT),
         ]
-        command = graph.update_command("graperoot", ROOT)
-        assert command[:3] == [str(venv / "graperoot/bin/python"), "-I", "-c"]
-        assert command[-1] == str(ROOT)
-        assert graph.server_command("graphify", ROOT)[-1].endswith(
-            "workspaces__Org__repo/graph.json"
-        )
-        assert graph.server_command("graperoot", ROOT)[-2:] == [
-            "graperoot.mcp_graph_server",
-            "--stdio",
+        # The flow server runs isolated on the graph and the clone.
+        assert graph.server_command("graphify", ROOT) == [
+            str(venv / "graphify/bin/python"),
+            "-I",
+            str(venv / "graph_flow.py"),
+            str(graph.data_dir("graphify", ROOT) / "graph.json"),
+            str(ROOT),
         ]
 
 
 class TestInstallBundle:
-    def test_split_bundle_separates_source_and_locks(self):
-        source, locks = graph.split_bundle(
-            "print(1)\n### lock: graphify\na==1\n### lock: graperoot\nb==2\nc==3\n"
+    def test_split_bundle_separates_source_locks_and_files(self):
+        source, locks, files = graph.split_bundle(
+            "print(1)\n### lock: graphify\na==1\n### file: graph_flow.py\n### x\nb = 2\n"
         )
         assert source == "print(1)\n"
-        assert locks == {"graphify": "a==1\n", "graperoot": "b==2\nc==3\n"}
+        assert locks == {"graphify": "a==1\n"}
+        # A "### " line that is no part marker stays in the part.
+        assert files == {"graph_flow.py": "### x\nb = 2\n"}
 
-    def test_install_refuses_a_missing_lock(self, home, capsys):
+    def test_install_refuses_a_missing_lock_or_flow_server(self, home, capsys):
         assert graph.install("print(1)\n### lock: graphify\na==1\n") == 1
-        assert "graperoot" in capsys.readouterr().err
+        assert "graph_flow.py" in capsys.readouterr().err
+        assert graph.install("print(1)\n### file: graph_flow.py\nx = 1\n") == 1
+        assert "lock graphify" in capsys.readouterr().err
         assert not (home / ".local").exists()
 
 
@@ -121,27 +120,27 @@ class TestUpdateAndServe:
         built, execs = [], []
         monkeypatch.setattr(graph, "update", lambda tool, root, out=None: built.append(out) or rc)
         monkeypatch.setattr(graph.os, "execve", lambda *args: execs.append(args))
-        return graph.serve("graperoot"), built, execs
+        return graph.serve("graphify"), built, execs
 
     def test_serve_updates_on_stderr_then_execs(self, home, monkeypatch, capsys):
         _, built, execs = self.serve(monkeypatch, 0)
         assert built == [sys.stderr]
-        assert execs[0][1] == graph.server_command("graperoot", ROOT)
-        assert execs[0][2]["DG_DATA_DIR"] == str(graph.data_dir("graperoot", ROOT))
+        assert execs[0][1] == graph.server_command("graphify", ROOT)
+        assert execs[0][2]["GRAPHIFY_OUT"] == str(graph.data_dir("graphify", ROOT))
         assert capsys.readouterr().out == ""  # stdout belongs to MCP
 
     def test_failed_update_serves_only_an_existing_graph(self, home, monkeypatch):
         assert self.serve(monkeypatch, 1)[0] == 1
-        data = graph.data_dir("graperoot", ROOT)
+        data = graph.data_dir("graphify", ROOT)
         data.mkdir(parents=True)
-        (data / "info_graph.json").write_text("{}")
+        (data / "graph.json").write_text("{}")
         assert len(self.serve(monkeypatch, 1)[2]) == 1
 
     def test_serve_skips_the_update_while_the_tree_is_at_the_built_head(self, home, monkeypatch):
-        data = graph.data_dir("graperoot", ROOT)
+        data = graph.data_dir("graphify", ROOT)
         data.mkdir(parents=True)
-        (data / "info_graph.json").write_text("{}")
-        graph.built_at("graperoot", ROOT).write_text("abc")
+        (data / "graph.json").write_text("{}")
+        graph.built_at("graphify", ROOT).write_text("abc")
         _, built, execs = self.serve(monkeypatch, 0, head="abc")
         assert built == [] and len(execs) == 1
         assert self.serve(monkeypatch, 0, head="def")[1] == [sys.stderr]
@@ -149,7 +148,8 @@ class TestUpdateAndServe:
     def test_main_rejects_bad_arguments(self, home, monkeypatch, capsys):
         monkeypatch.setattr(sys, "stdin", io.StringIO(""))
         assert graph.main(["mode", "both"]) == 2
-        assert graph.main(["mode", "graphify", "open"]) == 2
+        assert graph.main(["mode", "graphify", "gate"]) == 2
+        assert graph.main(["mode", "graperoot"]) == 2
         assert graph.main(["gate", "post"]) == 2
         assert graph.main(["update", "graphify"]) == 2
         assert graph.main(["serve", "all"]) == 2

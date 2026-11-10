@@ -1,17 +1,17 @@
-"""bimetri patch (D2 phase 1): agent CLI settings for the code graph MCP on a worker (`mode`).
+"""bimetri patch (D2 phase 1-2): agent CLI settings for the code graph MCP on a worker (`mode`).
 
 agent-graph-mcp.sh ships this file and _agent_graph_mcp.py as one program, this one first.
 Writes, as the worker user:
     ~/.claude.json            bimetri-graph stdio server, tools loaded up front (alwaysLoad)
     ~/.claude/settings.json   startup waits, claude.ai connectors off
     ~/.codex/config.toml      bimetri-graph server with its startup timeout
-    ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md   a marked hint telling the agent to use the graph
-With gate, ~/.claude/settings.json also gets hooks that deny Claude every other tool until it has
-called a graph tool in that session (`gate pre|mark`, below), for a measured run.
+    ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md   the marked graph policy (graph_continue first, caps)
+~/.claude/settings.json also gets hooks that deny Claude every other tool until it has called
+graph_continue in that session (`gate pre|mark`, below); Codex has no hooks, only the policy.
 Mode none removes all of it except the connector switch. Stdlib only.
 """
 
-# ruff: noqa: RUF001 - the agent hint is Turkish; dotless i is a letter there
+# ruff: noqa: RUF001 - the agent policy is Turkish; dotless i is a letter there
 
 import json
 import os
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 NAME = "bimetri-graph"
-TOOLS = ("graphify", "graperoot")
+TOOLS = ("graphify",)
 # serve updates the graph before it answers: 51.7 s on platform-backend after a 3-file checkout.
 STARTUP_TIMEOUT_SEC = 120
 CLAUDE_ENV = {
@@ -30,18 +30,31 @@ CLAUDE_ENV = {
     # How long startup waits for alwaysLoad servers before it builds the tool list; default 5 s.
     "MCP_CONNECT_TIMEOUT_MS": "15000",
 }
-HINT_START, HINT_END = f"<!-- {NAME}: start -->", f"<!-- {NAME}: end -->"
-HINT = (
-    f"Bu makinede `{NAME}` MCP sunucusu deponun kod grafiğini sunar. Bir sembolü kimin "
-    "çağırdığını, nerede kullanıldığını ya da bir değişikliğin neyi etkileyeceğini bulmak için "
-    "grep'ten önce bu sunucunun araçlarını kullan. Grafiğin sonucunu, değiştireceğin dosyayı "
-    "okuyarak doğrula."
-)
+POLICY_START, POLICY_END = f"<!-- {NAME}: start -->", f"<!-- {NAME}: end -->"
+# Modelled on the Dual-Graph context policy (graph_continue first, then capped fallbacks).
+POLICY = f"""## Kod grafiği akışı (`{NAME}`)
+
+Bu makinede `{NAME}` MCP sunucusu deponun kod grafiğini sunar. Kodu keşfederken bu sırayı izle:
+
+1. Her görevin ya da yeni bir alt görevin başında önce `graph_continue` çağır; görevi kendi
+   sözlerinle, ilgili sınıf ve metot adlarıyla yaz. Ondan önce başka araç kullanma.
+2. `recommended_files` içindeki girdileri `graph_read` ile oku, her dosya için ayrı çağrı.
+   `yol::Sembol` girdisi yalnızca o sembolün satırlarını getirir; `why` neden önerildiğini söyler.
+3. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil.
+4. `confidence` ne olursa olsun önerilenler yetmezse en çok `max_supplementary_greps` kez
+   `fallback_rg` çağır ve en çok `max_supplementary_files` ek dosya oku; sonra dur, yazmaya geç.
+   `high` ise önerilen dosyalarla yetinmeye çalış. Bu sınırlar Grep, Glob ve kabukta
+   `rg`/`grep`/`find` ile yapılan keşfi de kapsar.
+5. Sınırlar yalnızca keşif içindir: değiştireceğin dosyayı okumak, düzenleme, derleme, test ve
+   git komutları serbest.
+
+Grafik son temiz commit'e göredir; senin yaptığın değişiklikler grafikte yoktur."""
 GATE_DENY = (
-    "Bu ölçümde önce `{name}` araçlarıyla değişikliğin etkisini bul (çağıranlar, kullanımlar). "
-    "Bir `{name}` aracını çağırana kadar {tool} ve öteki araçlar kapalı."
+    "Önce `{first}` ile görevin dosyalarını al (bkz. CLAUDE.md, kod grafiği akışı). "
+    "O çağrıya kadar {tool} ve öteki araçlar kapalı."
 )
 GRAPH_TOOLS = f"mcp__{NAME}__"
+GATE_FIRST = f"{GRAPH_TOOLS}graph_continue"
 # Claude's own tool search stays open: with alwaysLoad it is not needed, but it is no workaround.
 GATE_OPEN = ("ToolSearch",)
 _CODEX_TABLE = re.compile(r"^\[mcp_servers\.(?:\"bimetri-graph\"|bimetri-graph)[.\]]")
@@ -94,9 +107,8 @@ def gate_hooks(command: list) -> dict:
     def hook(step: str) -> list:
         return [{"type": "command", "command": shlex.join([*command, step]), "timeout": 5}]
 
-    # PostToolUseFailure too: a graph call that errors still counts as using the graph, and the
-    # agent must not be locked out by it.
-    mark = [{"matcher": f"{GRAPH_TOOLS}.*", "hooks": hook("mark")}]
+    # PostToolUseFailure too: a graph_continue that errors must not lock the agent out.
+    mark = [{"matcher": GATE_FIRST, "hooks": hook("mark")}]
     return {
         "PreToolUse": [{"matcher": "*", "hooks": hook("pre")}],
         "PostToolUse": mark,
@@ -132,26 +144,26 @@ def update_claude_settings(path: Path, mode: str, gate: "list | None" = None) ->
     _write_private(path, json.dumps(data, indent=2) + "\n")
 
 
-def update_hint(path: Path, on: bool) -> None:
-    """Add or drop the marked hint block of a CLI's user-level instructions file."""
+def update_policy(path: Path, on: bool) -> None:
+    """Add or drop the marked policy block of a CLI's user-level instructions file."""
     kept, skipping = [], False
     for line in path.read_text().splitlines() if path.exists() else []:
-        if line == HINT_START and kept and not kept[-1]:
+        if line == POLICY_START and kept and not kept[-1]:
             kept.pop()  # the blank line set before the block
-        skipping = skipping or line == HINT_START
+        skipping = skipping or line == POLICY_START
         if not skipping:
             kept.append(line)
-        skipping = skipping and line != HINT_END
+        skipping = skipping and line != POLICY_END
     text = "\n".join(kept).strip()
     if on:
-        text = (text + "\n\n" if text else "") + "\n".join((HINT_START, HINT, HINT_END))
+        text = (text + "\n\n" if text else "") + "\n".join((POLICY_START, POLICY, POLICY_END))
     if text or path.exists():
         path.parent.mkdir(exist_ok=True)
         _write_private(path, text + "\n" if text else "")
 
 
 def gate(step: str, payload: str) -> int:
-    """Claude hook: pre denies (exit 2, reason on stderr) until mark has run in that session."""
+    """Claude hook: pre denies (exit 2, reason on stderr) until graph_continue ran in that session."""
     event = json.loads(payload or "{}")
     session = re.sub(r"[^A-Za-z0-9_-]", "", str(event.get("session_id", "")))
     marker = base_dir() / "gate" / f"{session or 'unknown'}.ok"
@@ -160,24 +172,24 @@ def gate(step: str, payload: str) -> int:
         marker.touch()
         return 0
     tool = str(event.get("tool_name", ""))
-    if tool.startswith(GRAPH_TOOLS) or tool in GATE_OPEN or marker.exists():
+    if tool in (GATE_FIRST, *GATE_OPEN) or marker.exists():
         return 0
-    print(GATE_DENY.format(name=NAME, tool=tool), file=sys.stderr)
+    print(GATE_DENY.format(first="graph_continue", tool=tool), file=sys.stderr)
     return 2
 
 
-def set_mode(mode: str, with_gate: bool = False) -> int:
+def set_mode(mode: str) -> int:
     program = [sys.executable, str(base_dir() / "agent_graph.py")]
     entry = [*program, "serve", mode] if mode in TOOLS else None
     if (home() / ".codex").is_dir():
         update_codex(home() / ".codex" / "config.toml", entry)
-        update_hint(home() / ".codex" / "AGENTS.md", bool(entry))
+        update_policy(home() / ".codex" / "AGENTS.md", bool(entry))
         print(f"codex:  {mode}")
     else:
         print("codex:  skipped (~/.codex missing, log in first)")
     update_claude(home() / ".claude.json", entry)
-    gate_command = [*program, "gate"] if with_gate and entry else None
+    gate_command = [*program, "gate"] if entry else None
     update_claude_settings(home() / ".claude" / "settings.json", mode, gate_command)
-    update_hint(home() / ".claude" / "CLAUDE.md", bool(entry))
+    update_policy(home() / ".claude" / "CLAUDE.md", bool(entry))
     print(f"claude: {mode}{', gate on' if gate_command else ''}, claude.ai connectors off")
     return 0

@@ -10,3 +10,7 @@
 ## 2026-06-05 — Alembic migration collided with the runtime auto-migrate (backend crash-loop)
 **What went wrong:** A new column was added in BOTH alembic migration 039 (`op.add_column`) and main.py's runtime `_run_migrations`. During a dev `--reload`, `_run_migrations` added the column without advancing `alembic_version`, so on the next container start the entrypoint's `alembic upgrade head` re-ran `op.add_column` on the existing column → `DuplicateColumnError` → crash loop.
 **Rule for next time:** This codebase has TWO migration mechanisms (alembic `versions/` AND `main.py._run_migrations`). When a schema change is added to both, the alembic migration MUST be idempotent — use `op.execute("ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...")` (and `DROP ... IF EXISTS`) rather than `op.add_column`/`op.drop_*`, because the runtime layer can apply it first without bumping `alembic_version`.
+
+## 2026-11-10 — Presented the user's own tool back to them as a finding
+**What went wrong:** Paused the approved graperoot removal because "iklim.co's Dual-Graph is graperoot". The user had recommended graperoot and already knew that.
+**Rule for next time:** Do not hold approved work for a link the user already knows. Mention only what is new (a measurement, a risk) and carry on.

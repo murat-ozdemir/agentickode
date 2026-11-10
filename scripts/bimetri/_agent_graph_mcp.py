@@ -1,13 +1,13 @@
-"""bimetri patch (D2 phase 1): local code graph for the agent CLIs on a worker.
+"""bimetri patch (D2 phase 1-2): local code graph for the agent CLIs on a worker.
 
 Runs as the worker user (agent-graph-mcp.sh sends it over SSH, after _agent_graph_config.py):
-    install            stdin: own source, then the frozen locks (agent-graph-locks/<tool>.txt)
-    update TOOL ROOT   TOOL: graphify | graperoot | all
-    mode MODE [gate]   MODE: none | graphify | graperoot (agent CLI settings, see the config file);
-                       gate: Claude may use other tools only after a graph call
-    gate pre|mark      Claude hook (stdin: hook event JSON), written by mode ... gate
-    serve TOOL         update if needed, then stdio MCP server; the agent CLIs start it in the run
-                       workspace
+    install            stdin: own source, then "### lock: graphify" + agent-graph-locks/graphify.txt
+                       and "### file: graph_flow.py" + the flow server (_graph_flow*.py)
+    update TOOL ROOT   TOOL: graphify | all
+    mode MODE          MODE: none | graphify (agent CLI settings and gate, see the config file)
+    gate pre|mark      Claude hook (stdin: hook event JSON), written by mode graphify
+    serve TOOL         update if needed, then the graph_flow.py stdio MCP server on the graph;
+                       the agent CLIs start it in the run workspace
 One venv per tool under ~/.local/share/bimetri-graph. Graph data goes to data/<tool>/<root slug>,
 outside the clone, so `git status` and `clean -fd` never see it. Stdlib only, no network.
 """
@@ -21,19 +21,8 @@ from pathlib import Path
 
 from _agent_graph_config import NAME, TOOLS, base_dir, gate, home, set_mode  # bundle: drop
 
-LOCK_MARK = "### lock: "  # install stdin: source, then "### lock: <tool>" + lock lines
-# Same code path as graperoot's own graph_scan tool: incremental, writes the symbol index too.
-GRAPEROOT_SCAN = """
-import asyncio, json, sys
-from graperoot.mcp_graph_server import build_server
-async def main():
-    res = await build_server(host="127.0.0.1", port=0).call_tool(
-        "graph_scan", {"project_root": sys.argv[1]})
-    out = res[1] if isinstance(res, tuple) else res
-    print(json.dumps(out))
-    sys.exit(0 if out.get("ok") else 1)
-asyncio.run(main())
-"""
+PART_MARK = "### "  # install stdin: source, then "### lock: <tool>" / "### file: <name>" parts
+FLOW = "graph_flow.py"
 
 
 def data_dir(tool: str, root: Path) -> Path:
@@ -42,25 +31,17 @@ def data_dir(tool: str, root: Path) -> Path:
 
 def tool_env(tool: str, root: Path) -> dict:
     env, data = dict(os.environ), str(data_dir(tool, root))
-    if tool == "graphify":
-        env.update(GRAPHIFY_OUT=data, GRAPHIFY_QUERY_LOG_DISABLE="1", GRAPHIFY_NO_TIPS="1")
-    else:
-        env.update(DG_DATA_DIR=data, DUAL_GRAPH_PROJECT_ROOT=str(root))
+    env.update(GRAPHIFY_OUT=data, GRAPHIFY_QUERY_LOG_DISABLE="1", GRAPHIFY_NO_TIPS="1")
     return env
 
 
 def update_command(tool: str, root: Path) -> list:
-    venv = base_dir() / tool / "bin"
-    if tool == "graphify":
-        return [str(venv / "graphify"), "update", str(root)]
-    return [str(venv / "python"), "-I", "-c", GRAPEROOT_SCAN, str(root)]
+    return [str(base_dir() / tool / "bin" / "graphify"), "update", str(root)]
 
 
 def server_command(tool: str, root: Path) -> list:
-    python = str(base_dir() / tool / "bin" / "python")
-    if tool == "graphify":
-        return [python, "-m", "graphify.serve", str(data_dir(tool, root) / "graph.json")]
-    return [python, "-m", "graperoot.mcp_graph_server", "--stdio"]
+    python, graph = base_dir() / tool / "bin" / "python", data_dir(tool, root) / "graph.json"
+    return [str(python), "-I", str(base_dir() / FLOW), str(graph), str(root)]
 
 
 def clean_head(root: Path) -> "str | None":
@@ -96,25 +77,32 @@ def update(tool: str, root: Path, out=None) -> int:
 
 
 def split_bundle(text: str) -> tuple:
+    """(source, {tool: lock text}, {file name: text}) from the install stdin."""
     parts, name = {"": []}, ""
     for line in text.splitlines(keepends=True):
-        if line.startswith(LOCK_MARK):
-            name = line[len(LOCK_MARK) :].strip()
+        kind, _, rest = line[len(PART_MARK) :].partition(": ")
+        if line.startswith(PART_MARK) and kind in ("lock", "file") and rest.strip():
+            name = f"{kind}: {rest.strip()}"
             parts[name] = []
         else:
             parts[name].append(line)
-    return "".join(parts.pop("")), {k: "".join(v) for k, v in parts.items()}
+    texts = {k: "".join(v) for k, v in parts.items()}
+    locks = {k[len("lock: ") :]: v for k, v in texts.items() if k.startswith("lock: ")}
+    files = {k[len("file: ") :]: v for k, v in texts.items() if k.startswith("file: ")}
+    return texts[""], locks, files
 
 
 def install(bundle: str) -> int:
-    source, locks = split_bundle(bundle)
-    missing = [tool for tool in TOOLS if not locks.get(tool, "").strip()]
+    source, locks, files = split_bundle(bundle)
+    missing = [f"lock {tool}" for tool in TOOLS if not locks.get(tool, "").strip()]
+    missing += [] if files.get(FLOW, "").strip() else [FLOW]
     if missing:
-        print(f"ERROR: no lock for {', '.join(missing)} on stdin", file=sys.stderr)
+        print(f"ERROR: no {', '.join(missing)} on stdin", file=sys.stderr)
         return 1
     base = base_dir()
     base.mkdir(parents=True, exist_ok=True)
     (base / "agent_graph.py").write_text(source)
+    (base / FLOW).write_text(files[FLOW])
     for tool in TOOLS:
         venv = base / tool
         if not (venv / "bin" / "python").exists():
@@ -134,7 +122,7 @@ def serve(tool: str) -> int:
         print(f"{NAME}: cwd {os.getcwd()} is not inside a git clone", file=sys.stderr)
         return 1
     root = Path(found.stdout.strip())
-    graph = data_dir(tool, root) / ("graph.json" if tool == "graphify" else "info_graph.json")
+    graph = data_dir(tool, root) / "graph.json"
     # The agent CLI waits only a few seconds for the server (alwaysLoad), and even a no-op
     # Graphify update takes ~4 s. So update only when the tree moved since the last build.
     # stdout is the MCP channel from here on, so the update reports on stderr.
@@ -155,14 +143,13 @@ def main(argv: list) -> int:
     if command == "update" and len(args) == 2 and args[0] in (*TOOLS, "all"):
         tools = TOOLS if args[0] == "all" else (args[0],)
         return max(update(tool, Path(args[1]).resolve()) for tool in tools)
-    mode, gated = (args[0], args[1:] == ["gate"]) if args else ("", False)
-    if command == "mode" and mode in (*TOOLS, "none") and len(args) == 1 + gated:
-        return set_mode(mode, with_gate=gated)
+    if command == "mode" and len(args) == 1 and args[0] in (*TOOLS, "none"):
+        return set_mode(args[0])
     if command == "gate" and args in (["pre"], ["mark"]):
         return gate(args[0], sys.stdin.read())
     if command == "serve" and len(args) == 1 and args[0] in TOOLS:
         return serve(args[0])
-    usage = "install | update TOOL|all ROOT | mode none|TOOL [gate] | serve TOOL | gate pre|mark"
+    usage = "install | update TOOL|all ROOT | mode none|TOOL | serve TOOL | gate pre|mark"
     print(f"usage: {usage}", file=sys.stderr)
     return 2
 

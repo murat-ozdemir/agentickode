@@ -2,7 +2,7 @@
 # Licensed under AGPLv3. See LICENSE file.
 # Commercial licensing: info@mechemsi.com
 
-"""bimetri patch (D2 phase 1): agent-graph-mcp.sh, the SSH side of the code graph MCP setup."""
+"""bimetri patch (D2 phase 1-2): agent-graph-mcp.sh, the SSH side of the code graph MCP setup."""
 
 import os
 import subprocess
@@ -58,19 +58,24 @@ class TestShellScript:
         assert done.returncode == 0, done.stderr
         args = (out / "0.args").read_text().splitlines()
         assert args[0] == "agent1-coder" and args[1].startswith("python3 -c ")
-        program, locks = graph.split_bundle((out / "0.stdin").read_text())
-        assert sorted(locks) == ["graperoot", "graphify"]
+        program, locks, files = graph.split_bundle((out / "0.stdin").read_text())
+        assert sorted(locks) == ["graphify"] and sorted(files) == ["graph_flow.py"]
         assert "bundle: drop" not in program and "def set_mode" in program
         # The bundled program runs on its own: config first, then the main module.
         ran = subprocess.run([sys.executable, "-I", "-c", program], capture_output=True, text=True)
         assert ran.returncode == 2 and "usage" in ran.stderr
+        # So does the flow server, core first; mcp and graphify are imported only in main.
+        flow = files["graph_flow.py"]
+        assert "from _graph_flow import" not in flow and "def continue_flow" in flow
+        compile(flow, "graph_flow.py", "exec")
+        ran = subprocess.run(
+            [sys.executable, "-I", "-c", flow.replace('if __name__ == "__main__":', "if 0:")],
+            capture_output=True,
+            text=True,
+        )
+        assert ran.returncode == 0, ran.stderr
 
-    def test_gate_is_passed_to_the_mode_command(self):
-        done = self.run("--dry-run", "--gate", "mode", "graperoot", "h1")
-        assert "_agent_graph_mcp.py> mode graperoot gate" in done.stdout
-        refused = self.run("--dry-run", "--gate", "mode", "none", "h1")
-        assert refused.returncode == 2 and "graph mode" in refused.stderr
-
-    def test_rejects_unknown_mode(self):
-        done = self.run("--dry-run", "mode", "both", "h1")
-        assert done.returncode == 2 and "usage" in done.stderr
+    def test_rejects_unknown_mode_and_the_old_options(self):
+        for args in (("mode", "both"), ("mode", "graperoot"), ("--gate", "mode", "graphify")):
+            done = self.run("--dry-run", *args, "h1")
+            assert done.returncode == 2, args
