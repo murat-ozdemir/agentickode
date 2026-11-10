@@ -10,7 +10,9 @@
 # install: pinned venvs under ~/.local/share/bimetri-graph of the worker user, then a first build
 #          of both graphs for --repo with timings. Mode stays as it was (none on a new worker).
 # mode none|graphify|graperoot: registers (or removes) the stdio MCP server bimetri-graph for
-#          Claude (~/.claude.json) and Codex (~/.codex/config.toml); shows `claude mcp list`.
+#          Claude (~/.claude.json) and Codex (~/.codex/config.toml), with a 120 s startup timeout,
+#          and turns claude.ai connectors off for Claude on the worker. Then runs `claude mcp list`
+#          inside --repo, where serve can find the clone; that also runs serve's graph update.
 # update:  incremental update of both graphs for --repo, with timings.
 # stats RUN_ID: tool calls (graph calls apart), tokens with the cache split and duration of that
 #          run's Claude transcript, which only the worker user can read (_agent_run_stats.py).
@@ -67,7 +69,7 @@ case "$action" in
   install) commands=("$as_worker install" "$as_worker update all $(printf %q "$repo")") ;;
   update) commands=("$as_worker update all $(printf %q "$repo")") ;;
   mode) commands=("$as_worker mode $arg"
-                  "runuser -l $worker_user -c 'claude mcp list' 2>&1 | grep bimetri-graph || true") ;;
+                  "runuser -l $worker_user -c $(printf %q "cd $(printf %q "$repo") && claude mcp list") 2>&1 | grep -E '^(bimetri-graph|claude\.ai)' || true") ;;
   stats) commands=("$as_worker stats $arg") ;;
 esac
 

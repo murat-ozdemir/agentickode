@@ -158,6 +158,16 @@ the plan is closed as `abandoned`, with the numbers.
   stderr; stdout is the MCP channel), then `exec`s the server. A failed update still serves an
   existing graph. Updating at every session start keeps the graph on the run's checkout, even
   when the previous run left the clone on its feature branch.
+- Startup time (10 Nov, agent-1): after a 3-file checkout `graphify update` took 51.7 s (no
+  change: 3.9 s), past Claude's 30 s MCP startup limit, so the server never connected. `mode`
+  now writes `MCP_TIMEOUT=120000` to the worker user's `~/.claude/settings.json` (`env`) and
+  `startup_timeout_sec = 120` for Codex, and checks with `claude mcp list` inside `--repo` (from
+  the home directory `serve` finds no clone and always fails). For the measured runs the clones
+  are checked out at the base commit and updated beforehand, so the run-start update has nothing
+  to do. The merge refresh above is the lasting fix.
+- `mode` also sets `disableClaudeAiConnectors: true` there: the workers log in with the
+  operator's claude.ai subscription, whose connectors (mail, drive, calendar) would otherwise
+  reach every agent. Machine-local; claude.ai itself is unchanged.
 - Measured locally on agentickode-bimetri (768 files): Graphify first build 12.8–18.4 s,
   graperoot 1.1–1.7 s; no-change update about 1 s for each.
 - platform-backend (1225 code files), first build on each of .10/.11/.12 (`install`, 10 Nov):

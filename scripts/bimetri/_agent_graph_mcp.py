@@ -3,7 +3,7 @@
 Runs as the worker user (agent-graph-mcp.sh sends it over SSH):
     install            stdin: own source, then the frozen locks (agent-graph-locks/<tool>.txt)
     update TOOL ROOT   TOOL: graphify | graperoot | all
-    mode MODE          MODE: none | graphify | graperoot
+    mode MODE          MODE: none | graphify | graperoot (also writes ~/.claude/settings.json)
     serve TOOL         update, then stdio MCP server; Claude/Codex start it in the run workspace
 One venv per tool under ~/.local/share/bimetri-graph. Graph data goes to data/<tool>/<root slug>,
 outside the clone, so `git status` and `clean -fd` never see it. Stdlib only, no network.
@@ -34,6 +34,8 @@ async def main():
     sys.exit(0 if out.get("ok") else 1)
 asyncio.run(main())
 """
+# serve updates the graph before it answers: 51.7 s on platform-backend after a 3-file checkout.
+STARTUP_TIMEOUT_SEC = 120
 _CODEX_TABLE = re.compile(r"^\[mcp_servers\.(?:\"bimetri-graph\"|bimetri-graph)[.\]]")
 
 
@@ -138,7 +140,7 @@ def update_codex(path: Path, entry: "list | None") -> None:
             kept.append(line)
     if entry:
         kept += ["", f"[mcp_servers.{NAME}]", f"command = {json.dumps(entry[0])}"]
-        kept += [f"args = {json.dumps(entry[1:])}", "startup_timeout_sec = 60"]
+        kept += [f"args = {json.dumps(entry[1:])}", f"startup_timeout_sec = {STARTUP_TIMEOUT_SEC}"]
     text = "\n".join(kept).strip()
     _write_private(path, text + "\n" if text else "")
 
@@ -152,6 +154,18 @@ def update_claude(path: Path, entry: "list | None") -> None:
     _write_private(path, json.dumps(data, indent=2) + "\n")
 
 
+def update_claude_settings(path: Path, mode: str) -> None:
+    data = json.loads(path.read_text()) if path.exists() else {}
+    env = data["env"] = {k: v for k, v in data.get("env", {}).items() if k != "MCP_TIMEOUT"}
+    if mode in TOOLS:
+        env["MCP_TIMEOUT"] = str(STARTUP_TIMEOUT_SEC * 1000)  # Claude's default is 30 s
+    # Workers log in with the operator's claude.ai subscription; keep its connectors (mail, drive,
+    # calendar) away from the agents. Applies to this machine only.
+    data["disableClaudeAiConnectors"] = True
+    path.parent.mkdir(exist_ok=True)
+    _write_private(path, json.dumps(data, indent=2) + "\n")
+
+
 def set_mode(mode: str) -> int:
     entry = [sys.executable, str(base_dir() / "agent_graph.py"), "serve", mode]
     entry = entry if mode in TOOLS else None
@@ -161,7 +175,8 @@ def set_mode(mode: str) -> int:
     else:
         print("codex:  skipped (~/.codex missing, log in first)")
     update_claude(home() / ".claude.json", entry)
-    print(f"claude: {mode}")
+    update_claude_settings(home() / ".claude" / "settings.json", mode)
+    print(f"claude: {mode}, claude.ai connectors off")
     return 0
 
 

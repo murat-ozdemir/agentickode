@@ -91,7 +91,7 @@ class TestCodexConfig:
         assert config["mcp_servers"]["bimetri-graph"] == {
             "command": ENTRY[0],
             "args": ENTRY[1:],
-            "startup_timeout_sec": 60,
+            "startup_timeout_sec": 120,
         }
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
@@ -119,11 +119,31 @@ class TestClaudeConfig:
         assert json.loads(path.read_text())["mcpServers"] == {"other": {"type": "http"}}
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
+    def test_settings_raise_the_startup_timeout_and_disable_connectors(self, tmp_path):
+        path = tmp_path / ".claude" / "settings.json"
+        graph.update_claude_settings(path, "graphify")
+        assert json.loads(path.read_text()) == {
+            "env": {"MCP_TIMEOUT": "120000"},
+            "disableClaudeAiConnectors": True,
+        }
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    def test_none_drops_only_the_timeout(self, tmp_path):
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"model": "x", "env": {"A": "1", "MCP_TIMEOUT": "120000"}}))
+        graph.update_claude_settings(path, "none")
+        assert json.loads(path.read_text()) == {
+            "model": "x",
+            "env": {"A": "1"},
+            "disableClaudeAiConnectors": True,
+        }
+
     def test_set_mode_skips_codex_without_login(self, home, capsys):
         assert graph.set_mode("graphify") == 0
         assert "skipped" in capsys.readouterr().out
         assert not (home / ".codex").exists()
         assert "bimetri-graph" in json.loads((home / ".claude.json").read_text())["mcpServers"]
+        assert (home / ".claude" / "settings.json").exists()
 
 
 class TestUpdateAndServe:
@@ -193,7 +213,11 @@ class TestShellScript:
     def test_mode_lists_the_registered_server(self):
         done = self.run("--dry-run", "mode", "none", "h1", "h2")
         assert done.stdout.count("_agent_graph_mcp.py> mode none") == 2
-        assert "claude mcp list" in done.stdout
+        # Listed inside the clone: serve only starts where git finds a work tree.
+        assert (
+            r"-c cd\ /workspaces/Bienport-IoT/platform-backend\ \&\&\ claude\ mcp\ list"
+            in done.stdout
+        )
 
     def test_rejects_unknown_mode(self):
         done = self.run("--dry-run", "mode", "both", "h1")
