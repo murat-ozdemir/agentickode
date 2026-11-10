@@ -56,7 +56,7 @@ OpenAI stops answering for lack of credit.
 - [ ] Month spend on the card equals platform.openai.com/usage for the same month, to the cent
 - [ ] Remaining equals the billing page's credit balance after the opening entry
 - [x] Credit add / edit / delete from the popup; the date defaults to today
-- [ ] Sync runs every 15 min; last update and any sync error visible on the card
+- [x] Sync runs every 15 min; last update and any sync error visible on the card
 - [ ] Quota error → card red, one Slack message; a new credit entry clears it
 - [x] Unit + frontend tests; ruff, pyright clean
-- [ ] Deployed to dev-1 with the Admin key in `.env`
+- [x] Deployed to dev-1 with the Admin key in `.env`
