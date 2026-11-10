@@ -11,6 +11,7 @@ from backend.models.agents import (
 )
 from backend.models.base import Base
 from backend.models.bimetri_memory import MemoryProposal
+from backend.models.bimetri_openai import OpenAICredit, OpenAIDailyCost
 from backend.models.chat import ChatSession
 from backend.models.episodes import Episode
 from backend.models.flow_prompts import FlowPrompt
@@ -46,6 +47,8 @@ __all__ = [
     "NotificationChannel",
     "NotificationSource",
     "OllamaServer",
+    "OpenAICredit",
+    "OpenAIDailyCost",
     "ProjectConfig",
     "ProjectInstruction",
     "ProjectInstructionVersion",

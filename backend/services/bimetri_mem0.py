@@ -12,6 +12,7 @@ is empty.
 from collections.abc import Sequence
 
 from backend.config import settings
+from backend.services.bimetri_openai_alert import check_quota
 from backend.services.http_client import get_http_client
 
 # What the project is and how it works vs. what was done in which PR. Searched separately so the
@@ -39,6 +40,7 @@ async def list_memories(project: str) -> list[dict]:
         params={"user_id": project, "top_k": 1000},
         timeout=15.0,
     )
+    await check_quota(resp, "mem0")
     resp.raise_for_status()
     body = resp.json()
     return body.get("results", []) if isinstance(body, dict) else body
@@ -59,6 +61,7 @@ async def search_memories(
         json={"query": query, "filters": filters, "top_k": top_k},
         timeout=15.0,
     )
+    await check_quota(resp, "mem0")
     resp.raise_for_status()
     body = resp.json()
     return body.get("results", []) if isinstance(body, dict) else body
@@ -77,6 +80,7 @@ async def add_memory(project: str, text: str, metadata: dict) -> str | None:
         },
         timeout=30.0,
     )
+    await check_quota(resp, "mem0")
     resp.raise_for_status()
     results = (resp.json() or {}).get("results") or [{}]
     return results[0].get("id")

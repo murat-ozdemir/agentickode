@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     bimetri_memory_mcp_token: str = ""
     memory_proposal_model: str = "gpt-5-mini"
     memory_proposal_language: str = "Turkish"
+    # bimetri patch: OpenAI Admin key (read-only Usage scope) for the Dashboard spend card.
+    # Off while empty.
+    openai_admin_key: str = ""
+    openai_usage_poll_seconds: int = 900
 
     # Redis
     redis_url: str = "redis://redis:6379/0"

@@ -23,6 +23,7 @@ from backend.api import (
     backup,
     bimetri_memories,
     bimetri_memory_proposals,
+    bimetri_openai,
     chat,
     git_connections,
     health,
@@ -75,6 +76,7 @@ from backend.services.notifications.dispatcher import NotificationDispatcher
 from backend.services.queue_service import queue_service
 from backend.services.rules_dispatcher import RulesDispatcher
 from backend.services.task_management.status_sync import StatusSyncer
+from backend.worker.bimetri_openai_usage_scheduler import OpenAIUsageScheduler
 from backend.worker.engine import WorkerEngine
 from backend.worker.issue_poller_scheduler import IssuePollerScheduler
 from backend.worker.platform_cron_scheduler import PlatformCronScheduler
@@ -384,6 +386,8 @@ async def lifespan(app: FastAPI):
     schedule_trigger_scheduler_task = asyncio.create_task(schedule_trigger_scheduler.run())
     worktree_cleanup = WorktreeCleanupScheduler(async_session)
     worktree_cleanup_task = asyncio.create_task(worktree_cleanup.run())
+    openai_usage = OpenAIUsageScheduler(async_session)  # bimetri patch
+    openai_usage_task = asyncio.create_task(openai_usage.run())
     yield
     logger.info("Shutting down worker")
     notification_dispatcher.stop()
@@ -394,12 +398,14 @@ async def lifespan(app: FastAPI):
     issue_poller.stop()
     schedule_trigger_scheduler.stop()
     worktree_cleanup.stop()
+    openai_usage.stop()
     worker_engine.stop()
     scheduler_task.cancel()
     cron_scheduler_task.cancel()
     issue_poller_task.cancel()
     schedule_trigger_scheduler_task.cancel()
     worktree_cleanup_task.cancel()
+    openai_usage_task.cancel()
     worker_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await worker_task
@@ -408,6 +414,7 @@ async def lifespan(app: FastAPI):
         await issue_poller_task
         await schedule_trigger_scheduler_task
         await worktree_cleanup_task
+        await openai_usage_task
     await close_http_client()
     await queue_service.close()
 
@@ -471,6 +478,7 @@ app.include_router(webhooks_pr_comment.router, prefix="/api")
 app.include_router(memory.router, prefix="/api")
 app.include_router(bimetri_memories.router, prefix="/api")  # bimetri patch
 app.include_router(bimetri_memory_proposals.router, prefix="/api")  # bimetri patch
+app.include_router(bimetri_openai.router, prefix="/api")  # bimetri patch
 app.include_router(webhooks_slack.router, prefix="/api")
 app.include_router(webhooks_discord.router, prefix="/api")
 app.include_router(ws.router)

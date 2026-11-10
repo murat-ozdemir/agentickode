@@ -170,6 +170,22 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
     `curl -s http://<MEM0_BIND>:8892/health` = `ok`, `curl -s -o /dev/null -w '%{http_code}' -X POST http://<MEM0_BIND>:8892/mcp` = `401`.
     In a run log the agent's tool calls show as `mcp__bimetri-memory__...` (Claude).
 
+12. OpenAI spend card (Dashboard). Shows this month's OpenAI API spend from the Costs API, the
+    credits you enter, the remaining balance and a red state when OpenAI answers
+    `insufficient_quota` / `credit_balance_exhausted` (one message to the notification channels).
+    Create an Admin key (Organization Owner, read-only, Usage scope) at
+    `platform.openai.com/settings/organization/admin-keys`, then put it in `.env` without echoing it:
+    ```bash
+    bash -c 'read -rsp "OPENAI_ADMIN_KEY: " K; echo; sed -i "/^OPENAI_ADMIN_KEY=/d" .env; printf "OPENAI_ADMIN_KEY=%s\n" "$K" >> .env'
+    ```
+    ```bash
+    docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml up -d --build backend frontend
+    ```
+    Migration `b047_openai_usage` runs on backend start. On the card, **Kredi ekle**: first entry =
+    the credit balance on `platform.openai.com/settings/organization/billing` right now, dated
+    today; later entries = each top-up. Sync runs every 15 min (`OPENAI_USAGE_POLL_SECONDS`) and on
+    **Yenile**.
+
 Rollback (data written after the migration is lost):
 ```bash
 docker compose -p agentickode -f docker-compose.dev.yml -f docker-compose.prod.yml -f docker-compose.swag.yml -f docker-compose.bimetri.yml stop mem0 postgres
@@ -212,3 +228,7 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | Run prompt has no "Hafıza araçları" lines | `BIMETRI_MEMORY_MCP_TOKEN` missing in `.env` or backend not recreated with `up -d backend` |
 | Backend port open but every request times out | Pre-fix symptom: with `--reload` a crashed worker left the reloader holding the port. `docker-compose.bimetri.yml` now sets `UVICORN_RELOAD: ""` so a crash exits the container and Docker restarts it; `PYTHONFAULTHANDLER` prints the stack. Native crashes show in the host's `kern.log` as `segfault ... libpython3.12` |
 | Agent proposal refused: `run N does not belong to org/repo` | The agent passed another project's name or a wrong `run_id`; the values are in the prompt's memory section |
+| Card: `OPENAI_ADMIN_KEY tanımlı değil` | Key missing in `.env` or backend not recreated with `up -d backend` |
+| Card: `Senkron hatası: OpenAI 401 ...` / `403` | Not an Admin key (project keys cannot read costs) or revoked; recreate it and rewrite the `.env` line |
+| Card month spend differs from the usage page | Compare the same UTC month; press **Yenile** (late cost is picked up on each sync) |
+| Card remaining differs from the billing page | Edit the opening entry (spend earlier that UTC day is counted against it) |

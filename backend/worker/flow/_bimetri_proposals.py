@@ -23,6 +23,7 @@ from backend.models import MemoryProposal
 from backend.models.bimetri_memory import PROPOSAL_KINDS
 from backend.repositories.memory_proposal_repo import MemoryProposalRepository
 from backend.services.bimetri_mem0 import list_memories, mem0_enabled
+from backend.services.bimetri_openai_alert import check_quota, clear_alert_quietly
 from backend.services.http_client import get_http_client
 from backend.worker.flow._bimetri_pr_chain import collect_pr_chain
 
@@ -95,7 +96,9 @@ async def generate_proposals(
         },
         timeout=180.0,
     )
+    await check_quota(resp, "memory proposals")
     resp.raise_for_status()
+    await clear_alert_quietly()
     return parse_proposals(resp.json()["choices"][0]["message"]["content"])
 
 

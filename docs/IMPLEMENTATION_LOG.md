@@ -4,6 +4,19 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-10 — bimetri: OpenAI API spend card (fork)
+
+**Tests**: 1272 backend unit, 272 frontend passing; ruff, pyright, eslint, tsc clean
+**Plan**: `claudedocs/plans/2026-11-10-bimetri-openai-usage.md`
+
+- `backend/services/bimetri_openai_usage.py` + scheduler — Costs API daily spend (Admin key), UTC
+  days stored in `bimetri_openai_costs` (migration 047), summary with remaining balance
+- `backend/services/bimetri_openai_alert.py` — `insufficient_quota`/`credit_balance_exhausted` from
+  mem0 or the proposal call → red card + one notification; cleared by a credit entry
+- `backend/api/bimetri_openai.py` — summary, sync, credit CRUD
+- `frontend/src/components/shared/OpenAIUsageCard.tsx`, `OpenAICreditsModal.tsx` — Dashboard card
+  and "Kredi ekle" popup
+
 ## 2026-11-10 — bimetri: graph gate budget, merge-time graph refresh, D2 trial (fork)
 
 **Tests**: 1397 backend passing; ruff and pyright clean

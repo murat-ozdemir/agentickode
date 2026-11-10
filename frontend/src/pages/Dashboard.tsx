@@ -8,6 +8,7 @@ import { getAnalytics, getRuns, getStats } from "../api";
 import { BASE } from "../api/client";
 import AnalyticsCharts from "../components/shared/AnalyticsCharts";
 import FilterBar from "../components/shared/FilterBar";
+import OpenAIUsageCard from "../components/shared/OpenAIUsageCard";
 import Pagination from "../components/shared/Pagination";
 import StatsBar from "../components/shared/StatsBar";
 import TaskRunTable from "../components/runs/TaskRunTable";
@@ -120,6 +121,7 @@ export default function Dashboard() {
         Dashboard
       </h1>
       <StatsBar stats={stats} />
+      <OpenAIUsageCard />
       <AnalyticsCharts data={analytics} />
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="relative flex-1 min-w-[200px] max-w-md">
