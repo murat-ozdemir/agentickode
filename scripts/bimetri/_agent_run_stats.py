@@ -5,7 +5,8 @@ Runs as the worker user (agent-graph-mcp.sh stats RUN sends it over SSH):
     stats RUN_ID    find the session whose prompt carries "`run_id` = RUN_ID" and summarise it
 The run id comes from the project-memory block of the prompt, so projects without mem0 have no
 match. Subagent transcripts of the session are counted too. Codex sessions are not read.
-Bash commands are listed one per line (whitespace collapsed, long ones cut).
+Bash commands and ToolSearch queries are listed one per line in call order (whitespace
+collapsed, long ones cut).
 Stdlib only.
 """
 
@@ -86,6 +87,9 @@ def summarise(paths: list) -> dict:
                     # Agents often search and read through the shell; Read alone misses that.
                     elif block.get("name") == "Bash" and args.get("command"):
                         commands.append(" ".join(str(args["command"]).split()))
+                    # Deferred MCP tools are loaded through ToolSearch; shows whether it looked.
+                    elif block.get("name") == "ToolSearch":
+                        commands.append(f"ToolSearch: {args.get('query')}")
     tokens = {label: sum(int(u.get(key) or 0) for u in usage.values()) for label, key in USAGE_KEYS}
     return {
         "duration": (max(times) - min(times)).total_seconds() if times else 0.0,

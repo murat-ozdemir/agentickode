@@ -108,6 +108,19 @@ class TestSummarise:
         commands = stats.summarise([path])["commands"]
         assert commands == ["grep -rn 'Cache<' src", "sed -n 1,20p A.java"]
 
+    def test_lists_tool_search_queries_with_the_commands(self, tmp_path):
+        path = write(
+            tmp_path / "a.jsonl",
+            [
+                reply(
+                    "m1", [tool("ToolSearch", query="select:graph_query")], "2026-11-10T10:00:01Z"
+                ),
+                reply("m2", [tool("Bash", command="ls")], "2026-11-10T10:00:02Z"),
+            ],
+        )
+        commands = stats.summarise([path])["commands"]
+        assert commands == ["ToolSearch: select:graph_query", "ls"]
+
     def test_empty_transcript(self, tmp_path):
         path = write(tmp_path / "a.jsonl", [])
         result = stats.summarise([path])

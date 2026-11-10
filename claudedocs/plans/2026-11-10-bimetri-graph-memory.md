@@ -143,7 +143,9 @@ the plan is closed as `abandoned`, with the numbers.
 
 - `scripts/bimetri/agent-graph-mcp.sh install|update|mode none|graphify|graperoot HOST...`, run
   as root on dev-1 with AgenticKode's SSH key; `--dry-run` prints the SSH commands. It sends
-  `_agent_graph_mcp.py` (stdlib only) to each worker and runs it as the worker user.
+  `_agent_graph_config.py` + `_agent_graph_mcp.py` (stdlib only, joined into one program) to
+  each worker and runs it as the worker user. `--direct` takes SSH destinations that log in as
+  the worker user themselves (e.g. `~/.ssh/config` aliases) instead of root plus `runuser`.
 - One venv per tool under `~/.local/share/bimetri-graph`, installed from frozen locks
   (`scripts/bimetri/agent-graph-locks/<tool>.txt`): `graphifyy[mcp]==0.9.105` with mcp 2.3.0;
   `graperoot==3.10.19` with mcp 1.19.0 and pydantic 2.13.3. Unpinned, pip pulls pydantic 2.14,
@@ -157,7 +159,9 @@ the plan is closed as `abandoned`, with the numbers.
   with `git rev-parse --show-toplevel` from its cwd, runs the incremental update (output on
   stderr; stdout is the MCP channel), then `exec`s the server. A failed update still serves an
   existing graph. Updating at every session start keeps the graph on the run's checkout, even
-  when the previous run left the clone on its feature branch.
+  when the previous run left the clone on its feature branch. A successful update of a clean
+  tree stamps its HEAD (`<data dir>.head`); while the tree is clean at that commit, `serve`
+  skips the update and starts at once (a no-change Graphify update still takes ~4 s).
 - Startup time (10 Nov, agent-1): after a 3-file checkout `graphify update` took 51.7 s (no
   change: 3.9 s), past Claude's 30 s MCP startup limit, so the server never connected. `mode`
   now writes `MCP_TIMEOUT=120000` to the worker user's `~/.claude/settings.json` (`env`) and
@@ -165,6 +169,17 @@ the plan is closed as `abandoned`, with the numbers.
   the home directory `serve` finds no clone and always fails). For the measured runs the clones
   are checked out at the base commit and updated beforehand, so the run-start update has nothing
   to do. The merge refresh above is the lasting fix.
+- Measurement B (run 76, 10 Nov) was invalid: zero graph calls. The session init listed
+  `bimetri-graph` as `pending` with no tools. Two Claude Code defaults
+  (code.claude.com/docs/en/mcp): MCP tools are deferred behind tool search (the agent sees only
+  names and must call `ToolSearch`), and startup does not wait for slow servers. Fix (`mode`):
+  - `"alwaysLoad": true` on the Claude entry: tools in the first tool list, startup waits for
+    the server up to `MCP_CONNECT_TIMEOUT_MS`, set to 15000 (default 5000) in `settings.json`;
+  - the HEAD stamp above, so `serve` answers well within that wait;
+  - a marked Turkish hint in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` to use the graph
+    before grep (mem0 got used because the prompt names it; nothing named the graph). `mode
+    none` removes it.
+  `stats` now lists `ToolSearch` queries next to the Bash commands.
 - `mode` also sets `disableClaudeAiConnectors: true` there: the workers log in with the
   operator's claude.ai subscription, whose connectors (mail, drive, calendar) would otherwise
   reach every agent. Machine-local; claude.ai itself is unchanged.

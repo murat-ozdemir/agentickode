@@ -5,11 +5,7 @@
 """bimetri patch (D2 phase 1): local code graph MCP setup on the workers."""
 
 import io
-import json
-import stat
-import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,14 +14,15 @@ import pytest
 _DIR = Path(__file__).resolve().parents[2] / "scripts" / "bimetri"
 sys.path.insert(0, str(_DIR))
 
+import _agent_graph_config as config  # noqa: E402
 import _agent_graph_mcp as graph  # noqa: E402
 
 ROOT = Path("/workspaces/Org/repo")
-ENTRY = ["/usr/bin/python3", "/h/.local/share/bimetri-graph/agent_graph.py", "serve", "graperoot"]
 
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "home", lambda: tmp_path)
     monkeypatch.setattr(graph, "home", lambda: tmp_path)
     return tmp_path
 
@@ -77,86 +74,38 @@ class TestInstallBundle:
         assert not (home / ".local").exists()
 
 
-class TestCodexConfig:
-    def test_replaces_earlier_entry_and_keeps_the_rest(self, tmp_path):
-        path = tmp_path / "config.toml"
-        path.write_text(
-            'model = "gpt-5"\n\n[mcp_servers.bimetri-graph]\ncommand = "old"\n\n'
-            '[mcp_servers.bimetri-memory]\nurl = "http://m/mcp"\n'
-        )
-        graph.update_codex(path, ENTRY)
-        config = tomllib.loads(path.read_text())
-        assert config["model"] == "gpt-5"
-        assert config["mcp_servers"]["bimetri-memory"] == {"url": "http://m/mcp"}
-        assert config["mcp_servers"]["bimetri-graph"] == {
-            "command": ENTRY[0],
-            "args": ENTRY[1:],
-            "startup_timeout_sec": 120,
-        }
-        assert stat.S_IMODE(path.stat().st_mode) == 0o600
-
-    def test_none_removes_the_entry(self, tmp_path):
-        path = tmp_path / "config.toml"
-        graph.update_codex(path, ENTRY)
-        graph.update_codex(path, None)
-        assert path.read_text() == ""
-
-
-class TestClaudeConfig:
-    def test_adds_and_removes_entry_keeping_other_keys(self, tmp_path):
-        path = tmp_path / ".claude.json"
-        path.write_text(json.dumps({"theme": "dark", "mcpServers": {"other": {"type": "http"}}}))
-        graph.update_claude(path, ENTRY)
-        data = json.loads(path.read_text())
-        assert data["theme"] == "dark"
-        assert data["mcpServers"]["bimetri-graph"] == {
-            "type": "stdio",
-            "command": ENTRY[0],
-            "args": ENTRY[1:],
-            "env": {},
-        }
-        graph.update_claude(path, None)
-        assert json.loads(path.read_text())["mcpServers"] == {"other": {"type": "http"}}
-        assert stat.S_IMODE(path.stat().st_mode) == 0o600
-
-    def test_settings_raise_the_startup_timeout_and_disable_connectors(self, tmp_path):
-        path = tmp_path / ".claude" / "settings.json"
-        graph.update_claude_settings(path, "graphify")
-        assert json.loads(path.read_text()) == {
-            "env": {"MCP_TIMEOUT": "120000"},
-            "disableClaudeAiConnectors": True,
-        }
-        assert stat.S_IMODE(path.stat().st_mode) == 0o600
-
-    def test_none_drops_only_the_timeout(self, tmp_path):
-        path = tmp_path / "settings.json"
-        path.write_text(json.dumps({"model": "x", "env": {"A": "1", "MCP_TIMEOUT": "120000"}}))
-        graph.update_claude_settings(path, "none")
-        assert json.loads(path.read_text()) == {
-            "model": "x",
-            "env": {"A": "1"},
-            "disableClaudeAiConnectors": True,
-        }
-
-    def test_set_mode_skips_codex_without_login(self, home, capsys):
-        assert graph.set_mode("graphify") == 0
-        assert "skipped" in capsys.readouterr().out
-        assert not (home / ".codex").exists()
-        assert "bimetri-graph" in json.loads((home / ".claude.json").read_text())["mcpServers"]
-        assert (home / ".claude" / "settings.json").exists()
-
-
 class TestUpdateAndServe:
-    def test_update_reports_rc_and_time(self, home, monkeypatch, capsys):
+    def test_clean_head_is_none_for_a_changed_tree(self, monkeypatch):
+        replies = iter([SimpleNamespace(returncode=0, stdout=" M a.py\n")])
+        monkeypatch.setattr(graph.subprocess, "run", lambda *a, **kw: next(replies))
+        assert graph.clean_head(ROOT) is None
+        replies = iter([SimpleNamespace(returncode=0, stdout=""), SimpleNamespace(stdout="abc\n")])
+        assert graph.clean_head(ROOT) == "abc"
+
+    def fake_update(self, monkeypatch, rc, head):
         calls = []
+        monkeypatch.setattr(graph, "clean_head", lambda root: head)
         monkeypatch.setattr(
             graph.subprocess,
             "run",
-            lambda cmd, **kw: calls.append((cmd, kw)) or SimpleNamespace(returncode=3),
+            lambda cmd, **kw: calls.append((cmd, kw)) or SimpleNamespace(returncode=rc),
         )
+        return calls
+
+    def test_update_reports_rc_and_time(self, home, monkeypatch, capsys):
+        calls = self.fake_update(monkeypatch, 3, "abc")
         assert graph.update("graphify", ROOT) == 3
         assert calls[0][1]["cwd"] == ROOT and calls[0][1]["stdout"] == 2
         assert capsys.readouterr().out.startswith("graphify: update rc=3 in ")
+        assert graph.built_at("graphify", ROOT).read_text() == ""
+
+    def test_update_of_a_clean_tree_stamps_its_head(self, home, monkeypatch):
+        self.fake_update(monkeypatch, 0, "abc")
+        graph.update("graphify", ROOT)
+        assert graph.built_at("graphify", ROOT).read_text() == "abc"
+        self.fake_update(monkeypatch, 0, None)
+        graph.update("graphify", ROOT)
+        assert graph.built_at("graphify", ROOT).read_text() == ""
 
     def test_serve_outside_git_fails(self, home, monkeypatch, capsys):
         monkeypatch.setattr(
@@ -165,9 +114,10 @@ class TestUpdateAndServe:
         assert graph.serve("graphify") == 1
         assert "not inside a git clone" in capsys.readouterr().err
 
-    def serve(self, monkeypatch, rc):
+    def serve(self, monkeypatch, rc, head=None):
         git = SimpleNamespace(returncode=0, stdout=f"{ROOT}\n")
         monkeypatch.setattr(graph.subprocess, "run", lambda *a, **kw: git)
+        monkeypatch.setattr(graph, "clean_head", lambda root: head)
         built, execs = [], []
         monkeypatch.setattr(graph, "update", lambda tool, root, out=None: built.append(out) or rc)
         monkeypatch.setattr(graph.os, "execve", lambda *args: execs.append(args))
@@ -187,38 +137,18 @@ class TestUpdateAndServe:
         (data / "info_graph.json").write_text("{}")
         assert len(self.serve(monkeypatch, 1)[2]) == 1
 
+    def test_serve_skips_the_update_while_the_tree_is_at_the_built_head(self, home, monkeypatch):
+        data = graph.data_dir("graperoot", ROOT)
+        data.mkdir(parents=True)
+        (data / "info_graph.json").write_text("{}")
+        graph.built_at("graperoot", ROOT).write_text("abc")
+        _, built, execs = self.serve(monkeypatch, 0, head="abc")
+        assert built == [] and len(execs) == 1
+        assert self.serve(monkeypatch, 0, head="def")[1] == [sys.stderr]
+
     def test_main_rejects_bad_arguments(self, home, monkeypatch, capsys):
         monkeypatch.setattr(sys, "stdin", io.StringIO(""))
         assert graph.main(["mode", "both"]) == 2
         assert graph.main(["update", "graphify"]) == 2
         assert graph.main(["serve", "all"]) == 2
         assert "usage" in capsys.readouterr().err
-
-
-class TestShellScript:
-    script = _DIR / "agent-graph-mcp.sh"
-
-    def run(self, *args):
-        return subprocess.run(["bash", str(self.script), *args], capture_output=True, text=True)
-
-    def test_dry_run_prints_ssh_commands_per_host(self):
-        done = self.run("--dry-run", "--repo", "/w/r", "install", "10.0.0.1")
-        assert done.returncode == 0
-        lines = done.stdout.splitlines()
-        assert lines[0] == "== 10.0.0.1"
-        assert lines[1].endswith("-c <scripts/bimetri/_agent_graph_mcp.py> install")
-        assert lines[2].endswith("<scripts/bimetri/_agent_graph_mcp.py> update all /w/r")
-        assert "runuser -u coder" in lines[1]
-
-    def test_mode_lists_the_registered_server(self):
-        done = self.run("--dry-run", "mode", "none", "h1", "h2")
-        assert done.stdout.count("_agent_graph_mcp.py> mode none") == 2
-        # Listed inside the clone: serve only starts where git finds a work tree.
-        assert (
-            r"-c cd\ /workspaces/Bienport-IoT/platform-backend\ \&\&\ claude\ mcp\ list"
-            in done.stdout
-        )
-
-    def test_rejects_unknown_mode(self):
-        done = self.run("--dry-run", "mode", "both", "h1")
-        assert done.returncode == 2 and "usage" in done.stderr

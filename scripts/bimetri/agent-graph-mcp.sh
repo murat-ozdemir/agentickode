@@ -10,16 +10,20 @@
 # install: pinned venvs under ~/.local/share/bimetri-graph of the worker user, then a first build
 #          of both graphs for --repo with timings. Mode stays as it was (none on a new worker).
 # mode none|graphify|graperoot: registers (or removes) the stdio MCP server bimetri-graph for
-#          Claude (~/.claude.json) and Codex (~/.codex/config.toml), with a 120 s startup timeout,
-#          and turns claude.ai connectors off for Claude on the worker. Then runs `claude mcp list`
-#          inside --repo, where serve can find the clone; that also runs serve's graph update.
+#          Claude (~/.claude.json, tools loaded up front, startup waits up to 15 s) and Codex
+#          (~/.codex/config.toml, 120 s startup timeout), adds (or removes) a hint to use it in
+#          ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, and turns claude.ai connectors off for
+#          Claude on the worker (_agent_graph_config.py). Then runs `claude mcp list` inside
+#          --repo, where serve can find the clone; that also brings the graph up to date.
 # update:  incremental update of both graphs for --repo, with timings.
 # stats RUN_ID: tool calls (graph calls apart), tokens with the cache split and duration of that
 #          run's Claude transcript, which only the worker user can read (_agent_run_stats.py).
 #          Ask every worker; those that did not run it say so.
 # Options: --user <worker user> (default coder), --key <SSH key> (default .ssh/id_ed25519),
 #          --repo <clone on the worker> (default /workspaces/Bienport-IoT/platform-backend),
-#          --dry-run (print the SSH commands, run nothing). Safe to run again.
+#          --dry-run (print the SSH commands, run nothing),
+#          --direct (HOST is an SSH destination that logs in as the worker user, e.g. an
+#          ~/.ssh/config alias; no root, --user and --key unused). Safe to run again.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -27,6 +31,7 @@ worker_user=coder
 key=.ssh/id_ed25519
 repo=/workspaces/Bienport-IoT/platform-backend
 dry_run=0
+direct=0
 action=""
 arg=""
 hosts=()
@@ -36,6 +41,7 @@ while [ $# -gt 0 ]; do
     --key) key=$2; shift 2 ;;
     --repo) repo=$2; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
+    --direct) direct=1; shift ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *)
       if [ -z "$action" ]; then action=$1
@@ -44,7 +50,7 @@ while [ $# -gt 0 ]; do
       shift ;;
   esac
 done
-usage="usage: $0 [--user U] [--key FILE] [--repo PATH] [--dry-run] install|update|mode MODE|stats RUN_ID HOST..."
+usage="usage: $0 [--user U] [--key FILE] [--repo PATH] [--dry-run] [--direct] install|update|mode MODE|stats RUN_ID HOST..."
 case "$action" in
   install | update) ;;
   mode) case "$arg" in none | graphify | graperoot) ;; *) echo "$usage" >&2; exit 2 ;; esac ;;
@@ -53,36 +59,51 @@ case "$action" in
 esac
 [ ${#hosts[@]} -gt 0 ] || { echo "$usage" >&2; exit 2; }
 
+# One program from two files: the config module, then the main one without its import of it.
 program_file=scripts/bimetri/_agent_graph_mcp.py
-if [ "$action" = stats ]; then program_file=scripts/bimetri/_agent_run_stats.py; fi
-program=$(cat "$program_file")
+if [ "$action" = stats ]; then
+  program_file=scripts/bimetri/_agent_run_stats.py
+  program=$(cat "$program_file")
+else
+  program=$(cat scripts/bimetri/_agent_graph_config.py; grep -v '# bundle: drop$' "$program_file")
+fi
 # install reads its own source plus the frozen locks from stdin (see _agent_graph_mcp.py).
 bundle() {
-  cat "$program_file"
+  printf '%s\n' "$program"
   for tool in graphify graperoot; do
     echo "### lock: $tool"
     cat "scripts/bimetri/agent-graph-locks/$tool.txt"
   done
 }
 as_worker="runuser -u $worker_user -- python3 -c $(printf %q "$program")"
+mcp_list="cd $(printf %q "$repo") && claude mcp list"
+mcp_list="runuser -l $worker_user -c $(printf %q "$mcp_list")"
+target=(-i "$key")
+if [ $direct = 1 ]; then
+  as_worker="python3 -c $(printf %q "$program")"
+  mcp_list="bash -lc $(printf %q "cd $(printf %q "$repo") && claude mcp list")"
+  target=()
+fi
 case "$action" in
   install) commands=("$as_worker install" "$as_worker update all $(printf %q "$repo")") ;;
   update) commands=("$as_worker update all $(printf %q "$repo")") ;;
   mode) commands=("$as_worker mode $arg"
-                  "runuser -l $worker_user -c $(printf %q "cd $(printf %q "$repo") && claude mcp list") 2>&1 | grep -E '^(bimetri-graph|claude\.ai)' || true") ;;
+                  "$mcp_list 2>&1 | grep -E '^(bimetri-graph|claude\.ai)' || true") ;;
   stats) commands=("$as_worker stats $arg") ;;
 esac
 
 for host in "${hosts[@]}"; do
   echo "== $host"
+  destination=$host
+  if [ $direct = 0 ]; then destination=root@$host; fi
   for i in "${!commands[@]}"; do
     if [ $dry_run = 1 ]; then
       # The program text is long; show its file name instead.
-      echo "ssh -i $key root@$host ${commands[$i]//"$(printf %q "$program")"/<$program_file>}"
+      echo "ssh ${target[*]:+${target[*]} }$destination ${commands[$i]//"$(printf %q "$program")"/<$program_file>}"
     elif [ "$action" = install ] && [ "$i" = 0 ]; then
-      bundle | ssh -i "$key" "root@$host" "${commands[$i]}"
+      bundle | ssh "${target[@]}" "$destination" "${commands[$i]}"
     else
-      ssh -i "$key" "root@$host" "${commands[$i]}" < /dev/null
+      ssh "${target[@]}" "$destination" "${commands[$i]}" < /dev/null
     fi
   done
 done

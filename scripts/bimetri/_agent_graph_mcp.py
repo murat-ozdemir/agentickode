@@ -1,26 +1,24 @@
 """bimetri patch (D2 phase 1): local code graph for the agent CLIs on a worker.
 
-Runs as the worker user (agent-graph-mcp.sh sends it over SSH):
+Runs as the worker user (agent-graph-mcp.sh sends it over SSH, after _agent_graph_config.py):
     install            stdin: own source, then the frozen locks (agent-graph-locks/<tool>.txt)
     update TOOL ROOT   TOOL: graphify | graperoot | all
-    mode MODE          MODE: none | graphify | graperoot (also writes ~/.claude/settings.json)
-    serve TOOL         update, then stdio MCP server; Claude/Codex start it in the run workspace
+    mode MODE          MODE: none | graphify | graperoot (agent CLI settings, see the config file)
+    serve TOOL         update if needed, then stdio MCP server; the agent CLIs start it in the run
+                       workspace
 One venv per tool under ~/.local/share/bimetri-graph. Graph data goes to data/<tool>/<root slug>,
 outside the clone, so `git status` and `clean -fd` never see it. Stdlib only, no network.
 """
 
 import fcntl
-import json
 import os
-import pwd
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-NAME = "bimetri-graph"
-TOOLS = ("graphify", "graperoot")
+from _agent_graph_config import NAME, TOOLS, base_dir, home, set_mode  # bundle: drop
+
 LOCK_MARK = "### lock: "  # install stdin: source, then "### lock: <tool>" + lock lines
 # Same code path as graperoot's own graph_scan tool: incremental, writes the symbol index too.
 GRAPEROOT_SCAN = """
@@ -34,17 +32,6 @@ async def main():
     sys.exit(0 if out.get("ok") else 1)
 asyncio.run(main())
 """
-# serve updates the graph before it answers: 51.7 s on platform-backend after a 3-file checkout.
-STARTUP_TIMEOUT_SEC = 120
-_CODEX_TABLE = re.compile(r"^\[mcp_servers\.(?:\"bimetri-graph\"|bimetri-graph)[.\]]")
-
-
-def home() -> Path:
-    return Path(pwd.getpwuid(os.getuid()).pw_dir)
-
-
-def base_dir() -> Path:
-    return home() / ".local" / "share" / NAME
 
 
 def data_dir(tool: str, root: Path) -> Path:
@@ -74,17 +61,34 @@ def server_command(tool: str, root: Path) -> list:
     return [python, "-m", "graperoot.mcp_graph_server", "--stdio"]
 
 
+def clean_head(root: Path) -> "str | None":
+    """HEAD of a clean work tree; None when anything is changed or untracked."""
+    git = ["git", "-C", str(root)]
+    status = subprocess.run([*git, "status", "--porcelain"], capture_output=True, text=True)
+    if status.returncode != 0 or status.stdout.strip():
+        return None
+    head = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True)
+    return head.stdout.strip() or None
+
+
+def built_at(tool: str, root: Path) -> Path:
+    data = data_dir(tool, root)
+    return data.parent / (data.name + ".head")
+
+
 def update(tool: str, root: Path, out=None) -> int:
     data = data_dir(tool, root)
     data.mkdir(parents=True, exist_ok=True)
     with open(data.parent / (data.name + ".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        started = time.monotonic()
+        started, head = time.monotonic(), clean_head(root)
         # stdout=2: tool output goes to stderr, stdout carries only the summary line.
         done = subprocess.run(
             update_command(tool, root), env=tool_env(tool, root), cwd=root, stdout=2
         )
         elapsed = time.monotonic() - started
+        # serve skips the update while the clean tree is still at this commit.
+        built_at(tool, root).write_text(head if done.returncode == 0 and head else "")
     print(f"{tool}: update rc={done.returncode} in {elapsed:.1f}s", file=out or sys.stdout)
     return done.returncode
 
@@ -122,64 +126,6 @@ def install(bundle: str) -> int:
     return 0
 
 
-def _write_private(path: Path, text: str) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
-    os.chmod(str(tmp), 0o600)
-    os.replace(str(tmp), str(path))
-
-
-def update_codex(path: Path, entry: "list | None") -> None:
-    kept, skipping = [], False
-    for line in path.read_text().splitlines() if path.exists() else []:
-        if line.startswith("["):
-            skipping = bool(_CODEX_TABLE.match(line))
-        if not skipping:
-            kept.append(line)
-    if entry:
-        kept += ["", f"[mcp_servers.{NAME}]", f"command = {json.dumps(entry[0])}"]
-        kept += [f"args = {json.dumps(entry[1:])}", f"startup_timeout_sec = {STARTUP_TIMEOUT_SEC}"]
-    text = "\n".join(kept).strip()
-    _write_private(path, text + "\n" if text else "")
-
-
-def update_claude(path: Path, entry: "list | None") -> None:
-    data = json.loads(path.read_text()) if path.exists() else {}
-    servers = data.setdefault("mcpServers", {})
-    servers.pop(NAME, None)
-    if entry:
-        servers[NAME] = {"type": "stdio", "command": entry[0], "args": entry[1:], "env": {}}
-    _write_private(path, json.dumps(data, indent=2) + "\n")
-
-
-def update_claude_settings(path: Path, mode: str) -> None:
-    data = json.loads(path.read_text()) if path.exists() else {}
-    env = data["env"] = {k: v for k, v in data.get("env", {}).items() if k != "MCP_TIMEOUT"}
-    if mode in TOOLS:
-        env["MCP_TIMEOUT"] = str(STARTUP_TIMEOUT_SEC * 1000)  # Claude's default is 30 s
-    # Workers log in with the operator's claude.ai subscription; keep its connectors (mail, drive,
-    # calendar) away from the agents. Applies to this machine only.
-    data["disableClaudeAiConnectors"] = True
-    path.parent.mkdir(exist_ok=True)
-    _write_private(path, json.dumps(data, indent=2) + "\n")
-
-
-def set_mode(mode: str) -> int:
-    entry = [sys.executable, str(base_dir() / "agent_graph.py"), "serve", mode]
-    entry = entry if mode in TOOLS else None
-    if (home() / ".codex").is_dir():
-        update_codex(home() / ".codex" / "config.toml", entry)
-        print(f"codex:  {mode}")
-    else:
-        print("codex:  skipped (~/.codex missing, log in first)")
-    update_claude(home() / ".claude.json", entry)
-    update_claude_settings(home() / ".claude" / "settings.json", mode)
-    print(f"claude: {mode}, claude.ai connectors off")
-    return 0
-
-
 def serve(tool: str) -> int:
     found = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     if found.returncode != 0:
@@ -187,9 +133,13 @@ def serve(tool: str) -> int:
         return 1
     root = Path(found.stdout.strip())
     graph = data_dir(tool, root) / ("graph.json" if tool == "graphify" else "info_graph.json")
-    # Incremental update first: the run's reset may have changed files since the last build.
+    # The agent CLI waits only a few seconds for the server (alwaysLoad), and even a no-op
+    # Graphify update takes ~4 s. So update only when the tree moved since the last build.
     # stdout is the MCP channel from here on, so the update reports on stderr.
-    if update(tool, root, out=sys.stderr) != 0 and not graph.exists():
+    head, stamp = clean_head(root), built_at(tool, root)
+    if graph.exists() and head and stamp.exists() and stamp.read_text() == head:
+        print(f"{tool}: graph is at {head[:8]}, no update", file=sys.stderr)
+    elif update(tool, root, out=sys.stderr) != 0 and not graph.exists():
         return 1
     command = server_command(tool, root)
     os.execve(command[0], command, tool_env(tool, root))
