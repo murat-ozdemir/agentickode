@@ -96,6 +96,13 @@ class TestSync:
         state = await AppSettingRepository(db_session).get(usage.SYNC_KEY)
         assert state == {"at": "earlier", "error": error}
 
+    async def test_a_missing_scope_error_is_shown_whole(self, db_session, http):
+        detail = "You have insufficient permissions. Missing scopes: api.usage.read. " + "x" * 200
+        http.get.return_value = httpx.Response(
+            403, json={"error": detail}, request=httpx.Request("GET", usage.COSTS_URL)
+        )
+        assert await usage.sync(db_session, NOW) == f"OpenAI 403: {detail}"
+
 
 class TestSummary:
     async def test_month_spend_credits_and_remaining(self, db_session):

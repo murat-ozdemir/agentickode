@@ -42,7 +42,9 @@ def _day_start(day: date) -> int:
 def _describe(exc: Exception) -> str:
     if isinstance(exc, httpx.HTTPStatusError):
         try:
-            message = exc.response.json()["error"]["message"]
+            error = exc.response.json()["error"]
+            # The Costs API sends a plain string for a missing scope, an object otherwise.
+            message = error if isinstance(error, str) else error["message"]
         except (ValueError, KeyError, TypeError):
             message = exc.response.text[:200]
         return f"OpenAI {exc.response.status_code}: {message}"
