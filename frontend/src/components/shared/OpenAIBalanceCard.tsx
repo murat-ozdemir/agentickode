@@ -11,6 +11,14 @@ import OpenAICreditsModal from "./OpenAICreditsModal";
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" });
 
+/** Time only for today, day/month and time otherwise: the card is narrow. */
+const short = (iso: string) => {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })} ${time}`;
+};
+
 const iconButton = "p-1 text-gray-500 hover:text-white rounded disabled:opacity-40";
 
 export default function OpenAIBalanceCard({ usage }: { usage: OpenAIUsage }) {
@@ -27,7 +35,7 @@ export default function OpenAIBalanceCard({ usage }: { usage: OpenAIUsage }) {
   let note = "";
   if (data && !data.enabled) note = "OPENAI_ADMIN_KEY not set";
   else if (data && remaining == null) note = "Add the billing balance";
-  else if (data?.last_sync_at) note = `Updated ${when(data.last_sync_at)}`;
+  else if (data?.last_sync_at) note = `Updated ${short(data.last_sync_at)}`;
 
   return (
     <div

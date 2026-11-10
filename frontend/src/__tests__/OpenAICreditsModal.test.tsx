@@ -37,6 +37,16 @@ describe("OpenAICreditsModal", () => {
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
   });
 
+  it("lists the latest 5 entries and expands to all", async () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({ ...credit, id: i + 1 }));
+    vi.mocked(getOpenAICredits).mockResolvedValue(many);
+    setup();
+    await screen.findByTestId("credit-1");
+    expect(screen.queryByTestId("credit-6")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("credit-show-all"));
+    expect(screen.getByTestId("credit-7")).toBeInTheDocument();
+  });
+
   it("adds a credit and tells the card", async () => {
     const onChanged = setup();
     fireEvent.change(screen.getByTestId("credit-amount"), { target: { value: "10.5" } });

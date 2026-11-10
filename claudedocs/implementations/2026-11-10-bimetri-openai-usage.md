@@ -12,9 +12,10 @@ related: [plans/2026-11-10-bimetri-openai-usage.md, runbooks/bimetri-mem0-pgvect
 Two Dashboard widgets for the OpenAI API spend of mem0 and the memory proposals, placed in the
 analytics rows: an **OpenAI Balance** metric card next to "Est. Total Cost" (credits entered by
 hand minus Costs API spend, last update; sync error and alert reason in the tooltip, refresh and
-"Add credit" icon buttons) and an **OpenAI Spend ($)** chart next to "Cost by Agent ($)" (this
-month per UTC day, month total in the title). "Add credit" opens a popup (amount + date, default
-today) with the list of entries to edit or delete. The UI text is English. When OpenAI refuses a call for
+"Add credit" icon buttons) and an **OpenAI Spend ($)** area chart next to "Cost by Agent ($)"
+(this month per UTC day, month total in the title; an area so 31 days fit the narrow card).
+"Add credit" opens a popup (amount + date, default today) with the latest 5 entries to edit or
+delete and a "Show all (N)" toggle. Page width is `max-w-[1600px]` for the five-column rows. The UI text is English. When OpenAI refuses a call for
 lack of credit the card turns red and the enabled notification channels get one message.
 
 ## Key Files

@@ -21,6 +21,8 @@ interface Props {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const SHOWN = 5;
+
 const field =
   "px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40";
 
@@ -31,6 +33,7 @@ export default function OpenAICreditsModal({ onClose, onChanged }: Props) {
   const [editing, setEditing] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -120,7 +123,7 @@ export default function OpenAICreditsModal({ onClose, onChanged }: Props) {
 
         <ul className="divide-y divide-gray-800 max-h-64 overflow-y-auto" data-testid="credit-list">
           {credits.length === 0 && <li className="py-2 text-sm text-gray-500">No entries yet.</li>}
-          {credits.map((c) => (
+          {(showAll ? credits : credits.slice(0, SHOWN)).map((c) => (
             <li key={c.id} className="py-2 flex items-center justify-between text-sm" data-testid={`credit-${c.id}`}>
               <span className="text-gray-400">{c.credited_on}</span>
               <span className="text-white font-medium">${c.amount_usd.toFixed(2)}</span>
@@ -141,6 +144,15 @@ export default function OpenAICreditsModal({ onClose, onChanged }: Props) {
             </li>
           ))}
         </ul>
+        {credits.length > SHOWN && (
+          <button
+            onClick={() => setShowAll(!showAll)}
+            className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+            data-testid="credit-show-all"
+          >
+            {showAll ? "Show latest 5" : `Show all (${credits.length})`}
+          </button>
+        )}
       </div>
     </div>,
     document.body,

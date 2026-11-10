@@ -37,7 +37,7 @@ export default function Nav() {
 
   return (
     <nav className="bg-gray-900 border-b border-gray-800">
-      <div className="max-w-7xl mx-auto px-4 flex items-center h-14 gap-8">
+      <div className="max-w-[1600px] mx-auto px-4 flex items-center h-14 gap-8">
         <span className="text-lg font-bold tracking-tight text-white inline-flex items-center gap-2">
           <Cpu className="w-5 h-5 text-blue-400" />
           AgenticKode
