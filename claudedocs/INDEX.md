@@ -16,6 +16,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [Terminal + Chat Agent Launch as Selected User](plans/2026-06-08-launch-as-user.md) | implemented | 2026-06-08 | Terminal PTY + chat agent + tmux sessions + LaunchAgentModal all run as `worker_user` via `runuser` (no-op when unset); migration 042 |
 | [Host machine as default platform workspace](plans/2026-06-08-host-default-workspace.md) | partial | 2026-06-08 | `gh` check + run-as-user seeding + SSH-to-host switch (all OFF by default via `PLATFORM_*`); host-side sshd setup is operator's step |
 | [bimetri: project-memory MCP for agents](plans/2026-11-09-bimetri-memory-mcp.md) | implemented | 2026-11-09 | Run-start memory search split (knowledge vs history), `memory-mcp` service with search/list/propose tools, agent proposals on the Memory page (yama 75) |
+| [bimetri: local code graph for agents (D2)](plans/2026-11-10-bimetri-graph-memory.md) | in-progress | 2026-11-10 | Incremental code graph for the workers' shared clones over stdio MCP (graperoot or Graphify), refreshed at run start and on merge. Phase 1: `agent-graph-mcp.sh` installs both, measurement pending |
 | *Plans are in `docs/plans/` — migrate here as they are updated* | | | |
 
 ## Implementations
