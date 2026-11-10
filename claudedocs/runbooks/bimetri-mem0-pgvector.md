@@ -210,4 +210,5 @@ Restore a backup into a running DB: `docker exec -i <postgres> pg_restore -U age
 | `agent-memory-mcp.sh`: `.../health does not answer` | `memory-mcp` not running or `MEM0_BIND` not set: `up -d memory-mcp`, `docker logs agentickode-memory-mcp-1` |
 | `claude mcp list` shows `bimetri-memory ... ✗ Failed to connect` | Worker cannot reach `<MEM0_BIND>:8892` (firewall) or the token in `.env` changed; rerun `agent-memory-mcp.sh` after a token change |
 | Run prompt has no "Hafıza araçları" lines | `BIMETRI_MEMORY_MCP_TOKEN` missing in `.env` or backend not recreated with `up -d backend` |
+| Backend port open but every request times out | Pre-fix symptom: with `--reload` a crashed worker left the reloader holding the port. `docker-compose.bimetri.yml` now sets `UVICORN_RELOAD: ""` so a crash exits the container and Docker restarts it; `PYTHONFAULTHANDLER` prints the stack. Native crashes show in the host's `kern.log` as `segfault ... libpython3.12` |
 | Agent proposal refused: `run N does not belong to org/repo` | The agent passed another project's name or a wrong `run_id`; the values are in the prompt's memory section |

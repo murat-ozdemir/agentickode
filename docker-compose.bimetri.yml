@@ -17,6 +17,11 @@ services:
     environment:
       # Kosu basinda proje hafizasi; MEM0_API_KEY .env'de (bossa ozellik kapali).
       MEM0_URL: ${MEM0_URL:-http://mem0:8000}
+      # No --reload: with the reloader a crashed worker leaves its parent holding the port, so
+      # the API hangs and the restart policy never fires. Code changes need a container restart.
+      UVICORN_RELOAD: ""
+      # On a native crash (segfault), dump the Python stack of every thread to the log.
+      PYTHONFAULTHANDLER: "1"
 
   postgres:
     image: pgvector/pgvector:pg16
