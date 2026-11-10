@@ -200,10 +200,14 @@ gate; the findings below are the next work.**
 
 Next (from #95):
 
-- [ ] `graph_read`/`graph_callers`: return the call lines with a few lines of context, not the
-  whole enclosing method.
-- [ ] Grep cap: soften it (warn, or allow searches that complete a caller list) so the agent does
-  not give up on completeness.
+- [x] `graph_read`/`graph_callers`: return the call lines with a few lines of context, not the
+  whole enclosing method. `3d2be2f`: use sites are recommended as `path:LINE` with their
+  statement in `why`; `graph_read path:LINE` gives ±10 lines; `graph_callers` lists each use with
+  its statement and takes `Class::method`. On agent-1, `graph_callers ResourceStatusService::update`
+  lists all 8 uses in 2009 chars (run #95 read ~56k chars of whole methods for them).
+- [x] Grep cap: soften it (warn, or allow searches that complete a caller list) so the agent does
+  not give up on completeness. `3d2be2f`: the first search past the budget is denied with a
+  pointer to `graph_callers`; after that searches pass (`fallback_rg` adds a note).
 - [ ] Deploy the merge refresh to dev-1 and watch it on a real merge.
 
 ### Merge refresh (built 10 Nov, approved before the trial)

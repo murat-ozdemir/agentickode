@@ -15,6 +15,9 @@ Persistent record of what was built, when, and by whom.
   under a per-clone flock; `workspace_setup` waits on that lock
 - Trial run #95: correct (5/5, CI green) but $0.357 vs $0.129 graphless; a measurement, not a
   decision: the graph stays (user decision), workers in `mode graphify` with the gate
+- `scripts/bimetri/_graph_read.py` (new), `_graph_flow.py` — from #95: use sites as `path:LINE`
+  with their statement, `graph_read path:LINE` window, `graph_callers` by `Class::method`;
+  gate denies only the first search past the budget (`3d2be2f`, 1258 unit tests)
 
 ## 2026-06-05 — Remove the roles abstraction (v0.5.2+)
 
