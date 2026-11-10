@@ -1,6 +1,6 @@
 ---
 title: bimetri — local code graph for agents on workers (D2)
-status: abandoned
+status: in-progress
 date: 2026-11-10
 related: [plans/2026-11-09-bimetri-memory-mcp.md, runbooks/bimetri-mem0-pgvector.md]
 ---
@@ -173,9 +173,12 @@ Two runs of the Phase 1b task (rename to `updateByNetworkId`), sonnet-5-5 medium
 | Searches | grep-type calls within the cap; denials are counted, not a failure on their own |
 | Cost | mean of the two ≤ $0.155 (graphless mean $0.129 + 20 % noise band) |
 
-Fail: workers go back to `mode none`, this plan closes `abandoned` with the numbers.
+These criteria measure this flow's cost; they do not decide whether agents get the graph. The
+user decided the graph stays (10 Nov, after this trial): they have used it for months and see the
+benefit. A failed criterion means the flow gets cheaper, not that the graph goes.
 
-Result (10 Nov): **fail on cost; plan abandoned, workers in `mode none`.**
+Result (10 Nov): **correct, but over the cost criterion. Workers stay in `mode graphify` with the
+gate; the findings below are the next work.**
 
 | Run | Worker | Time | Cost | Cache write / read | Output | Calls |
 |---|---|---|---|---|---|---|
@@ -191,8 +194,17 @@ Result (10 Nov): **fail on cost; plan abandoned, workers in `mode none`.**
 - Run 2 was not started: with #95 at $0.357 the mean is at least $0.178 even if run 2 were
   free, so the cost criterion fails whatever it does.
 - Cleanup: PR #79 closed unmerged, branch deleted, #78 closed, clones back on `7a010367`.
-- Kept in the fork, unused while `mode none`: `agent-graph-mcp.sh` (install, modes, gate) and
-  the merge refresh below. The install stays on the workers (`~/.local/share/bimetri-graph`).
+- After the trial I wrongly switched the workers to `mode none` and marked this plan
+  `abandoned`; the user reversed that the same day and the workers are back in `mode graphify`
+  with the gate (`✔ Connected` on all three).
+
+Next (from #95):
+
+- [ ] `graph_read`/`graph_callers`: return the call lines with a few lines of context, not the
+  whole enclosing method.
+- [ ] Grep cap: soften it (warn, or allow searches that complete a caller list) so the agent does
+  not give up on completeness.
+- [ ] Deploy the merge refresh to dev-1 and watch it on a real merge.
 
 ### Merge refresh (built 10 Nov, approved before the trial)
 

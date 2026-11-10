@@ -14,3 +14,7 @@
 ## 2026-11-10 — Presented the user's own tool back to them as a finding
 **What went wrong:** Paused the approved graperoot removal because "iklim.co's Dual-Graph is graperoot". The user had recommended graperoot and already knew that.
 **Rule for next time:** Do not hold approved work for a link the user already knows. Mention only what is new (a measurement, a risk) and carry on.
+
+## 2026-11-10 — Cancelled a user-decided tool because of my own trial
+**What went wrong:** After one costly trial run (#95) I switched the workers to `mode none` and marked the graph plan `abandoned`. The user had decided agents get the graph; they have used it for months and see the benefit.
+**Rule for next time:** A measurement never removes or disables a tool the user decided on. Report the numbers, keep the tool running, and turn the finding into improvement work (here: smaller `graph_read` output, softer grep cap).
