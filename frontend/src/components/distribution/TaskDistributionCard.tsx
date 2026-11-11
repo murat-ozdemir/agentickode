@@ -94,7 +94,7 @@ export default function TaskDistributionCard({ onSelect }: Props) {
           <div className="flex flex-[1_1_440px] min-w-0">
             <DistributionHistory data={data} dim={dim} />
           </div>
-          <div className="flex-[2_1_620px] min-w-0 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-x-5 gap-y-4 content-start">
+          <div className="flex-[2_1_620px] min-w-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-5 content-start">
             {GROUPS.map(([key, title, hint]) => (
               <DistributionGroup
                 key={key}
