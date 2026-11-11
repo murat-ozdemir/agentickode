@@ -14,6 +14,7 @@ import {
 import type { MemoryProposal, MemoryProposalKind, MemoryProposalStatus } from "../api";
 import ProposalCard from "../components/memory/ProposalCard";
 import { useToast } from "../components/shared/Toast";
+import { notifyMemoryProposalsChanged } from "../hooks/useMemoryPendingCount";
 
 const STATUSES: MemoryProposalStatus[] = ["pending", "approved", "rejected"];
 
@@ -55,6 +56,7 @@ export default function MemoryProposals() {
           : "Saved to project memory",
       );
       setItems((all) => all.filter((x) => x.id !== p.id));
+      notifyMemoryProposalsChanged();
     } catch (e) {
       toast.error(`Approve failed: ${(e as Error).message}`);
     }
@@ -64,6 +66,7 @@ export default function MemoryProposals() {
     try {
       await rejectMemoryProposal(p.id);
       setItems((all) => all.filter((x) => x.id !== p.id));
+      notifyMemoryProposalsChanged();
     } catch (e) {
       toast.error(`Reject failed: ${(e as Error).message}`);
     }

@@ -4,6 +4,14 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-11 — bimetri: pending count on the Memory menu (fork)
+
+**Tests**: 299 frontend passing; eslint, tsc clean
+
+- `frontend/src/hooks/useMemoryPendingCount.ts` — polls pending memory proposals every 30 s;
+  `notifyMemoryProposalsChanged()` recounts at once after an approve/reject
+- `frontend/src/components/memory/PendingBadge.tsx` — amber count on the Memory nav link (99+)
+
 ## 2026-11-11 — bimetri: Codex cost in dollars (fork)
 
 **Tests**: 1458 backend (unit + integration), 295 frontend passing; ruff, eslint, tsc clean

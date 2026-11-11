@@ -19,6 +19,8 @@ import {
   X,
 } from "lucide-react";
 import OfficeIcon from '../office/OfficeIcon';
+import PendingBadge from "../memory/PendingBadge"; // bimetri patch
+import useMemoryPendingCount from "../../hooks/useMemoryPendingCount"; // bimetri patch
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -34,6 +36,7 @@ const links = [
 export default function Nav() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  const memoryPending = useMemoryPendingCount(); // bimetri patch
 
   return (
     <nav className="bg-gray-900 border-b border-gray-800">
@@ -51,7 +54,7 @@ export default function Nav() {
               <Link
                 key={l.to}
                 to={l.to}
-                className={`px-3 py-1.5 rounded text-sm inline-flex items-center gap-1.5 ${
+                className={`relative px-3 py-1.5 rounded text-sm inline-flex items-center gap-1.5 ${
                   pathname === l.to
                     ? "bg-gray-800 text-white"
                     : "text-gray-400 hover:text-white hover:bg-gray-800/50"
@@ -59,6 +62,7 @@ export default function Nav() {
               >
                 <Icon className="w-4 h-4" />
                 {l.label}
+                {l.to === "/memory" && <PendingBadge count={memoryPending} />}
               </Link>
             );
           })}
@@ -111,6 +115,7 @@ export default function Nav() {
               >
                 <Icon className="w-4 h-4" />
                 {l.label}
+                {l.to === "/memory" && <PendingBadge count={memoryPending} inline />}
               </Link>
             );
           })}

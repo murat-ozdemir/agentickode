@@ -105,7 +105,8 @@ Run on the server, as root, from the repo root (`/opt/agentickode`).
    `pending` rows in `bimetri_memory_proposals` (migration `b045_memory_proposals`, applied on
    backend start). Nothing reaches mem0 until someone approves it on the **Memory** page
    (`/memory`); approval writes it with `infer=False` as `tur` = `ders` / `tuzak` / `karar`,
-   `kaynak=proposal`. Off while `MEM0_OPENAI_API_KEY` is empty; a PR without comments makes no
+   `kaynak=proposal`. The menu's **Memory** link shows an amber count while proposals wait
+   (polled every 30 s, recounted at once after an approve/reject). Off while `MEM0_OPENAI_API_KEY` is empty; a PR without comments makes no
    LLM call. Setup, as root (`.env` change, so `up -d`, then the frontend rebuild):
    ```bash
    scripts/bimetri/mem0-backend-key.sh
