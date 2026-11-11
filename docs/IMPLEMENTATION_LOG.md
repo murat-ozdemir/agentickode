@@ -4,6 +4,20 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-11 — bimetri: Codex token usage and ChatGPT plan credits (fork)
+
+**Tests**: 1289 backend unit, 287 frontend passing; ruff, eslint, tsc clean
+**Plan**: `claudedocs/plans/2026-11-11-bimetri-codex-credits.md`
+
+- `backend/services/adapters/_bimetri_codex.py` — `codex exec --json` JSONL: last agent message,
+  summed `turn.completed` usage (input / cached input / output), credits from per-model rates
+- `backend/seed/_bimetri_codex.py` — `--json` after `codex exec` in codex templates,
+  `CODEX_CREDIT_RATES` env var on the codex agent (edits kept)
+- `backend/worker/flow/executor.py` — credits and token breakdown into the invocation `metadata_`;
+  no dollar cost for Codex
+- `frontend/src/components/runs/CodexUsageNote.tsx`, `utils/codexUsage.ts` — credits beside the
+  dollar cost in the activity panel, call drawer and cost summary
+
 ## 2026-11-10 — bimetri: runs table paging and multi-word search (fork)
 
 **Tests**: 1277 backend unit, 281 frontend passing; ruff, eslint, tsc clean

@@ -7,6 +7,8 @@ import { ChevronDown, ChevronRight, Bot, Link, Eye, X } from "lucide-react";
 import { getRunInvocations } from "../../api";
 import type { AgentInvocation } from "../../types";
 import InvocationDetailDrawer from "./InvocationDetailDrawer";
+import CodexUsageNote from "./CodexUsageNote";
+import { codexUsage, formatCredits, totalCodexCredits } from "../../utils/codexUsage";
 
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "-";
@@ -57,6 +59,7 @@ function InvocationRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const sessionId = inv.session_id ?? (inv.metadata_?.session_id as string | undefined);
+  const codexCredits = codexUsage(inv.metadata_)?.credits;
 
   return (
     <div className={`border rounded-lg overflow-hidden ${statusBg(inv.status)}`}>
@@ -96,7 +99,9 @@ function InvocationRow({
           <span className="text-xs text-amber-400 flex-shrink-0 w-16 text-right">
             {inv.estimated_cost_usd != null
               ? `$${inv.estimated_cost_usd.toFixed(4)}`
-              : ""}
+              : codexCredits != null
+                ? <span className="text-sky-400">{formatCredits(codexCredits)} cr</span>
+                : ""}
           </span>
 
           {/* Duration */}
@@ -162,6 +167,7 @@ function InvocationRow({
             {inv.estimated_cost_usd != null && (
               <span className="text-amber-400">Cost: ${inv.estimated_cost_usd.toFixed(4)}</span>
             )}
+            <CodexUsageNote metadata={inv.metadata_} />
             {inv.duration_seconds !== null && (
               <span>Duration: {formatDuration(inv.duration_seconds)}</span>
             )}
@@ -263,11 +269,17 @@ export default function AgentActivityPanel({ runId }: Props) {
             (sum, inv) => sum + (inv.estimated_cost_usd ?? 0),
             0,
           );
-          return totalCost > 0 ? (
-            <span className="text-xs text-amber-400 mr-2">
-              ${totalCost.toFixed(4)}
-            </span>
-          ) : null;
+          const credits = totalCodexCredits(invocations);
+          return (
+            <>
+              {totalCost > 0 && (
+                <span className="text-xs text-amber-400 mr-2">${totalCost.toFixed(4)}</span>
+              )}
+              {credits != null && (
+                <span className="text-xs text-sky-400 mr-2">{formatCredits(credits)} credits</span>
+              )}
+            </>
+          );
         })()}
         <span className="text-xs text-gray-500 mr-2">{invocations.length} invocation(s)</span>
         {collapsed ? (

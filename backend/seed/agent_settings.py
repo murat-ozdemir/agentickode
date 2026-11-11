@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.models import AgentSettings
+from backend.seed._bimetri_codex import upgrade_codex
 from backend.seed._helpers import commands_for
 
 logger = logging.getLogger("agentickode.seed")
@@ -359,6 +360,9 @@ async def seed_agent_settings(db: AsyncSession) -> None:
                         changed = True
                 if changed:
                     flag_modified(existing, "command_templates")
+            # bimetri patch: codex --json + credit rates env var
+            if upgrade_codex(existing):
+                changed = True
             if changed:
                 backfilled += 1
     await db.commit()

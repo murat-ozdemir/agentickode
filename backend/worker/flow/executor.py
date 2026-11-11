@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import TaskRun
 from backend.repositories.flow_prompt_repo import FlowPromptRepository
+from backend.services.adapters._bimetri_codex import add_credits
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
@@ -40,6 +41,14 @@ from backend.worker.phases._helpers import (
 from backend.worker.steps.agent_step import run_agent_step
 
 logger = logging.getLogger("agentickode.flow.executor")
+
+
+_USAGE_EXTRAS = (
+    "cached_input_tokens",
+    "reasoning_output_tokens",
+    "codex_credits",
+    "billing",
+)
 
 
 # bimetri yamasi: ajan cagrisini agent_invocations'a ekle (dashboard); commit'i kosu yapar, hata kosuyu bozmaz
@@ -73,7 +82,12 @@ def _bimetri_cagri_kaydi(run, session, agent, phase, t0, result, exc) -> None:
                 started_at=t0,
                 completed_at=t1,
                 session_id=result.get("session_id"),
-                metadata_={"model": result.get("model"), "bimetri": True},
+                metadata_={
+                    "model": result.get("model"),
+                    "bimetri": True,
+                    # bimetri patch: Codex token breakdown and ChatGPT credits
+                    **{k: usage[k] for k in _USAGE_EXTRAS if usage.get(k) is not None},
+                },
             )
         )
     except Exception:
@@ -113,15 +127,22 @@ async def _bimetri_durum(run: TaskRun, session: AsyncSession, label: str | None)
             "gitea", get_http_client(), access_token=await get_project_token(run, session)
         )
     except Exception as exc:
-        await broadcaster.log(run.id, f"Durum etiketi ayarlanamadi: {exc}", level="warning", phase="agent")
+        await broadcaster.log(
+            run.id, f"Durum etiketi ayarlanamadi: {exc}", level="warning", phase="agent"
+        )
         return
     for kind, n in targets:
         try:
             await provider.set_status_label(f"{run.repo_owner}/{run.repo_name}", n, label)
-            await broadcaster.log(run.id, f"{kind} #{n} durumu: {label or 'temizlendi'}", phase="agent")
+            await broadcaster.log(
+                run.id, f"{kind} #{n} durumu: {label or 'temizlendi'}", phase="agent"
+            )
         except Exception as exc:
             await broadcaster.log(
-                run.id, f"{kind} #{n} durum etiketi ayarlanamadi: {exc}", level="warning", phase="agent"
+                run.id,
+                f"{kind} #{n} durum etiketi ayarlanamadi: {exc}",
+                level="warning",
+                phase="agent",
             )
 
 
@@ -270,14 +291,18 @@ async def execute_flow_prompt(
                         _canli += [la.get("name", "") for la in _r.json()]
             except Exception as exc:
                 await broadcaster.log(
-                    run.id, f"Guncel etiketler okunamadi, webhook'takiler kullaniliyor: {exc}",
-                    level="warning", phase="agent",
+                    run.id,
+                    f"Guncel etiketler okunamadi, webhook'takiler kullaniliyor: {exc}",
+                    level="warning",
+                    phase="agent",
                 )
         labels = [
             str(lbl).strip().lower().replace("ı", "i")
             for lbl in _canli + list(_m.get("labels") or [])
         ]
-        agent_name = next((lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("agent/")), None)
+        agent_name = next(
+            (lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("agent/")), None
+        )
         # bimetri yamasi: test kosusunda ajan test-agent/ etiketinden, yoksa kodu yazanin tersi
         if _m.get("review_mode") == "test":
             _yazan = agent_name or _m.get("agent_override") or flow.agent
@@ -287,7 +312,10 @@ async def execute_flow_prompt(
             )
         if agent_name and agent_name not in AGENT_COMMANDS:
             await broadcaster.log(
-                run.id, f"Bilinmeyen ajan etiketi: agent/{agent_name}", level="warning", phase="agent"
+                run.id,
+                f"Bilinmeyen ajan etiketi: agent/{agent_name}",
+                level="warning",
+                phase="agent",
             )
             agent_name = None
         agent_name = agent_name or (run.task_source_meta or {}).get("agent_override") or flow.agent
@@ -345,6 +373,7 @@ async def execute_flow_prompt(
         except Exception as _exc:
             _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, None, _exc)
             raise
+        add_credits(result.get("usage"), model, env)
         _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, {**result, "model": model}, None)
         # bimetri yamasi: CLI hata koduyla bittiyse (limit, kimlik, cokme) kosu basarisiz
         _rd = result.get("response")
@@ -404,9 +433,7 @@ async def execute_flow_prompt(
         run.error_message = str(e)
         run.completed_at = datetime.now(UTC)
         await session.commit()
-        await broadcaster.event(
-            run.id, "run_failed", {**_olay_yuku(run), "error": str(e)}
-        )
+        await broadcaster.event(run.id, "run_failed", {**_olay_yuku(run), "error": str(e)})
         with contextlib.suppress(Exception):
             await close_run_session(run, session)
         # bimetri yamasi: basarisiz kosu (inceleme dahil): issue (ve varsa PR) status/on-hold

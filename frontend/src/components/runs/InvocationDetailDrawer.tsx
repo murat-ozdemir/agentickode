@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { X, Bot, ChevronDown, ChevronRight, Copy, Check, Loader2 } from "lucide-react";
 import { getInvocationDetail } from "../../api";
 import type { AgentInvocationDetail } from "../../types";
+import CodexUsageNote from "./CodexUsageNote";
 
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "-";
@@ -192,6 +193,7 @@ export default function InvocationDetailDrawer({ runId, invocationId, onClose }:
                 {detail.estimated_cost_usd != null && (
                   <span className="text-amber-400">Cost: ${detail.estimated_cost_usd.toFixed(4)}</span>
                 )}
+                <CodexUsageNote metadata={detail.metadata_} />
               </div>
 
               {/* Session ID */}

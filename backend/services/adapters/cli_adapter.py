@@ -111,6 +111,14 @@ class CLIAdapter:
         Returns the result text (or raw stdout if parsing fails).
         """
         self._last_token_usage = None
+        # bimetri patch: codex exec --json writes JSONL events; result = last agent message
+        if self._agent == "codex":
+            from backend.services.adapters._bimetri_codex import parse_jsonl
+
+            parsed = parse_jsonl(raw_stdout)
+            if parsed is not None:
+                self._bimetri_usage = parsed[1]
+                return parsed[0] if parsed[0] is not None else raw_stdout
         stripped = raw_stdout.strip()
         if not stripped.startswith("{"):
             return raw_stdout
@@ -126,7 +134,8 @@ class CLIAdapter:
             "input_tokens": sum(
                 int(_u.get(k) or 0)
                 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
-            ) or None,
+            )
+            or None,
             "output_tokens": _u.get("output_tokens"),
             "cost_usd": data.get("total_cost_usd"),
         }

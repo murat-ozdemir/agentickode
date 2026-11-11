@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, DollarSign } from "lucide-react";
 import { getRunInvocations } from "../../api";
 import type { AgentInvocation } from "../../types";
+import { formatCredits, totalCodexCredits } from "../../utils/codexUsage";
 
 interface PhaseSummary {
   phase: string;
@@ -68,6 +69,9 @@ export default function RunCostSummary({ runId }: Props) {
     { tokensIn: 0, tokensOut: 0, cost: 0, duration: 0 },
   );
 
+  // bimetri patch: Codex calls carry ChatGPT plan credits, not dollars
+  const codexCredits = totalCodexCredits(invocations);
+
   // Per-phase breakdown
   const phaseMap = new Map<string, PhaseSummary>();
   for (const inv of invocations) {
@@ -108,6 +112,9 @@ export default function RunCostSummary({ runId }: Props) {
         <DollarSign className="w-4 h-4 text-amber-400 flex-shrink-0" />
         <h2 className="text-lg font-semibold flex-1">Cost Summary</h2>
         <span className="text-sm text-amber-400 mr-2">${totals.cost.toFixed(4)}</span>
+        {codexCredits != null && (
+          <span className="text-sm text-sky-400 mr-2">{formatCredits(codexCredits)} credits</span>
+        )}
         <span className="text-xs text-gray-500 mr-2">
           {totals.tokensIn.toLocaleString()} in / {totals.tokensOut.toLocaleString()} out
         </span>
@@ -125,6 +132,11 @@ export default function RunCostSummary({ runId }: Props) {
             <div className="bg-gray-800/40 rounded-lg p-3">
               <p className="text-xs text-gray-500 mb-1">Total Cost</p>
               <p className="text-lg font-semibold text-amber-400">${totals.cost.toFixed(4)}</p>
+              {codexCredits != null && (
+                <p className="text-xs text-sky-400" data-testid="codex-credits-total">
+                  + {formatCredits(codexCredits)} ChatGPT credits
+                </p>
+              )}
             </div>
             <div className="bg-gray-800/40 rounded-lg p-3">
               <p className="text-xs text-gray-500 mb-1">Tokens In</p>
