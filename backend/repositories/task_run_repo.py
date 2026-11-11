@@ -43,6 +43,7 @@ class TaskRunRepository:
         status: str | None = None,
         project_id: str | None = None,
         search: str | None = None,
+        ids: list[int] | None = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         limit: int = 50,
@@ -67,6 +68,8 @@ class TaskRunRepository:
         search_filter = _search_filter(search) if search else None
         if search_filter is not None:
             filters.append(search_filter)
+        if ids is not None:
+            filters.append(TaskRun.id.in_(ids))
 
         # Count query
         count_q = select(func.count()).select_from(TaskRun)

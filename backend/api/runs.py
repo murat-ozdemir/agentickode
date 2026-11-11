@@ -10,6 +10,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.bimetri_distribution import Dimension, RangeKey, matching_run_ids
 from backend.database import get_db
 from backend.models import ProjectConfig, TaskRun
 from backend.repositories.task_run_repo import TaskRunRepository
@@ -38,12 +39,21 @@ async def list_runs(
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    # bimetri: a row of the Task Distribution card (e.g. dist_dim=agent, dist_value=codex)
+    dist_dim: Dimension | None = None,
+    dist_value: str | None = None,
+    dist_range: RangeKey = "all",
     repo: TaskRunRepository = Depends(_get_repo),
+    db: AsyncSession = Depends(get_db),
 ):
+    ids = None
+    if dist_dim and dist_value:
+        ids = await matching_run_ids(db, dist_range, dist_dim, dist_value)
     items, total = await repo.list_runs(
         status=status,
         project_id=project_id,
         search=search,
+        ids=ids,
         sort_by=sort_by,
         sort_order=sort_order,
         limit=limit,

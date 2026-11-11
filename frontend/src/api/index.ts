@@ -17,3 +17,4 @@ export * from "./sessions";
 export * from "./memoryProposals";
 export * from "./memoryRecords";
 export * from "./openaiUsage";
+export * from "./runDistribution";

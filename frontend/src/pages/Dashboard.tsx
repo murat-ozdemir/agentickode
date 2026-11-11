@@ -3,9 +3,11 @@
 // Commercial licensing: info@mechemsi.com
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LayoutDashboard, Search } from "lucide-react";
+import { LayoutDashboard, Search, X } from "lucide-react";
 import { getAnalytics, getRuns, getStats } from "../api";
+import type { DistributionFilter } from "../api";
 import { BASE } from "../api/client";
+import TaskDistributionCard from "../components/distribution/TaskDistributionCard";
 import AnalyticsCharts from "../components/shared/AnalyticsCharts";
 import FilterBar from "../components/shared/FilterBar";
 import OpenAIBalanceCard from "../components/shared/OpenAIBalanceCard";
@@ -43,6 +45,7 @@ export default function Dashboard() {
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [dist, setDist] = useState<DistributionFilter | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -54,7 +57,7 @@ export default function Dashboard() {
   }, [search]);
 
   // Reset offset when filter changes
-  useEffect(() => { setOffset(0); }, [filter]);
+  useEffect(() => { setOffset(0); }, [filter, dist]);
 
   const load = useCallback(async () => {
     const [r, s, a] = await Promise.all([
@@ -65,6 +68,9 @@ export default function Dashboard() {
         sort_order: sortOrder,
         limit: pageSize,
         offset,
+        dist_dim: dist?.dim,
+        dist_value: dist?.value,
+        dist_range: dist?.range,
       }),
       getStats(),
       getAnalytics(),
@@ -78,7 +84,7 @@ export default function Dashboard() {
     setTotal(r.total);
     setStats(s);
     setAnalytics(a);
-  }, [filter, debouncedSearch, sortBy, sortOrder, offset, pageSize]);
+  }, [filter, debouncedSearch, sortBy, sortOrder, offset, pageSize, dist]);
 
   const handlePageSize = (n: number) => {
     setPageSize(n);
@@ -134,6 +140,7 @@ export default function Dashboard() {
         extraMetric={<OpenAIBalanceCard usage={openai} />}
         extraChart={<OpenAISpendChart data={openai.data} />}
       />
+      <TaskDistributionCard onSelect={setDist} />
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -145,6 +152,17 @@ export default function Dashboard() {
             className="w-full pl-9 pr-3 py-2 bg-gray-900/40 border border-gray-800/60 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 backdrop-blur-sm"
           />
         </div>
+        {dist && (
+          <button
+            type="button"
+            onClick={() => setDist(null)}
+            data-testid="distribution-filter"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs bg-blue-500/15 border border-blue-500/40 text-blue-200 hover:bg-blue-500/25"
+          >
+            {dist.dim}: {dist.value} · {dist.range === "all" ? "All" : dist.range}
+            <X className="w-3.5 h-3.5" aria-label="Clear filter" />
+          </button>
+        )}
       </div>
       <FilterBar value={filter} onChange={setFilter} />
       <TaskRunTable

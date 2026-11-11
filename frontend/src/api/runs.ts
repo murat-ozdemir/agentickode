@@ -27,6 +27,10 @@ export interface RunsQueryParams {
   sort_order?: string;
   limit?: number;
   offset?: number;
+  // bimetri: a row of the Task Distribution card
+  dist_dim?: string;
+  dist_value?: string;
+  dist_range?: string;
 }
 
 export const getRuns = (params?: RunsQueryParams | string) => {

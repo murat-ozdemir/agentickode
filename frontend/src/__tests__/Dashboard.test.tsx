@@ -2,7 +2,7 @@
 // Licensed under AGPLv3. See LICENSE file.
 // Commercial licensing: info@mechemsi.com
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 
@@ -31,6 +31,14 @@ vi.mock("../api", () => ({
     enabled: false, month_start: "2026-11-01", month_spend_usd: 0, month_days: [], credits_total_usd: 0,
     first_credit_on: null, spent_since_first_credit_usd: 0, remaining_usd: null,
     last_sync_at: null, sync_error: null, alert: null,
+  }),
+  getRunDistribution: vi.fn().mockResolvedValue({
+    range: "all", total: 1, since: "2026-11-11",
+    days: [{ date: "2026-11-11", total: 1, by: { agent: { codex: 1 } } }],
+    groups: {
+      server: [], agent: [{ name: "codex", count: 1 }], model: [],
+      difficulty: [], type: [], outcome: [],
+    },
   }),
 }));
 
@@ -62,6 +70,17 @@ describe("Dashboard", () => {
   it("renders the search input", async () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByPlaceholderText("Search runs...")).toBeInTheDocument();
+  });
+
+  it("filters runs by a Task Distribution row and clears it", async () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const group = await screen.findByTestId("distribution-group-agent");
+    fireEvent.click(within(group).getByText("codex"));
+    await waitFor(() =>
+      expect(lastRunsQuery()).toMatchObject({ dist_dim: "agent", dist_value: "codex", dist_range: "all" }),
+    );
+    fireEvent.click(screen.getByTestId("distribution-filter"));
+    await waitFor(() => expect(lastRunsQuery()).toMatchObject({ dist_dim: undefined }));
   });
 
   describe("per page selector", () => {

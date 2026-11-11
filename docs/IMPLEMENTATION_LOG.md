@@ -4,6 +4,19 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-11 — bimetri: Task Distribution card (fork)
+
+**Tests**: 1456 backend (unit + integration), 295 frontend passing; ruff, eslint, tsc clean
+**Plan**: `claudedocs/plans/2026-11-11-bimetri-task-distribution.md`
+
+- `backend/services/bimetri_run_distribution.py`, `repositories/run_distribution_repo.py`,
+  `api/bimetri_distribution.py` — per-day and per-value run counts for 7d / 30d / all
+- `backend/api/runs.py`, `repositories/task_run_repo.py` — `dist_dim` / `dist_value` / `dist_range`
+  filter on the Runs list, same classifier as the card
+- `frontend/src/components/distribution/` — card with "Color by" stacked bars, six lists, top-5
+  models; `pages/Dashboard.tsx` filter chip
+- dev-1 data: model written into the 20 early backfilled invocations (runs 5–24)
+
 ## 2026-11-11 — bimetri: Codex token usage and ChatGPT plan credits (fork)
 
 **Tests**: 1289 backend unit, 287 frontend passing; ruff, eslint, tsc clean
