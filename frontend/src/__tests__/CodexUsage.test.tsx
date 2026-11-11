@@ -85,16 +85,16 @@ describe("CodexUsageNote", () => {
 describe("RunCostSummary", () => {
   beforeEach(() => {
     (getRunInvocations as ReturnType<typeof vi.fn>).mockResolvedValue([
-      invocation({ id: 1 }),
+      invocation({ id: 1, estimated_cost_usd: 0.045 }),
       invocation({ id: 2, agent_name: "claude", estimated_cost_usd: 0.5, metadata_: null }),
     ]);
   });
 
-  it("keeps Codex credits out of the dollar total", async () => {
+  it("adds the dollar equivalent of Codex credits to the total", async () => {
     render(<RunCostSummary runId={42} />);
     expect(await screen.findByTestId("codex-credits-total")).toHaveTextContent(
-      "+ 1.13 ChatGPT credits",
+      "incl. 1.13 ChatGPT credits",
     );
-    expect(screen.getAllByText("$0.5000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$0.5450").length).toBeGreaterThan(0);
   });
 });

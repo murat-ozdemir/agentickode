@@ -2,7 +2,7 @@
 // Licensed under AGPLv3. See LICENSE file.
 // Commercial licensing: info@mechemsi.com
 
-// bimetri patch: Codex runs on a ChatGPT plan — no dollar cost, credits instead.
+// bimetri patch: Codex runs on a ChatGPT plan — billed in credits (dollar equivalent in the cost).
 
 type Metadata = Record<string, unknown> | null | undefined;
 

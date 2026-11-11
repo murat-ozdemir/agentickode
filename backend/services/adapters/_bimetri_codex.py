@@ -4,9 +4,11 @@
 
 """bimetri patch: Codex ``exec --json`` output — final message, token usage, ChatGPT credits.
 
-Codex runs on a ChatGPT plan, so a run has no dollar cost. The credits it spends are
+Codex runs on a ChatGPT plan, so it is billed in credits. The credits a call spends are
 computed from the per-model rates in the codex agent's ``CODEX_CREDIT_RATES`` env var
-(credits per 1M tokens, ``model=input/cached_input/output``, comma separated).
+(credits per 1M tokens, ``model=input/cached_input/output``, comma separated). Their dollar
+equivalent uses the price of one credit in ``CODEX_CREDIT_USD``, so Codex shows up in the
+cost totals next to Claude.
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ import json
 from typing import Any
 
 RATES_ENV = "CODEX_CREDIT_RATES"
+PRICE_ENV = "CODEX_CREDIT_USD"
+DEFAULT_CREDIT_USD = "0.04"
 DEFAULT_CREDIT_RATES = (
     "gpt-6-astra=250/25/1250,gpt-6.1-sol=50/2.5/250,"
     "gpt-6.1-terra=25/1.25/125,gpt-6-luna=2.5/0.25/12.5"
@@ -91,10 +95,14 @@ def parse_rates(spec: str | None) -> dict[str, tuple[float, float, float]]:
 
 
 def add_credits(usage: dict[str, Any] | None, model: str | None, env: dict | None) -> None:
-    """Add ``codex_credits`` to a Codex usage dict; left out for an unknown model or no usage."""
+    """Add ``codex_credits`` and their dollar equivalent ``cost_usd`` to a Codex usage dict.
+
+    Both are left out for an unknown model or no usage; ``cost_usd`` also for a bad price.
+    """
     if not usage or usage.get("billing") != "chatgpt" or usage.get("input_tokens") is None:
         return
-    rate = parse_rates((env or {}).get(RATES_ENV) or DEFAULT_CREDIT_RATES).get(model or "")
+    env = env or {}
+    rate = parse_rates(env.get(RATES_ENV) or DEFAULT_CREDIT_RATES).get(model or "")
     if rate is None:
         return
     cached = usage.get("cached_input_tokens") or 0
@@ -103,3 +111,8 @@ def add_credits(usage: dict[str, Any] | None, model: str | None, env: dict | Non
     usage["codex_credits"] = round(
         (uncached * rate[0] + cached * rate[1] + output * rate[2]) / 1_000_000, 4
     )
+    try:
+        price = float(env.get(PRICE_ENV) or DEFAULT_CREDIT_USD)
+    except ValueError:
+        return
+    usage["cost_usd"] = round(usage["codex_credits"] * price, 6)

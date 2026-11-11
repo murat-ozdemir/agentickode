@@ -14,6 +14,8 @@ from backend.models import AgentSettings
 from backend.seed import seed_all
 from backend.services.adapters._bimetri_codex import (
     DEFAULT_CREDIT_RATES,
+    DEFAULT_CREDIT_USD,
+    PRICE_ENV,
     RATES_ENV,
     add_credits,
     parse_jsonl,
@@ -69,6 +71,19 @@ class TestCredits:
         add_credits(usage, "gpt-6.1-terra", {})
         # 20k uncached * 25 + 100k cached * 1.25 + 4k out * 125, per 1M tokens
         assert usage["codex_credits"] == 1.125
+        # at the default 0.04 $ per credit
+        assert usage["cost_usd"] == 0.045
+
+    def test_credit_price_comes_from_the_agent_env_var(self):
+        usage = {**USAGE, "billing": "chatgpt"}
+        add_credits(usage, "gpt-6.1-terra", {PRICE_ENV: "0.1"})
+        assert usage["cost_usd"] == 0.1125
+
+    def test_bad_credit_price_keeps_credits_without_dollars(self):
+        usage = {**USAGE, "billing": "chatgpt", "cost_usd": None}
+        add_credits(usage, "gpt-6.1-terra", {PRICE_ENV: "forty cents"})
+        assert usage["codex_credits"] == 1.125
+        assert usage["cost_usd"] is None
 
     def test_rates_come_from_the_agent_env_var(self):
         usage = {**USAGE, "billing": "chatgpt"}
@@ -83,6 +98,8 @@ class TestCredits:
         add_credits(claude, "gpt-6.1-terra", {})
         assert "codex_credits" not in usage
         assert "codex_credits" not in claude
+        assert "cost_usd" not in usage
+        assert claude["cost_usd"] == 0.1
 
 
 class TestCodexAdapter:
@@ -99,13 +116,13 @@ class TestCodexAdapter:
 class TestInvocationRecord:
     def test_codex_breakdown_goes_to_metadata(self):
         session = MagicMock()
-        usage = {**USAGE, "billing": "chatgpt", "cost_usd": None, "codex_credits": 1.125}
+        usage = {**USAGE, "billing": "chatgpt", "cost_usd": 0.045, "codex_credits": 1.125}
         result = {"response": {"output": "final", "exit_code": 0}, "usage": usage, "model": "m"}
         _bimetri_cagri_kaydi(
             MagicMock(id=1), session, "codex", "implement", datetime.now(UTC), result, None
         )
         inv = session.add.call_args.args[0]
-        assert inv.estimated_cost_usd is None
+        assert inv.estimated_cost_usd == 0.045
         assert inv.estimated_tokens_in == 120_000
         assert inv.metadata_ == {
             "model": "m",
@@ -117,7 +134,7 @@ class TestInvocationRecord:
 
 
 class TestSeedUpgrade:
-    async def test_adds_json_flag_and_rates_keeping_custom_settings(self, db_session):
+    async def test_adds_json_flag_rates_and_price_keeping_custom_settings(self, db_session):
         task = "cd {workspace} && cat {instruction_file} | codex exec --skip-git-repo-check -"
         db_session.add(
             AgentSettings(
@@ -143,6 +160,7 @@ class TestSeedUpgrade:
         assert row.environment_vars == {
             "MODEL_FOR_DIFFICULTY_EASY": "gpt-6.1-terra",
             RATES_ENV: DEFAULT_CREDIT_RATES,
+            PRICE_ENV: DEFAULT_CREDIT_USD,
         }
 
     async def test_existing_rates_are_not_overwritten(self, db_session):
@@ -152,7 +170,7 @@ class TestSeedUpgrade:
                 display_name="Codex",
                 description="test",
                 command_templates={"task": "codex exec --json -"},
-                environment_vars={RATES_ENV: "m=1/1/1"},
+                environment_vars={RATES_ENV: "m=1/1/1", PRICE_ENV: "0.05"},
             )
         )
         await db_session.commit()
@@ -165,4 +183,5 @@ class TestSeedUpgrade:
             )
         ).scalar_one()
         assert row.environment_vars[RATES_ENV] == "m=1/1/1"
+        assert row.environment_vars[PRICE_ENV] == "0.05"
         assert row.command_templates["task"] == "codex exec --json -"

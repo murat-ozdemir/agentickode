@@ -69,7 +69,7 @@ export default function RunCostSummary({ runId }: Props) {
     { tokensIn: 0, tokensOut: 0, cost: 0, duration: 0 },
   );
 
-  // bimetri patch: Codex calls carry ChatGPT plan credits, not dollars
+  // bimetri patch: Codex calls spend ChatGPT plan credits; their dollar equivalent is in the cost
   const codexCredits = totalCodexCredits(invocations);
 
   // Per-phase breakdown
@@ -134,7 +134,7 @@ export default function RunCostSummary({ runId }: Props) {
               <p className="text-lg font-semibold text-amber-400">${totals.cost.toFixed(4)}</p>
               {codexCredits != null && (
                 <p className="text-xs text-sky-400" data-testid="codex-credits-total">
-                  + {formatCredits(codexCredits)} ChatGPT credits
+                  incl. {formatCredits(codexCredits)} ChatGPT credits
                 </p>
               )}
             </div>

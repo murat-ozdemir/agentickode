@@ -4,6 +4,15 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-11 — bimetri: Codex cost in dollars (fork)
+
+**Tests**: 1458 backend (unit + integration), 295 frontend passing; ruff, eslint, tsc clean
+
+- `backend/services/adapters/_bimetri_codex.py` — `cost_usd = codex_credits × CODEX_CREDIT_USD`
+  (default 0.04) so Codex lands in `estimated_cost_usd` and the "Cost by Agent" chart
+- `backend/seed/_bimetri_codex.py` — seeds `CODEX_CREDIT_USD` on the codex agent when missing
+- `frontend/src/components/runs/RunCostSummary.tsx` — "incl. N ChatGPT credits" under the total
+
 ## 2026-11-11 — bimetri: Task Distribution card (fork)
 
 **Tests**: 1456 backend (unit + integration), 295 frontend passing; ruff, eslint, tsc clean

@@ -19,11 +19,12 @@ instead of an empty or made-up dollar figure.
 - Credits per call from per-model rates (input / cached input / output, per 1M tokens) kept in the
   codex agent's `CODEX_CREDIT_RATES` env var, editable on the Agents page
 - Run page: credits next to the dollar cost, cached tokens in the call details
+- (2026-11-11 follow-up) Dollar equivalent of the credits from the codex agent's `CODEX_CREDIT_USD`
+  env var (price of one credit), so Codex joins the cost totals and analytics charts
 
 **Out of scope**
 - The long-context 2x / 1.5x multipliers
 - Reading the real plan balance (ChatGPT has no API for it)
-- Analytics charts (they sum dollars; Codex stays out of them)
 
 ## Technical Approach
 
@@ -37,7 +38,8 @@ instead of an empty or made-up dollar figure.
 
 ## Success Criteria
 
-- [x] A codex call stores tokens and credits; `estimated_cost_usd` stays null
+- [x] A codex call stores tokens and credits
+- [x] `estimated_cost_usd` = credits × `CODEX_CREDIT_USD`; Codex shows in "Cost by Agent"
 - [x] Rates come from the agent env var; an unknown model gets no credits but keeps its tokens
 - [x] The dollar total leaves Codex out; credits are shown on their own line
 - [ ] First real Codex run checked: usage per turn, not cumulative
