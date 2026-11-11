@@ -18,3 +18,7 @@
 ## 2026-11-10 — Cancelled a user-decided tool because of my own trial
 **What went wrong:** After one costly trial run (#95) I switched the workers to `mode none` and marked the graph plan `abandoned`. The user had decided agents get the graph; they have used it for months and see the benefit.
 **Rule for next time:** A measurement never removes or disables a tool the user decided on. Report the numbers, keep the tool running, and turn the finding into improvement work (here: smaller `graph_read` output, softer grep cap).
+
+## 2026-11-11 — Graph server rebuilt the graph in the foreground on every checkout
+**What went wrong:** `serve` ran `graphify update` before the MCP handshake whenever HEAD moved. The user had warned that re-initialising the graph on each checkout would break runs; I missed it. On platform-frontend the update took ~50 s, Claude waits 15 s, the run failed (#110) and the orphaned update never stamped `.head`, so every run repeated it.
+**Rule for next time:** Anything an agent CLI starts at session open must answer within seconds. Slow work (graph builds, indexing) runs detached in the background and stamps its own result; the server serves what is on disk. Check a user's earlier warning against the design before shipping.
