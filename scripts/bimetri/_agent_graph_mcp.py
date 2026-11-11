@@ -6,8 +6,9 @@ Runs as the worker user (agent-graph-mcp.sh sends it over SSH, after _agent_grap
     update TOOL ROOT   TOOL: graphify | all
     mode MODE          MODE: none | graphify (agent CLI settings and gate, see the config file)
     gate pre|mark      Claude hook (stdin: hook event JSON), written by mode graphify
-    serve TOOL         update if needed, then the graph_flow.py stdio MCP server on the graph;
-                       the agent CLIs start it in the run workspace
+    serve TOOL         the graph_flow.py stdio MCP server on the graph on disk, at once; when the
+                       clone moved since the last build, an update runs beside it in the
+                       background. The agent CLIs start it in the run workspace
 One venv per tool under ~/.local/share/bimetri-graph. Graph data goes to data/<tool>/<root slug>,
 outside the clone, so `git status` and `clean -fd` never see it. Stdlib only, no network.
 """
@@ -24,6 +25,8 @@ from _agent_graph_gate import gate  # bundle: drop
 
 PART_MARK = "### "  # install stdin: source, then "### lock: <tool>" / "### file: <name>" parts
 FLOW = "graph_flow.py"
+# A hung update would hold the repo's lock, and with it every later update, for good.
+UPDATE_TIMEOUT_SEC = 1800
 
 
 def data_dir(tool: str, root: Path) -> Path:
@@ -60,21 +63,59 @@ def built_at(tool: str, root: Path) -> Path:
     return data.parent / (data.name + ".head")
 
 
-def update(tool: str, root: Path, out=None) -> int:
+def lock_path(tool: str, root: Path) -> Path:
     data = data_dir(tool, root)
-    data.mkdir(parents=True, exist_ok=True)
-    with open(data.parent / (data.name + ".lock"), "w") as lock:
+    return data.parent / (data.name + ".lock")
+
+
+def update(tool: str, root: Path, out=None) -> int:
+    data_dir(tool, root).mkdir(parents=True, exist_ok=True)
+    with open(lock_path(tool, root), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         started, head = time.monotonic(), clean_head(root)
-        # stdout=2: tool output goes to stderr, stdout carries only the summary line.
-        done = subprocess.run(
-            update_command(tool, root), env=tool_env(tool, root), cwd=root, stdout=2
-        )
+        try:
+            # stdout=2: tool output goes to stderr, stdout carries only the summary line.
+            rc = subprocess.run(
+                update_command(tool, root),
+                env=tool_env(tool, root),
+                cwd=root,
+                stdout=2,
+                timeout=UPDATE_TIMEOUT_SEC,
+            ).returncode
+        except subprocess.TimeoutExpired:
+            rc = 124
         elapsed = time.monotonic() - started
         # serve skips the update while the clean tree is still at this commit.
-        built_at(tool, root).write_text(head if done.returncode == 0 and head else "")
-    print(f"{tool}: update rc={done.returncode} in {elapsed:.1f}s", file=out or sys.stdout)
-    return done.returncode
+        built_at(tool, root).write_text(head if rc == 0 and head else "")
+    print(f"{tool}: update rc={rc} in {elapsed:.1f}s", file=out or sys.stdout)
+    return rc
+
+
+def update_in_background(tool: str, root: Path) -> None:
+    """Start `update` in its own session, unless one already runs for this clone.
+
+    The agent CLI waits seconds for the server, an update takes ~50 s on a large repo
+    (platform-frontend, run #110), and the CLI ends serve when it gives up. So the update must
+    not be serve's child in the foreground: it outlives serve and stamps the head itself.
+    """
+    data_dir(tool, root).mkdir(parents=True, exist_ok=True)
+    with open(lock_path(tool, root), "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"{tool}: an update is already running", file=sys.stderr)
+            return
+    log = data_dir(tool, root).parent / (data_dir(tool, root).name + ".log")
+    with open(log, "w") as out:
+        subprocess.Popen(
+            [sys.executable, str(base_dir() / "agent_graph.py"), "update", tool, str(root)],
+            cwd=root,
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    print(f"{tool}: updating in the background, log {log}", file=sys.stderr)
 
 
 def split_bundle(text: str) -> tuple:
@@ -124,14 +165,14 @@ def serve(tool: str) -> int:
         return 1
     root = Path(found.stdout.strip())
     graph = data_dir(tool, root) / "graph.json"
-    # The agent CLI waits only a few seconds for the server (alwaysLoad), and even a no-op
-    # Graphify update takes ~4 s. So update only when the tree moved since the last build.
-    # stdout is the MCP channel from here on, so the update reports on stderr.
+    # The agent CLI waits only a few seconds for the server (alwaysLoad), so serve answers on
+    # the graph on disk (reloaded when the update rewrites it) or, before the first build, with
+    # a note. stdout is the MCP channel from here on, so serve reports on stderr.
     head, stamp = clean_head(root), built_at(tool, root)
     if graph.exists() and head and stamp.exists() and stamp.read_text() == head:
         print(f"{tool}: graph is at {head[:8]}, no update", file=sys.stderr)
-    elif update(tool, root, out=sys.stderr) != 0 and not graph.exists():
-        return 1
+    else:
+        update_in_background(tool, root)
     command = server_command(tool, root)
     os.execve(command[0], command, tool_env(tool, root))
 

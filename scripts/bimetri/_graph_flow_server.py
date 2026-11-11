@@ -4,7 +4,8 @@ agent-graph-mcp.sh appends this file to _graph_flow.py (dropping the `# bundle: 
 installs the result as graph_flow.py; serve runs it with the Graphify venv's python (-I):
     python -I graph_flow.py GRAPH_JSON ROOT
 Uses Graphify's private loader and scorer (graphify.serve), pinned by the Graphify lock file.
-The graph is reloaded whenever graph.json changes on disk.
+The graph is reloaded whenever graph.json changes on disk. Before the first build there is no
+graph.json: the server still answers, and graph_continue says so with the low-confidence caps.
 """
 
 import json
@@ -13,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _graph_flow import OUTPUT_LINES, callers, continue_flow  # bundle: drop
+from _graph_flow import CAPS, OUTPUT_LINES, callers, continue_flow  # bundle: drop
 from _graph_read import read  # bundle: drop
 
 TOOLS = {
@@ -38,6 +39,9 @@ TOOLS = {
         {"pattern": "a ripgrep regex", "glob": "optional file glob, e.g. *.java"},
     ),
 }
+BUILDING = (
+    "the graph of this clone is still being built; use graph_read and fallback_rg within the caps"
+)
 REQUIRED = {
     "graph_continue": "task",
     "graph_read": "file",
@@ -55,6 +59,8 @@ class Flow:
         self.stamp, self.greps = None, None
 
     def graph(self):
+        if not self.graph_path.exists():
+            raise RuntimeError(BUILDING)
         stamp = self.graph_path.stat().st_mtime_ns
         if stamp != self.stamp:
             self.loaded, self.stamp = self.load(str(self.graph_path)), stamp
@@ -64,6 +70,12 @@ class Flow:
         """(text, is_error) for one tool call."""
         if not str(args.get(REQUIRED.get(name, ""), "")).strip():
             return f"{name} needs `{REQUIRED.get(name)}`", True
+        if name == "graph_continue" and not self.graph_path.exists():
+            greps, files = CAPS["low"]
+            self.greps = greps
+            result = {"confidence": "low", "recommended_files": [], "note": BUILDING}
+            result.update(max_supplementary_greps=greps, max_supplementary_files=files)
+            return json.dumps(result, ensure_ascii=False, indent=1), False
         if name == "graph_continue":
             graph = self.graph()
             result = continue_flow(graph, args["task"], self.root, lambda t: self.score(graph, t))
@@ -153,7 +165,8 @@ def main(graph_path: Path, root: Path) -> int:
     from mcp.server.stdio import stdio_server  # pyright: ignore[reportMissingImports]
 
     flow = Flow(graph_path, root, _load_graph, scorer(_score_nodes, _query_terms))
-    flow.graph()
+    if graph_path.exists():
+        flow.graph()
     server = build_server(flow)
 
     async def run() -> None:

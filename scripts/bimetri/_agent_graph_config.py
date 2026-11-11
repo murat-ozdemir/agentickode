@@ -25,7 +25,8 @@ from _agent_graph_gate import GATE_FIRST  # bundle: drop
 
 NAME = "bimetri-graph"
 TOOLS = ("graphify",)
-# serve updates the graph before it answers: 51.7 s on platform-backend after a 3-file checkout.
+# serve answers in ~2 s (loading a 42 MB graph) and updates in the background; the margin is for
+# a busy worker.
 STARTUP_TIMEOUT_SEC = 120
 CLAUDE_ENV = {
     "MCP_TIMEOUT": str(STARTUP_TIMEOUT_SEC * 1000),  # one server's connect attempt; default 30 s

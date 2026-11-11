@@ -5,6 +5,7 @@
 """bimetri patch (D2 phase 1-2): local code graph MCP setup on the workers."""
 
 import io
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +17,8 @@ sys.path.insert(0, str(_DIR))
 
 import _agent_graph_config as config  # noqa: E402
 import _agent_graph_mcp as graph  # noqa: E402
+import _graph_flow as flow  # noqa: E402
+import _graph_flow_server as server  # noqa: E402
 
 ROOT = Path("/workspaces/Org/repo")
 
@@ -113,37 +116,72 @@ class TestUpdateAndServe:
         assert graph.serve("graphify") == 1
         assert "not inside a git clone" in capsys.readouterr().err
 
-    def serve(self, monkeypatch, rc, head=None):
+    def test_hung_update_times_out_and_stamps_nothing(self, home, monkeypatch, capsys):
+        monkeypatch.setattr(graph, "clean_head", lambda root: "abc")
+
+        def hang(cmd, **kw):
+            raise graph.subprocess.TimeoutExpired(cmd, kw["timeout"])
+
+        monkeypatch.setattr(graph.subprocess, "run", hang)
+        assert graph.update("graphify", ROOT) == 124
+        assert graph.built_at("graphify", ROOT).read_text() == ""
+
+    def test_background_update_runs_in_its_own_session(self, home, monkeypatch, capsys):
+        started = []
+        monkeypatch.setattr(graph.subprocess, "Popen", lambda cmd, **kw: started.append((cmd, kw)))
+        graph.update_in_background("graphify", ROOT)
+        cmd, kw = started[0]
+        assert cmd[1:] == [
+            str(graph.base_dir() / "agent_graph.py"),
+            "update",
+            "graphify",
+            str(ROOT),
+        ]
+        assert kw["start_new_session"] and kw["stdin"] == graph.subprocess.DEVNULL
+        assert kw["stdout"].name.endswith(".log")  # not serve's stderr, which the CLI may close
+        assert "in the background" in capsys.readouterr().err
+
+    def test_background_update_is_skipped_while_one_runs(self, home, monkeypatch, capsys):
+        started = []
+        monkeypatch.setattr(graph.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
+        graph.data_dir("graphify", ROOT).mkdir(parents=True)
+        with open(graph.lock_path("graphify", ROOT), "w") as held:
+            graph.fcntl.flock(held, graph.fcntl.LOCK_EX)
+            graph.update_in_background("graphify", ROOT)
+        assert started == []
+        assert "already running" in capsys.readouterr().err
+
+    def serve(self, monkeypatch, head=None):
         git = SimpleNamespace(returncode=0, stdout=f"{ROOT}\n")
         monkeypatch.setattr(graph.subprocess, "run", lambda *a, **kw: git)
         monkeypatch.setattr(graph, "clean_head", lambda root: head)
         built, execs = [], []
-        monkeypatch.setattr(graph, "update", lambda tool, root, out=None: built.append(out) or rc)
+        monkeypatch.setattr(graph, "update_in_background", lambda tool, root: built.append(root))
         monkeypatch.setattr(graph.os, "execve", lambda *args: execs.append(args))
         return graph.serve("graphify"), built, execs
 
-    def test_serve_updates_on_stderr_then_execs(self, home, monkeypatch, capsys):
-        _, built, execs = self.serve(monkeypatch, 0)
-        assert built == [sys.stderr]
+    def test_serve_starts_the_update_and_execs_at_once(self, home, monkeypatch, capsys):
+        _, built, execs = self.serve(monkeypatch)  # no graph yet: the server still starts
+        assert built == [ROOT]
         assert execs[0][1] == graph.server_command("graphify", ROOT)
         assert execs[0][2]["GRAPHIFY_OUT"] == str(graph.data_dir("graphify", ROOT))
         assert capsys.readouterr().out == ""  # stdout belongs to MCP
 
-    def test_failed_update_serves_only_an_existing_graph(self, home, monkeypatch):
-        assert self.serve(monkeypatch, 1)[0] == 1
-        data = graph.data_dir("graphify", ROOT)
-        data.mkdir(parents=True)
-        (data / "graph.json").write_text("{}")
-        assert len(self.serve(monkeypatch, 1)[2]) == 1
+    def test_before_the_first_build_graph_continue_opens_with_low_caps(self, tmp_path):
+        made = server.Flow(tmp_path / "graph.json", tmp_path, None, None)
+        result = json.loads(made.call("graph_continue", {"task": "update()"})[0])
+        assert "being built" in result["note"] and made.greps == flow.CAPS["low"][0]
+        with pytest.raises(RuntimeError, match="being built"):
+            made.call("graph_callers", {"symbol": "update"})
 
     def test_serve_skips_the_update_while_the_tree_is_at_the_built_head(self, home, monkeypatch):
         data = graph.data_dir("graphify", ROOT)
         data.mkdir(parents=True)
         (data / "graph.json").write_text("{}")
         graph.built_at("graphify", ROOT).write_text("abc")
-        _, built, execs = self.serve(monkeypatch, 0, head="abc")
+        _, built, execs = self.serve(monkeypatch, head="abc")
         assert built == [] and len(execs) == 1
-        assert self.serve(monkeypatch, 0, head="def")[1] == [sys.stderr]
+        assert self.serve(monkeypatch, head="def")[1] == [ROOT]
 
     def test_main_rejects_bad_arguments(self, home, monkeypatch, capsys):
         monkeypatch.setattr(sys, "stdin", io.StringIO(""))
