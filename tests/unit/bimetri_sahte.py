@@ -25,6 +25,7 @@ class SahteGitea:
         self.ci_durum: dict[str, list[str]] = {}
         self.dispatch: list[tuple[str, dict]] = []
         self.dispatch_kodu = 204
+        self.workflow_var = True
         self._client = SimpleNamespace(get=self._get, post=self._post)
 
     def _headers(self) -> dict:
@@ -44,6 +45,8 @@ class SahteGitea:
             kod, veri = 200, [{"body": b} for b in self.yorum.get(n, [])]
         elif yol.endswith("/files"):
             kod, veri = 200, [{"filename": d} for d in self.dosya.get(int(yol.split("/")[-2]), [])]
+        elif "/contents/.gitea/workflows/" in yol:
+            kod, veri = (200, {}) if self.workflow_var else (404, {})
         elif yol.endswith("/status"):
             sha = yol.split("/")[-2]
             kod, veri = 200, {"statuses": [{"context": c} for c in self.ci_durum.get(sha, [])]}

@@ -7,6 +7,7 @@
 PR olaylarinda CI kendiliginden kosmaz; workflow_dispatch ile baslar ve sonucunu commit'e
 ``ci-kapisi`` durumu olarak kendisi yazar. Branch korumasi bu durumu ister: durum yoksa ya da
 pending kaldiysa merge kapali kalir (fail-closed).
+Repoda (PR dalinda) dev.yml yoksa CI kapisi sessizce atlanir: kit henuz girmemis repo.
 """
 
 import logging
@@ -56,6 +57,15 @@ async def ci_baslat(gp, rp: str, n: int) -> str:
         r.raise_for_status()
         head = r.json().get("head") or {}
         sha, dal = head.get("sha", ""), head.get("ref", "")
+        # No workflow on the PR branch: the repo has no CI kit yet, nothing to start or warn about
+        r = await gp._client.get(
+            f"{gp._base_url}/api/v1/repos/{rp}/contents/.gitea/workflows/{CI_WORKFLOW}",
+            params={"ref": dal},
+            headers=gp._headers(),
+            timeout=30.0,
+        )
+        if r.status_code == 404:
+            return f"CI atlandi: {dal} dalinda .gitea/workflows/{CI_WORKFLOW} yok"
         r = await gp._client.get(
             f"{gp._base_url}/api/v1/repos/{rp}/commits/{sha}/status",
             headers=gp._headers(),

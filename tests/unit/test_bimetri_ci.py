@@ -57,6 +57,13 @@ class TestCiBaslat:
         assert "zaten" in await ci_baslat(gp, RP, 5)
         assert gp.dispatch == []
 
+    async def test_skips_quietly_without_workflow(self):
+        gp = _gitea()
+        gp.workflow_var = False
+        assert "atlandi" in await ci_baslat(gp, RP, 5)
+        assert gp.dispatch == []
+        assert 5 not in gp.yorum
+
     async def test_failed_dispatch_comments_on_pr(self):
         gp = _gitea()
         gp.dispatch_kodu = 404
