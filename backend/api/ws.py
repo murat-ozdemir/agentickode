@@ -19,6 +19,7 @@ from sqlalchemy import select
 from backend.database import async_session
 from backend.models import ProjectWorkspaceServer, TaskRun, WorkspaceServer
 from backend.models.local_sessions import LocalTerminalSession
+from backend.services.workspace._bimetri_agent_launch import agent_launch_command
 from backend.services.workspace.platform_user import get_platform_run_as_user
 from backend.services.workspace.ssh_service import SSHService
 from backend.worker.broadcaster import broadcaster
@@ -587,7 +588,11 @@ async def _attach_to_tmux(
 
     if not tmux_exists and agent_name:
         # Create tmux with shell, then launch agent inside
-        agent_launch = "claude --permission-mode auto" if agent_name == "claude" else agent_name
+        agent_launch = (
+            "claude --permission-mode auto"
+            if agent_name == "claude"
+            else agent_launch_command(agent_name)
+        )
         proc = await asyncio.create_subprocess_shell(
             _runuser(f"tmux new-session -d -s {tmux_name} -x 120 -y 40", run_as_user),
             env=env,

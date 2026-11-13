@@ -12,6 +12,8 @@ interface LocalTerminalProps {
   agentName: string;
   /** If provided, attach to this existing tmux session instead of creating a new one. */
   tmuxName?: string;
+  /** Called when the socket drops (not on unmount), so the page can check the session. */
+  onDisconnect?: () => void;
 }
 
 /**
@@ -19,9 +21,12 @@ interface LocalTerminalProps {
  * If tmuxName is provided, re-attaches to an existing persistent session.
  * Otherwise falls back to the legacy ephemeral /ws/local-terminal/{agent} endpoint.
  */
-export default function LocalTerminal({ agentName, tmuxName }: LocalTerminalProps) {
+export default function LocalTerminal({ agentName, tmuxName, onDisconnect }: LocalTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  // bimetri patch: a ref, so a new callback does not reconnect the terminal.
+  const onDisconnectRef = useRef(onDisconnect);
+  onDisconnectRef.current = onDisconnect;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -71,7 +76,8 @@ export default function LocalTerminal({ agentName, tmuxName }: LocalTerminalProp
     };
 
     ws.onclose = () => {
-      term.write("\r\n\x1b[33m[Disconnected — session is still running]\x1b[0m\r\n");
+      term.write("\r\n\x1b[33m[Disconnected]\x1b[0m\r\n");
+      onDisconnectRef.current?.();
     };
 
     term.onData((data) => {
@@ -92,6 +98,7 @@ export default function LocalTerminal({ agentName, tmuxName }: LocalTerminalProp
 
     return () => {
       observer.disconnect();
+      ws.onclose = null;
       ws.close();
       term.dispose();
     };

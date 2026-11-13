@@ -12,6 +12,7 @@ import json
 import logging
 import shlex
 
+from backend.services.workspace._bimetri_agent_launch import agent_launch_command
 from backend.services.workspace.command_executor import CommandExecutor
 
 logger = logging.getLogger("agentickode.sessions")
@@ -79,11 +80,8 @@ class SessionService:
             agent_cmd = (
                 f"claude --dangerously-skip-permissions --session-id {shlex.quote(session_id)}"
             )
-        elif agent_name == "codex":
-            # bimetri patch: no ChatGPT-connected apps (Jira, Sites...); they shadow the repo.
-            agent_cmd = "codex -c features.apps=false"
         else:
-            agent_cmd = agent_name
+            agent_cmd = agent_launch_command(agent_name)
 
         # Send command into user's tmux session
         await self._ssh.run_command(

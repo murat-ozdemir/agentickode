@@ -212,6 +212,24 @@ export default function Chat() {
     finally { setCreating(false); }
   };
 
+  // bimetri patch: after a dropped socket, ask the backend whether the tmux session lives on
+  // (a backend restart kills it) instead of telling the user it is still running.
+  const checkTerminalAfterDisconnect = useCallback(async (sessionId: string) => {
+    try {
+      const res = await fetch("/api/local-terminals");
+      if (!res.ok) return;
+      const sessions: TerminalSession[] = await res.json();
+      setTerminalSessions(sessions);
+      const current = sessions.find((s) => s.session_id === sessionId);
+      if (!current || current.status !== "active") {
+        setActiveTerminal(null);
+        setError("This terminal session has ended. Launch a new one.");
+      }
+    } catch (err) {
+      console.error("Failed to check the terminal session", err);
+    }
+  }, []);
+
   const resumeTerminal = (session: TerminalSession) => {
     setActiveTerminal(session);
     setTerminalKey((k) => k + 1);
@@ -642,6 +660,7 @@ export default function Chat() {
                   key={terminalKey}
                   agentName={activeTerminal.agent_name}
                   tmuxName={activeTerminal.tmux_name}
+                  onDisconnect={() => checkTerminalAfterDisconnect(activeTerminal.session_id)}
                 />
               </div>
             ) : (

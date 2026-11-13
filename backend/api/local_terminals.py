@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.models.local_sessions import LocalTerminalSession
 from backend.services.chat._bimetri_cleanup import agent_home, remove_claude_session_files
+from backend.services.workspace._bimetri_agent_launch import agent_launch_command
 from backend.services.workspace.platform_user import get_platform_run_as_user
 from backend.worker.broadcaster import broadcaster
 
@@ -107,7 +108,7 @@ async def create_local_session(
     if body.agent_name == "claude":
         agent_launch = f"claude --permission-mode auto --session-id {claude_session_id}"
     else:
-        agent_launch = body.agent_name
+        agent_launch = agent_launch_command(body.agent_name)
 
     proc = await asyncio.create_subprocess_shell(
         _tmux(f"tmux new-session -d -s {tmux_name} -x 120 -y 40", run_as_user),
