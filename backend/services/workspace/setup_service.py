@@ -33,6 +33,25 @@ SETUP_STEPS = [
 # Steps that require SSH and should be auto-completed for local (platform) servers.
 _LOCAL_SKIP_STEPS = {"ssh_test", "generate_ssh_key"}
 
+# bimetri patch: a local platform with no run-as user (PLATFORM_USER unset) runs as root with
+# the agents baked into the image. Creating a "coder" user inside the container would not
+# survive a recreate, yet runs would keep dropping to that user, so these steps are skipped.
+_LOCAL_ROOT_SKIP_STEPS = {
+    "create_worker_user",
+    "create_workspace_dir",
+    "install_agents",
+    "sync_agents",
+}
+
+
+def local_skip_steps(server: Any) -> set[str]:
+    """Setup steps a server skips: none for remote ones (bimetri patch)."""
+    if getattr(server, "server_type", "remote") != "local":
+        return set()
+    if getattr(server, "worker_user", None):
+        return set(_LOCAL_SKIP_STEPS)
+    return _LOCAL_SKIP_STEPS | _LOCAL_ROOT_SKIP_STEPS
+
 
 def _step_entry(status: str = "pending", error: str | None = None) -> dict[str, Any]:
     return {"status": status, "error": error, "timestamp": datetime.now(UTC).isoformat()}
@@ -82,7 +101,7 @@ class ServerSetupService:
                 )
 
             # Check if this is a local (platform) server
-            is_local = getattr(server, "server_type", "remote") == "local"
+            skip_steps = local_skip_steps(server)  # bimetri patch
 
             # Run each step
             for i, step_name in enumerate(SETUP_STEPS):
@@ -90,7 +109,7 @@ class ServerSetupService:
                     continue
 
                 # Skip SSH-specific steps for local servers
-                if is_local and step_name in _LOCAL_SKIP_STEPS:
+                if step_name in skip_steps:
                     async with self._session_factory() as session:
                         repo = WorkspaceServerRepository(session)
                         server = await repo.get_by_id(server_id)

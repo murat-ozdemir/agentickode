@@ -26,3 +26,7 @@
 ## 2026-11-13 — Attributed my own earlier code to the user
 **What went wrong:** I said the RUF001 warnings came "not from my changes but from earlier commits' Turkish text", as if someone else had written that code. I wrote all of it in earlier turns.
 **Rule for next time:** Code in this branch from earlier sessions is my work too. Say "from code I wrote in earlier turns", never imply the user made the mess. Own lint debt I left and track its cleanup.
+
+## 2026-11-13 — Full test suite in the production container set up the platform server
+**What went wrong:** I ran the full pytest suite inside `agentickode-backend-1` on dev-1. Three integration tests create a server through the API without mocking `ServerSetupService`; its background task opens `backend.database.async_session` (production Postgres), so it set up the real server with id 1, the platform. The platform had only ever been seeded `online` and never run the 9 setup steps, so latent upstream bugs (`playwright` binary name, dash `&>`, a `coder` user that does not exist in the container) surfaced. The task died with the pytest event loop and left "System Deps running" behind; I first blamed a backend restart and re-did the setup several times.
+**Rule for next time:** Never run tests against a deployed container's real settings. Run them with `DATABASE_URL=sqlite+aiosqlite:///<throwaway>` and keep the conftest guard that blocks real setups. When production state changes unexpectedly, first check what I ran at that minute.

@@ -58,7 +58,9 @@ class WorkerUserService:
         home = f"/home/{username}"
 
         # Create user idempotently
-        create_cmd = f"id -u {safe_user} &>/dev/null || useradd -m -s /bin/bash {safe_user}"
+        # bimetri patch: ">/dev/null 2>&1", not "&>": the local executor runs /bin/sh (dash),
+        # where "&>" backgrounds ``id`` and the line succeeds without creating the user.
+        create_cmd = f"id -u {safe_user} >/dev/null 2>&1 || useradd -m -s /bin/bash {safe_user}"
         _, stderr, rc = await self._ssh.run_command(create_cmd, timeout=15)
         if rc != 0:
             return WorkerUserInfo(

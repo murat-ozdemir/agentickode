@@ -9,7 +9,7 @@ any external PostgreSQL dependency. JSONB columns are mapped to SQLite JSON.
 """
 
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -98,6 +98,19 @@ async def client(db_engine) -> AsyncGenerator[AsyncClient, None]:
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             yield ac
         app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_server_setup():
+    """bimetri patch: never start a real server setup from a test.
+
+    The setup task opens its own session from ``backend.database.async_session``, not the
+    test DB. A test that creates a server would set up the real server with the same id
+    (id 1 = platform) when the suite runs inside a deployed container.
+    """
+    target = "backend.services.workspace.setup_service.ServerSetupService.kick_off_setup"
+    with patch(target, MagicMock()) as kick_off:
+        yield kick_off
 
 
 @pytest.fixture()
