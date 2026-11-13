@@ -37,14 +37,20 @@ install_codex() {
     echo "Installing OpenAI Codex CLI..."
     ARCH=$(uname -m)
     case "$ARCH" in aarch64|arm64) ARCH=aarch64;; x86_64|amd64) ARCH=x86_64;; esac
-    URL="https://github.com/openai/codex/releases/latest/download/codex-${ARCH}-unknown-linux-musl.tar.gz"
-    curl -fsSL "$URL" -o /tmp/codex.tar.gz
-    tar -xzf /tmp/codex.tar.gz -C /tmp
+    # bimetri patch: codex runs tool calls through codex-code-mode-host, a separate release
+    # asset it looks for next to its own binary; both must come from the same release.
+    TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/openai/codex/releases/latest)
+    TAG=${TAG##*/}
     mkdir -p "$HOME/.local/bin"
-    mv "/tmp/codex-${ARCH}-unknown-linux-musl" "$HOME/.local/bin/codex"
-    chmod +x "$HOME/.local/bin/codex"
-    rm -f /tmp/codex.tar.gz
-    echo "  Codex installed: $(command -v codex || echo 'not found')"
+    for BIN in codex codex-code-mode-host; do
+        URL="https://github.com/openai/codex/releases/download/${TAG}/${BIN}-${ARCH}-unknown-linux-musl.tar.gz"
+        curl -fsSL "$URL" -o "/tmp/${BIN}.tar.gz"
+        tar -xzf "/tmp/${BIN}.tar.gz" -C /tmp
+        mv "/tmp/${BIN}-${ARCH}-unknown-linux-musl" "$HOME/.local/bin/${BIN}"
+        chmod +x "$HOME/.local/bin/${BIN}"
+        rm -f "/tmp/${BIN}.tar.gz"
+    done
+    echo "  Codex ${TAG} installed: $(command -v codex || echo 'not found')"
 }
 
 install_gemini() {
