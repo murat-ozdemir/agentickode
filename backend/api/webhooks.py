@@ -181,12 +181,19 @@ async def gitea_issue_webhook(
     db: AsyncSession = Depends(get_db),
     repo: ProjectConfigRepository = Depends(_get_repo),
 ):
-    """Receive Gitea issue events."""
+    """Receive Gitea issue events (opened, and ai-task added later via label_updated)."""
+    from backend.api._bimetri_issue_label import (
+        ISSUE_ACTIONS,
+        issue_has_run,
+        issue_run_lock,
+        trigger_action,
+    )
+
     body = await request.json()
     action = body.get("action", "")
     issue = body.get("issue", {})
 
-    if action not in ("opened", "labeled"):
+    if action not in ISSUE_ACTIONS:
         return {"status": "ignored", "reason": f"action_{action}"}
 
     labels = issue.get("labels", [])
@@ -209,27 +216,30 @@ async def gitea_issue_webhook(
             type="issue_event",
             source="gitea",
             labels=label_names,
-            action=action or None,
+            action=trigger_action(action) or None,
         )
     )
 
-    run = _create_task_run(
-        task_id=task_id,
-        project=project,
-        title=issue.get("title", ""),
-        description=issue.get("body", ""),
-        task_source="gitea",
-        task_source_meta={
-            "issue_number": issue.get("number"),
-            "repo_full_name": repo_full_name,
-            "labels": label_names,
-        },
-        use_claude="use-claude" in label_names,
-        flow_prompt_id=matched_flow.id if matched_flow else None,
-    )
-    db.add(run)
-    await db.commit()
-    await db.refresh(run)
+    async with issue_run_lock:
+        if await issue_has_run(db, project.project_id, task_id):
+            return {"status": "ignored", "reason": "run_exists"}
+        run = _create_task_run(
+            task_id=task_id,
+            project=project,
+            title=issue.get("title", ""),
+            description=issue.get("body", ""),
+            task_source="gitea",
+            task_source_meta={
+                "issue_number": issue.get("number"),
+                "repo_full_name": repo_full_name,
+                "labels": label_names,
+            },
+            use_claude="use-claude" in label_names,
+            flow_prompt_id=matched_flow.id if matched_flow else None,
+        )
+        db.add(run)
+        await db.commit()
+        await db.refresh(run)
 
     logger.info(f"Created run #{run.id} from Gitea webhook: {run.title}")
     # bimetri yamasi: kuyruga alinan issue status/open ve bot (token sahibi) atanir

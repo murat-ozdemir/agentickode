@@ -9,6 +9,7 @@ import logging
 import httpx
 
 from backend.config import settings
+from backend.services.git._bimetri_board import move_issue_card
 
 logger = logging.getLogger("agentickode.git_provider")
 
@@ -191,8 +192,25 @@ class GiteaProvider:
         if resp.status_code != 404:
             resp.raise_for_status()
 
-    # bimetri yamasi: tek durum etiketi - hedef status/* eklenir, digerleri (issue ya da PR) kaldirilir
+    # bimetri yamasi: tek durum etiketi - hedef status/* eklenir, digerleri (issue ya da PR) kaldirilir;
+    # issue bir proje panosundaysa karti da durumun sutununa tasinir (hata etiketi bozmaz)
     async def set_status_label(self, repo_path: str, number: int, label: str | None) -> None:
+        await self._set_status_label(repo_path, number, label)
+        if not label:
+            return
+        try:
+            await move_issue_card(
+                self._client,
+                f"{self._base_url}/api/v1",
+                self._headers(),
+                repo_path,
+                number,
+                label,
+            )
+        except Exception:
+            logger.warning("Board card move failed: %s #%s", repo_path, number, exc_info=True)
+
+    async def _set_status_label(self, repo_path: str, number: int, label: str | None) -> None:
         base = f"{self._base_url}/api/v1/repos/{repo_path}/issues/{number}/labels"
         resp = await self._client.get(base, headers=self._headers(), timeout=30.0)
         resp.raise_for_status()
