@@ -81,11 +81,11 @@ async def rename_session(session_id: str, req: RenameRequest):
 
 
 @router.delete("/chat/sessions/{session_id}")
-async def close_session(session_id: str):
-    """Close a chat session."""
+async def delete_session(session_id: str):
+    """Delete a chat session and its agent transcript."""
     async with async_session() as db:
-        await chat_service.close_session(db, session_id)
-    return {"status": "closed"}
+        found = await chat_service.delete_session(db, session_id)
+    return {"status": "deleted" if found else "not_found"}
 
 
 @router.websocket("/ws/chat/{session_id}")

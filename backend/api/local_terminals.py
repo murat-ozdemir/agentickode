@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.local_sessions import LocalTerminalSession
+from backend.services.chat._bimetri_cleanup import agent_home, remove_claude_session_files
 from backend.services.workspace.platform_user import get_platform_run_as_user
 from backend.worker.broadcaster import broadcaster
 
@@ -283,6 +284,8 @@ async def close_local_session(
 
     await db.delete(session)
     await db.commit()
+    if session.agent_name == "claude" and session.agent_session_id:
+        remove_claude_session_files(session.agent_session_id, agent_home(session.run_as_user))
 
     logger.info("Deleted local terminal session %s", session_id)
 

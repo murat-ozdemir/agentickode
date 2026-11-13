@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.chat import ChatSession
+from backend.services.chat._bimetri_cleanup import agent_home, remove_claude_session_files
 from backend.services.chat.agent_process import (
     invoke_agent,
     invoke_agent_streaming,
@@ -178,13 +179,22 @@ class ChatService:
         )
         return list(result.scalars().all())
 
-    async def close_session(self, db: AsyncSession, session_id: str) -> None:
-        """Close a session."""
+    async def delete_session(self, db: AsyncSession, session_id: str) -> bool:
+        """Delete a session: its row and the agent's own session files (bimetri patch).
+
+        It used to be marked "closed" only, and the list still returned it.
+        """
         chat = await self._get_session(db, session_id)
-        if chat:
-            chat.status = "closed"
-            await db.commit()
-            logger.info("Closed chat session %s", session_id)
+        if not chat:
+            return False
+        agent_session_id = chat.agent_session_id or chat.session_id
+        run_as_user = await get_platform_run_as_user(db)
+        await db.delete(chat)
+        await db.commit()
+        if chat.agent_name == "claude":
+            remove_claude_session_files(agent_session_id, agent_home(run_as_user))
+        logger.info("Deleted chat session %s", session_id)
+        return True
 
     async def rename_session(
         self, db: AsyncSession, session_id: str, name: str
