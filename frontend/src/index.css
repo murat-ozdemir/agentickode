@@ -23,3 +23,24 @@
     border-radius: 3px;
   }
 }
+
+/* bimetri patch: Markdown inside chat answers (no typography plugin here). */
+@layer components {
+  .chat-md { @apply break-words leading-relaxed; }
+  .chat-md > * + * { @apply mt-2; }
+  .chat-md h1, .chat-md h2, .chat-md h3, .chat-md h4 { @apply font-semibold text-gray-100 mt-3; }
+  .chat-md h1 { @apply text-lg; }
+  .chat-md h2 { @apply text-base; }
+  .chat-md strong { @apply font-semibold text-gray-100; }
+  .chat-md a { @apply text-violet-400 underline; }
+  .chat-md ul { @apply list-disc pl-5 space-y-0.5; }
+  .chat-md ol { @apply list-decimal pl-5 space-y-0.5; }
+  .chat-md code { @apply rounded bg-gray-900 px-1 py-0.5 font-mono text-[0.85em] text-gray-200; }
+  .chat-md pre { @apply overflow-x-auto rounded bg-gray-900 p-3; }
+  .chat-md pre code { @apply bg-transparent p-0; }
+  .chat-md blockquote { @apply border-l-2 border-gray-600 pl-3 text-gray-400; }
+  .chat-md table { @apply block overflow-x-auto border-collapse text-xs; }
+  .chat-md th, .chat-md td { @apply border border-gray-700 px-2 py-1 text-left; }
+  .chat-md th { @apply bg-gray-900 font-semibold text-gray-200; }
+  .chat-md hr { @apply border-gray-700; }
+}

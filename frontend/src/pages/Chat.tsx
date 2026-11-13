@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import ChatMarkdown from "../components/chat/ChatMarkdown";
 import LocalTerminal from "../components/chat/LocalTerminal";
 import { AGENT_NAMES, VISIBLE_AGENTS } from "../types";
 
@@ -657,7 +658,11 @@ export default function Chat() {
                           : "bg-gray-800 text-gray-300 border border-gray-700"
                       }`}
                     >
-                      <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                      {msg.role === "user" ? (
+                        <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                      ) : (
+                        <ChatMarkdown text={msg.content} />
+                      )}
                     </div>
                   </div>
                 ))}

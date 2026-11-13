@@ -57,6 +57,7 @@ class TestCodexCommand:
 
     def test_instructions_only_go_in_front_of_a_new_thread(self):
         assert codex_message("selam", "KURALLAR", True).startswith("KURALLAR")
+        assert "run_workspace_command" in codex_message("selam", "KURALLAR", True)
         assert codex_message("selam", "KURALLAR", False) == "selam"
 
     def test_a_chat_needs_a_thread_until_codex_reported_one(self):

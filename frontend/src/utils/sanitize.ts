@@ -25,3 +25,11 @@ export function renderDescription(text: string): string {
   const parsed = marked(text) as string;
   return DOMPurify.sanitize(parsed);
 }
+/**
+ * bimetri patch: renders a chat answer (always Markdown, GFM tables, single newlines kept)
+ * as sanitized HTML.
+ */
+export function renderChatMarkdown(text: string): string {
+  const parsed = marked.parse(text, { gfm: true, breaks: true, async: false }) as string;
+  return DOMPurify.sanitize(parsed);
+}

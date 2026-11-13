@@ -41,10 +41,19 @@ def thread_id_from(events: list[dict]) -> str | None:
     return None
 
 
+# The read-only sandbox needs bwrap namespaces, which Docker's default seccomp profile
+# blocks, so every shell command fails inside the backend container.
+NO_SHELL_NOTE = (
+    "Not: Bu ortamda kabuk komutları codex sandbox'ında çalışmaz (bwrap namespace açamıyor). "
+    "Kabuk denemeden AgenticKode araçlarını kullan; bir sunucuda komut gerekiyorsa "
+    "run_workspace_command aracını çağır."
+)
+
+
 def codex_message(message: str, system_prompt: str, is_new: bool) -> str:
     if not is_new:
         return message
-    return f"{system_prompt}\n\n---\n\nKullanıcının mesajı:\n\n{message}"
+    return f"{system_prompt}\n\n{NO_SHELL_NOTE}\n\n---\n\nKullanıcının mesajı:\n\n{message}"
 
 
 def codex_command(msg_path: str, thread_id: str | None, platform_url: str) -> str:

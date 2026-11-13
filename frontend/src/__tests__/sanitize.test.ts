@@ -3,7 +3,7 @@
 // Commercial licensing: info@mechemsi.com
 
 import { describe, it, expect } from "vitest";
-import { renderDescription } from "../utils/sanitize";
+import { renderChatMarkdown, renderDescription } from "../utils/sanitize";
 
 describe("renderDescription", () => {
   it("preserves HTML tags when input contains HTML", () => {
@@ -66,5 +66,26 @@ describe("renderDescription", () => {
     const input = '<img src="x" onerror="alert(1)">';
     const output = renderDescription(input);
     expect(output).not.toContain("onerror");
+  });
+});
+describe("renderChatMarkdown", () => {
+  it("renders bold, lists and GFM tables from a chat answer", () => {
+    const out = renderChatMarkdown(
+      "**MCP** hazır\n\n- bir\n- iki\n\n| Sunucu | Adres |\n|---|---|\n| worker-1 | `192.168.20.10` |",
+    );
+    expect(out).toContain("<strong>MCP</strong>");
+    expect(out).toContain("<li>bir</li>");
+    expect(out).toContain("<table>");
+    expect(out).toContain("<code>192.168.20.10</code>");
+  });
+
+  it("keeps single newlines as line breaks", () => {
+    expect(renderChatMarkdown("[Using tool: a]\n[Using tool: b]")).toContain("<br>");
+  });
+
+  it("strips scripts and inline handlers", () => {
+    const out = renderChatMarkdown('<img src=x onerror="alert(1)"><script>alert(2)</script>');
+    expect(out).not.toContain("onerror");
+    expect(out).not.toContain("<script");
   });
 });
