@@ -27,6 +27,8 @@ import tempfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+from backend.services.chat._bimetri_codex_chat import CodexEvents, codex_command, codex_message
+
 logger = logging.getLogger("agentickode.chat.agent_process")
 
 # System prompt for the conversational agent
@@ -89,9 +91,10 @@ AGENT_COMMANDS: dict[str, dict[str, str]] = {
         ),
         "check": "command -v claude",
     },
+    # bimetri patch: built by _bimetri_codex_chat.codex_command (codex exec --json)
     "codex": {
-        "new": "codex --quiet -p {message}",
-        "resume": "codex --quiet -p {message}",
+        "new": "codex exec --json -",
+        "resume": "codex exec --json resume {session_id} -",
         "check": "command -v codex",
     },
     "gemini": {
@@ -218,6 +221,8 @@ async def invoke_agent(
             stream_events=[],
         )
 
+    if agent_name == "codex":  # bimetri patch: codex exec has no system prompt flag
+        message = codex_message(message, SYSTEM_PROMPT, is_new_session)
     # Write message to file to avoid shell escaping issues
     msg_path = _write_message_file(message)
     mcp_config_path = _write_mcp_config(platform_url)
@@ -235,6 +240,9 @@ async def invoke_agent(
             )
             # Pipe message file to stdin
             cmd_str = f"cat {msg_path} | {cmd_str.strip()}"
+        elif agent_name == "codex":  # bimetri patch
+            thread_id = None if is_new_session else session_id
+            cmd_str = codex_command(msg_path, thread_id, platform_url)
         else:
             cmd_str = template.format(
                 message=msg_path,
@@ -272,7 +280,10 @@ async def invoke_agent(
         output_text, events = _parse_stream_output(stdout, agent_name)
         # bimetri yamasi: ajan hata verdiyse bos cevap yerine hatayi goster
         if not output_text and exit_code:
-            output_text = stderr_bytes.decode("utf-8", errors="replace").strip() or f"Ajan hata verdi (kod {exit_code})"
+            output_text = (
+                stderr_bytes.decode("utf-8", errors="replace").strip()
+                or f"Ajan hata verdi (kod {exit_code})"
+            )
 
         return InvocationResult(
             output=output_text,
@@ -296,10 +307,12 @@ async def invoke_agent_streaming(
     platform_url: str = "http://localhost:8000",
     timeout: float = 120.0,
     run_as_user: str | None = None,
+    session_sink: dict | None = None,
 ) -> AsyncIterator[str]:
     """Invoke an agent and stream output chunks as they arrive.
 
-    Yields parsed text chunks for real-time display in the chat UI.
+    Yields parsed text chunks for real-time display in the chat UI. For codex the thread id
+    it started goes into ``session_sink["agent_session_id"]`` (bimetri patch).
     """
     cmds = AGENT_COMMANDS.get(agent_name)
     if not cmds:
@@ -310,6 +323,8 @@ async def invoke_agent_streaming(
         yield f"Agent {agent_name} is not installed in this container"
         return
 
+    if agent_name == "codex":  # bimetri patch: codex exec has no system prompt flag
+        message = codex_message(message, SYSTEM_PROMPT, is_new_session)
     msg_path = _write_message_file(message)
     mcp_config_path = _write_mcp_config(platform_url)
     if run_as_user:
@@ -323,6 +338,9 @@ async def invoke_agent_streaming(
                 mcp_config=mcp_config_path,
             )
             cmd_str = f"cat {msg_path} | {cmd_str.strip()}"
+        elif agent_name == "codex":  # bimetri patch
+            thread_id = None if is_new_session else session_id
+            cmd_str = codex_command(msg_path, thread_id, platform_url)
         else:
             cmd_str = template.format(
                 message=msg_path,
@@ -344,6 +362,7 @@ async def invoke_agent_streaming(
             yield "No output from agent"
             return
 
+        codex = CodexEvents() if agent_name == "codex" else None
         while True:
             try:
                 line = await asyncio.wait_for(proc.stdout.readline(), timeout=timeout)
@@ -381,10 +400,18 @@ async def invoke_agent_streaming(
                             pass  # Skip raw tool results
                 except json.JSONDecodeError:
                     yield decoded
+            elif codex:
+                for text in codex.feed(decoded):
+                    yield text
             else:
                 yield decoded
 
         await proc.wait()
+        if codex:
+            for text in codex.finish():
+                yield text
+            if codex.thread_id and session_sink is not None:
+                session_sink["agent_session_id"] = codex.thread_id
 
     finally:
         for path in (msg_path, mcp_config_path):
@@ -394,6 +421,9 @@ async def invoke_agent_streaming(
 
 def _parse_stream_output(stdout: str, agent_name: str) -> tuple[str, list[dict]]:
     """Parse agent output, extracting text and stream events."""
+    if agent_name == "codex":  # bimetri patch
+        codex = CodexEvents()
+        return codex.parse(stdout), codex.events
     if agent_name != "claude":
         return stdout.strip(), []
 

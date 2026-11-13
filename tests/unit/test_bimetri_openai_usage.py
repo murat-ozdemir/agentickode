@@ -63,7 +63,8 @@ class TestFetchDailyCosts:
         }
         first, second = (c.kwargs["params"] for c in http.get.call_args_list)
         assert first["start_time"] == _ts(date(2026, 11, 1))
-        assert first["end_time"] == int(NOW.timestamp())
+        # The whole current day: an end_time inside today drops today's bucket.
+        assert first["end_time"] == _ts(date(2026, 11, 11))
         assert first["bucket_width"] == "1d" and first["limit"] == 180
         assert second["page"] == "p2"
         assert http.get.call_args.kwargs["headers"] == {"Authorization": "Bearer admin-test"}

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.chat import ChatSession
 from backend.services.chat._bimetri_cleanup import agent_home, remove_claude_session_files
+from backend.services.chat._bimetri_codex_chat import needs_new_thread, thread_id_from
 from backend.services.chat.agent_process import (
     invoke_agent,
     invoke_agent_streaming,
@@ -95,6 +96,10 @@ class ChatService:
 
         # Invoke agent (one-shot with session resume)
         agent_session_id = chat.agent_session_id or chat.session_id
+        # bimetri patch: a codex chat starts a thread until codex has reported one
+        is_first = is_first or needs_new_thread(
+            chat.agent_name, chat.agent_session_id, chat.session_id
+        )
 
         run_as_user = await get_platform_run_as_user(db)
         result = await invoke_agent(
@@ -105,6 +110,9 @@ class ChatService:
             platform_url=platform_url,
             run_as_user=run_as_user,
         )
+
+        if chat.agent_name == "codex" and (thread_id := thread_id_from(result.stream_events)):
+            chat.agent_session_id = thread_id  # bimetri patch: codex picks its thread id
 
         # Append assistant response
         msgs = list(chat.messages or [])
@@ -143,7 +151,12 @@ class ChatService:
         await db.commit()
 
         agent_session_id = chat.agent_session_id or chat.session_id
+        # bimetri patch: a codex chat starts a thread until codex has reported one
+        is_first = is_first or needs_new_thread(
+            chat.agent_name, chat.agent_session_id, chat.session_id
+        )
         response_parts: list[str] = []
+        session_sink: dict = {}
 
         run_as_user = await get_platform_run_as_user(db)
         async for chunk in invoke_agent_streaming(
@@ -153,9 +166,13 @@ class ChatService:
             is_new_session=is_first,
             platform_url=platform_url,
             run_as_user=run_as_user,
+            session_sink=session_sink,
         ):
             response_parts.append(chunk)
             yield chunk
+
+        if thread_id := session_sink.get("agent_session_id"):
+            chat.agent_session_id = thread_id  # bimetri patch: codex picks its thread id
 
         # Store full response
         msgs = list(chat.messages or [])

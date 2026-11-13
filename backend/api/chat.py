@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -56,7 +56,8 @@ async def get_session(session_id: str):
         result = await db.execute(select(ChatSession).where(ChatSession.session_id == session_id))
         chat = result.scalar_one_or_none()
         if not chat:
-            return {"error": "Session not found"}
+            # bimetri patch: 404, not a 200 error body the page took for a session
+            raise HTTPException(404, "Session not found")
         return _session_to_dict(chat)
 
 
@@ -76,7 +77,8 @@ async def rename_session(session_id: str, req: RenameRequest):
     async with async_session() as db:
         chat = await chat_service.rename_session(db, session_id, req.name)
         if not chat:
-            return {"error": "Session not found"}
+            # bimetri patch: 404, not a 200 error body the page took for a session
+            raise HTTPException(404, "Session not found")
         return _session_to_dict(chat)
 
 

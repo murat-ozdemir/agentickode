@@ -6,11 +6,11 @@
 
 Spend is never computed from tokens x price: the daily buckets (UTC) the platform shows are
 stored as reported and summed as Decimal, rounded to cents only for display. Each sync re-reads
-every day from min(month start, first credit day) up to now, so cost that arrives late on an
+every day from min(month start, first credit day) through today, so cost that arrives late on an
 earlier day is picked up. Off while OPENAI_ADMIN_KEY is empty.
 """
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 import httpx
@@ -52,10 +52,14 @@ def _describe(exc: Exception) -> str:
 
 
 async def fetch_daily_costs(start: date, end: datetime) -> dict[date, Decimal]:
-    """Organization spend per UTC day in [start, end), every project and line item."""
+    """Organization spend per UTC day from ``start`` through the day of ``end``.
+
+    end_time is the end of that day: the Costs API leaves out a bucket that end_time cuts in
+    half, so with end_time=now today's spend never showed until the day was over.
+    """
     params: dict = {
         "start_time": _day_start(start),
-        "end_time": int(end.timestamp()),
+        "end_time": _day_start(end.date() + timedelta(days=1)),
         "bucket_width": "1d",
         "limit": 180,
     }
