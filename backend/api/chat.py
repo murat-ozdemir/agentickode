@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from backend.database import async_session
 from backend.models.chat import ChatSession
+from backend.services.chat._bimetri_chat_guard import BUSY_DETAIL, session_turn
 from backend.services.chat.chat_service import chat_service
 
 router = APIRouter(tags=["chat"])
@@ -64,11 +65,14 @@ async def get_session(session_id: str):
 @router.post("/chat/sessions/{session_id}/message")
 async def send_message(session_id: str, req: SendMessageRequest):
     """Send a message and get the agent's response."""
-    async with async_session() as db:
-        response_parts = []
-        async for chunk in chat_service.send_message(db, session_id, req.message):
-            response_parts.append(chunk)
-        return {"response": "\n".join(response_parts)}
+    with session_turn(session_id) as free:  # bimetri patch: one turn at a time
+        if not free:
+            raise HTTPException(409, BUSY_DETAIL)
+        async with async_session() as db:
+            response_parts = []
+            async for chunk in chat_service.send_message(db, session_id, req.message):
+                response_parts.append(chunk)
+            return {"response": "\n".join(response_parts)}
 
 
 @router.post("/chat/sessions/{session_id}/rename")
@@ -110,9 +114,15 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
 
             if msg_type == "message":
                 content = data.get("content", "")
-                async with async_session() as db:
-                    async for chunk in chat_service.send_message_streaming(db, session_id, content):
-                        await websocket.send_json({"type": "chunk", "content": chunk})
+                with session_turn(session_id) as free:  # bimetri patch
+                    if not free:
+                        await websocket.send_json({"type": "error", "content": BUSY_DETAIL})
+                        continue
+                    async with async_session() as db:
+                        async for chunk in chat_service.send_message_streaming(
+                            db, session_id, content
+                        ):
+                            await websocket.send_json({"type": "chunk", "content": chunk})
                 await websocket.send_json({"type": "done"})
 
     except WebSocketDisconnect:

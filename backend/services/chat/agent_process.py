@@ -27,6 +27,7 @@ import tempfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+from backend.services.chat._bimetri_chat_guard import kill_agent, spawn_agent
 from backend.services.chat._bimetri_codex_chat import CodexEvents, codex_command, codex_message
 
 logger = logging.getLogger("agentickode.chat.agent_process")
@@ -255,17 +256,12 @@ async def invoke_agent(
 
         logger.info("Invoking %s (session=%s, new=%s)", agent_name, session_id[:8], is_new_session)
 
-        proc = await asyncio.create_subprocess_shell(
-            cmd_str,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
+        proc = await spawn_agent(cmd_str, env)  # bimetri patch: own process group
 
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except TimeoutError:
-            proc.kill()
+            kill_agent(proc)  # bimetri patch: proc.kill() left codex running
             await proc.wait()
             return InvocationResult(
                 output="Agent timed out",
@@ -351,12 +347,7 @@ async def invoke_agent_streaming(
         cmd_str = _wrap_runuser(cmd_str, run_as_user)
         env = {**os.environ, "AGENTICKODE_URL": platform_url}
 
-        proc = await asyncio.create_subprocess_shell(
-            cmd_str,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
+        proc = await spawn_agent(cmd_str, env)  # bimetri patch: own process group
 
         if not proc.stdout:
             yield "No output from agent"
@@ -367,7 +358,7 @@ async def invoke_agent_streaming(
             try:
                 line = await asyncio.wait_for(proc.stdout.readline(), timeout=timeout)
             except TimeoutError:
-                proc.kill()
+                kill_agent(proc)  # bimetri patch: proc.kill() left codex running
                 yield "\n[Agent timed out]"
                 break
 

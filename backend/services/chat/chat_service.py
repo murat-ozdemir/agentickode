@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.chat import ChatSession
+from backend.services.chat._bimetri_chat_guard import CHAT_TIMEOUT
 from backend.services.chat._bimetri_cleanup import agent_home, remove_claude_session_files
 from backend.services.chat._bimetri_codex_chat import needs_new_thread, thread_id_from
 from backend.services.chat.agent_process import (
@@ -109,6 +110,7 @@ class ChatService:
             is_new_session=is_first,
             platform_url=platform_url,
             run_as_user=run_as_user,
+            timeout=CHAT_TIMEOUT,  # bimetri patch
         )
 
         if chat.agent_name == "codex" and (thread_id := thread_id_from(result.stream_events)):
@@ -166,6 +168,7 @@ class ChatService:
             is_new_session=is_first,
             platform_url=platform_url,
             run_as_user=run_as_user,
+            timeout=CHAT_TIMEOUT,  # bimetri patch
             session_sink=session_sink,
         ):
             response_parts.append(chunk)

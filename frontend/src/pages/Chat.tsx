@@ -335,6 +335,13 @@ export default function Chat() {
         setActiveChatSession((prev) =>
           prev ? { ...prev, messages: [...prev.messages, assistantMsg] } : prev,
         );
+      } else if (res.status === 409) {
+        // bimetri patch: the backend refuses a second message while one is running
+        const body = await res.json().catch(() => null);
+        setActiveChatSession((prev) =>
+          prev ? { ...prev, messages: prev.messages.filter((m) => m !== userMsg) } : prev,
+        );
+        setError(body?.detail ?? "The previous message is still being processed.");
       } else {
         setError(`Agent error: ${res.status} ${res.statusText}`);
       }
