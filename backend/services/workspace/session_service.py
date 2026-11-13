@@ -80,7 +80,8 @@ class SessionService:
                 f"claude --dangerously-skip-permissions --session-id {shlex.quote(session_id)}"
             )
         elif agent_name == "codex":
-            agent_cmd = "codex"
+            # bimetri patch: no ChatGPT-connected apps (Jira, Sites...); they shadow the repo.
+            agent_cmd = "codex -c features.apps=false"
         else:
             agent_cmd = agent_name
 

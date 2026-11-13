@@ -56,8 +56,8 @@ class TestCodexCommand:
         assert f"resume {THREAD} - 2>&1" in cmd
 
     def test_instructions_only_go_in_front_of_a_new_thread(self):
-        assert codex_message("selam", "KURALLAR", True).startswith("KURALLAR")
-        assert "run_workspace_command" in codex_message("selam", "KURALLAR", True)
+        expected = "KURALLAR\n\n---\n\nKullanıcının mesajı:\n\nselam"
+        assert codex_message("selam", "KURALLAR", True) == expected
         assert codex_message("selam", "KURALLAR", False) == "selam"
 
     def test_a_chat_needs_a_thread_until_codex_reported_one(self):

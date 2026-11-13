@@ -22,6 +22,14 @@ services:
       UVICORN_RELOAD: ""
       # On a native crash (segfault), dump the Python stack of every thread to the log.
       PYTHONFAULTHANDLER: "1"
+    # codex runs shell commands in a bwrap sandbox, which needs an unprivileged user
+    # namespace. Docker's default seccomp and AppArmor profiles both block that
+    # ("bwrap: No permissions to create a new namespace"). Tested on dev-1: both lifted is
+    # the minimum that works. This container already mounts docker.sock (root on the host),
+    # so dropping these filters adds little exposure.
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
 
   postgres:
     image: pgvector/pgvector:pg16
