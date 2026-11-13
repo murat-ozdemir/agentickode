@@ -75,18 +75,29 @@ const STEP_LABELS: Record<string, string> = {
   mark_online: "Finalize",
 };
 
-/** Check if a running step looks stuck (>10 min since timestamp). */
+/** bimetri patch: Postgres JSONB reorders keys by length, so list steps in setup order. */
+const STEP_ORDER = Object.keys(STEP_LABELS);
+function orderedSteps(log: NonNullable<WSType["setup_log"]>) {
+  const rank = (name: string) => {
+    const i = STEP_ORDER.indexOf(name);
+    return i === -1 ? STEP_ORDER.length : i;
+  };
+  return Object.entries(log).sort(([a], [b]) => rank(a) - rank(b));
+}
+
+/** Check if a running step looks stuck (>20 min since timestamp). */
 function isStepStuck(entry: { status: string; timestamp?: string }): boolean {
   if (entry.status !== "running" || !entry.timestamp) return false;
   const elapsed = Date.now() - new Date(entry.timestamp).getTime();
-  return elapsed > 10 * 60 * 1000;
+  // bimetri patch: system deps alone may take ~15 min (apt + gh + node + playwright timeouts)
+  return elapsed > 20 * 60 * 1000;
 }
 
 function SetupProgress({ server, onForceRetry }: { server: WSType; onForceRetry?: () => void }) {
   const log = server.setup_log;
   if (!log) return null;
 
-  const steps = Object.entries(log);
+  const steps = orderedSteps(log);
   const completed = steps.filter(([, v]) => v.status === "completed" || v.status === "skipped").length;
   const failed = steps.find(([, v]) => v.status === "failed");
   const running = steps.find(([, v]) => v.status === "running");
@@ -594,7 +605,7 @@ export default function WorkspaceServers() {
             <div className="mt-3 pt-3 border-t border-gray-700/40 animate-fade-in">
               <h4 className="text-xs text-gray-400 mb-2 font-medium">Setup Log</h4>
               <div className="space-y-1.5">
-                {Object.entries(s.setup_log).map(([name, entry]) => (
+                {orderedSteps(s.setup_log).map(([name, entry]) => (
                   <div key={name}>
                     <div className="flex items-center gap-2 text-xs">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${

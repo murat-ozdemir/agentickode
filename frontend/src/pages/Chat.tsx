@@ -63,12 +63,30 @@ const FALLBACK_AGENTS = [...AGENT_NAMES];
 
 // ─── Component ──────────────────────────────────────────────────────
 const LAST_SESSION_KEY = "agentickode_last_chat_session";
+// bimetri patch: remember the picked agent across visits (it reset to claude on every load)
+const AGENT_KEY = "agentickode_chat_agent";
+function loadAgent(): string {
+  try {
+    return window.localStorage.getItem(AGENT_KEY) || "claude";
+  } catch {
+    return "claude";
+  }
+}
+function saveAgent(agent: string) {
+  try {
+    window.localStorage.setItem(AGENT_KEY, agent);
+  } catch { /* storage unavailable: keep the choice for this visit only */ }
+}
 
 export default function Chat() {
   const { sessionId: urlSessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>(urlSessionId ? "chat" : "terminal");
-  const [selectedAgent, setSelectedAgent] = useState("claude");
+  const [selectedAgent, setSelectedAgentState] = useState(loadAgent);
+  const setSelectedAgent = (agent: string) => {
+    setSelectedAgentState(agent);
+    saveAgent(agent);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [agents, setAgents] = useState<string[]>(FALLBACK_AGENTS);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +119,11 @@ export default function Chat() {
         const enabled = data
           .filter((a) => a.enabled && VISIBLE_AGENTS.has(a.agent_name))
           .map((a) => a.agent_name);
-        if (enabled.length > 0) setAgents(enabled);
+        if (enabled.length > 0) {
+          setAgents(enabled);
+          // bimetri patch: a remembered agent that is no longer offered falls back to the first
+          setSelectedAgentState((cur) => (enabled.includes(cur) ? cur : enabled[0]));
+        }
       }
     } catch { /* use fallback */ }
   }, []);

@@ -297,7 +297,11 @@ async def _install_system_deps(ssh: CommandExecutor, server_id: int, username: s
     if rc != 0:
         failed.append(f"nodejs: {stderr.strip()[:500]}")
 
-    pw_cmd = "npm install -g @playwright/cli@latest && playwright install --with-deps chrome"
+    # bimetri patch: @playwright/cli ships the ``playwright-cli`` command, not ``playwright``
+    pw_cmd = (
+        "npm install -g @playwright/cli@latest && "
+        "playwright-cli install-browser --with-deps chrome"
+    )
     stdout, stderr, rc = await ssh.run_command(pw_cmd, timeout=300)
     if rc != 0:
         err = stderr.strip() or stdout.strip()
@@ -354,7 +358,7 @@ async def _install_user_deps(ssh: CommandExecutor, username: str) -> list[str]:
         ("node", "node --version"),
         ("npm", "npm --version"),
         ("bun", "bun --version"),
-        ("playwright", "playwright --version"),
+        ("playwright-cli", "playwright-cli --version"),  # bimetri patch
     ]
     missing: list[str] = []
     for name, cmd in checks:

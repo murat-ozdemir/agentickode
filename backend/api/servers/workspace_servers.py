@@ -136,7 +136,11 @@ async def list_workspace_servers(
                 continue
             reachable, err = ping
             if reachable:
-                if s.status != "online":
+                # bimetri patch: reachable is not set up — a ping must not hide a running or
+                # failed setup behind a green dot; only a finished setup may flip it online.
+                if s.status in ("setting_up", "setup_failed"):
+                    await repo.update(s, {"last_seen_at": now})
+                elif s.status != "online":
                     await repo.update(
                         s, {"status": "online", "last_seen_at": now, "error_message": None}
                     )

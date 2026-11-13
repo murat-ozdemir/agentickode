@@ -48,6 +48,7 @@ class TestCodexCommand:
         assert BRIDGE in cmd and "http://localhost:8000/mcp/sse" in cmd
         assert "read-only" in cmd
         assert "dangerously" not in cmd
+        assert "-c features.apps=false" in cmd
 
     def test_later_messages_resume_the_thread(self):
         cmd = codex_command("/tmp/m.txt", THREAD, "http://localhost:8000")

@@ -59,6 +59,9 @@ def codex_command(msg_path: str, thread_id: str | None, platform_url: str) -> st
         f"mcp_servers.agentickode.command={json.dumps(sys.executable)}",
         "-c",
         f"mcp_servers.agentickode.args={json.dumps([BRIDGE, f'{platform_url}/mcp/sse'])}",
+        # ChatGPT-connected apps (e.g. Supabase's list_projects) shadow the platform tools.
+        "-c",
+        "features.apps=false",
     ]
     cmd = "codex exec " + " ".join(shlex.quote(o) for o in opts)
     if thread_id:
