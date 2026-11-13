@@ -103,12 +103,13 @@ export default function Chat() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatSession, setActiveChatSession] = useState<ChatSession | null>(null);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  // bimetri patch: which sessions wait for an answer. A single global flag showed one
+  // session's spinner and answer in whichever session was open when the answer came.
+  const [pendingSessions, setPendingSessions] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [setupNeeded, setSetupNeeded] = useState(false);
   const [runningSetup, setRunningSetup] = useState(false);
   const [setupLog, setSetupLog] = useState("");
-  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Data fetching ────────────────────────────────────────────────
@@ -306,21 +307,35 @@ export default function Chat() {
     }
   };
 
+  const loading = !!activeChatSession && pendingSessions.has(activeChatSession.session_id);
+
+  const setPending = (sessionId: string, pending: boolean) =>
+    setPendingSessions((prev) => {
+      const next = new Set(prev);
+      if (pending) next.add(sessionId);
+      else next.delete(sessionId);
+      return next;
+    });
+
+  // Change a session's messages only while that session is still the open one.
+  const updateMessages = (sessionId: string, change: (msgs: ChatMessage[]) => ChatMessage[]) =>
+    setActiveChatSession((prev) =>
+      prev && prev.session_id === sessionId ? { ...prev, messages: change(prev.messages) } : prev,
+    );
+
   const sendMessage = async () => {
-    if (!input.trim() || !activeChatSession || loading || sending) return;
+    if (!input.trim() || !activeChatSession || loading) return;
+    const sessionId = activeChatSession.session_id;
     const msg = input.trim();
     setInput("");
     setError(null);
-    setSending(true);
+    setPending(sessionId, true);
 
     const userMsg: ChatMessage = { role: "user", content: msg, timestamp: new Date().toISOString() };
-    setActiveChatSession((prev) =>
-      prev ? { ...prev, messages: [...prev.messages, userMsg] } : prev,
-    );
+    updateMessages(sessionId, (msgs) => [...msgs, userMsg]);
 
-    setLoading(true);
     try {
-      const res = await fetch(`/api/chat/sessions/${activeChatSession.session_id}/message`, {
+      const res = await fetch(`/api/chat/sessions/${sessionId}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg }),
@@ -332,15 +347,11 @@ export default function Chat() {
           content: data.response || "(empty response)",
           timestamp: new Date().toISOString(),
         };
-        setActiveChatSession((prev) =>
-          prev ? { ...prev, messages: [...prev.messages, assistantMsg] } : prev,
-        );
+        updateMessages(sessionId, (msgs) => [...msgs, assistantMsg]);
       } else if (res.status === 409) {
         // bimetri patch: the backend refuses a second message while one is running
         const body = await res.json().catch(() => null);
-        setActiveChatSession((prev) =>
-          prev ? { ...prev, messages: prev.messages.filter((m) => m !== userMsg) } : prev,
-        );
+        updateMessages(sessionId, (msgs) => msgs.filter((m) => m !== userMsg));
         setError(body?.detail ?? "The previous message is still being processed.");
       } else {
         setError(`Agent error: ${res.status} ${res.statusText}`);
@@ -348,8 +359,7 @@ export default function Chat() {
     } catch (e) {
       setError(`Network error: ${e instanceof Error ? e.message : "connection failed"}`);
     } finally {
-      setLoading(false);
-      setSending(false);
+      setPending(sessionId, false);
     }
   };
 
