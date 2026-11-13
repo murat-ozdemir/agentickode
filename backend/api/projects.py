@@ -29,6 +29,7 @@ from backend.services.encryption import encrypt_value
 from backend.services.git.repo_info import get_default_branch, get_default_branch_via_ssh
 from backend.services.git.url_parser import parse_git_url
 from backend.services.http_client import get_http_client
+from backend.services.run_factory import default_workspace_path
 from backend.services.workspace.command_executor import executor_for_server
 
 router = APIRouter(tags=["projects"])
@@ -201,7 +202,7 @@ async def check_workspace_readiness(
             continue
 
         # Resolve expected project path on workspace
-        raw_path = project.workspace_path or project.repo_name
+        raw_path = default_workspace_path(project)
         if raw_path.startswith("/"):
             expected_path = raw_path
         else:

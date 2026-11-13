@@ -11,16 +11,23 @@ and messaging command executor.
 from backend.models import ProjectConfig, TaskRun
 
 
+def default_workspace_path(project: ProjectConfig) -> str:
+    """bimetri patch: the project path when none is set, laid out like Gitea (owner/repo).
+
+    Runs, the run API and both readiness checks use this, so they all look in one place.
+    """
+    if project.workspace_path:
+        return str(project.workspace_path)
+    return f"/workspaces/{project.repo_owner}/{project.repo_name}"
+
+
 def resolve_workspace_path(project: ProjectConfig, task_id: str) -> str:
     """Determine workspace path based on project config and task ID."""
     ws_cfg = project.workspace_config or {}
     ws_type = ws_cfg.get("workspace_type", "existing")
     if ws_type == "cluster":
         return f"/workspaces/{task_id}"
-    if project.workspace_path:
-        return str(project.workspace_path)
-    # bimetri yamasi: klasor yapisi Gitea'daki gibi, orn. /workspaces/Bienport-IoT/platform-backend
-    return f"/workspaces/{project.repo_owner}/{project.repo_name}"
+    return default_workspace_path(project)
 
 
 def create_task_run(

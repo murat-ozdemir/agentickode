@@ -17,6 +17,7 @@ from backend.repositories.project_config_repo import ProjectConfigRepository
 from backend.repositories.readiness_repo import WorkspaceReadinessRepository
 from backend.repositories.workspace_server_repo import WorkspaceServerRepository
 from backend.schemas.readiness import WorkspaceReadinessOut
+from backend.services.run_factory import default_workspace_path
 from backend.services.workspace.command_executor import executor_for_server
 from backend.services.workspace.readiness_service import TTL_DAYS, WorkspaceReadinessService
 
@@ -68,7 +69,7 @@ async def trigger_validation(server_id: int, project_id: str, db: AsyncSession =
 
     # Resolve workspace path
     ws_cfg = project.workspace_config or {}
-    workspace_path = project.workspace_path or project_id
+    workspace_path = default_workspace_path(project)
     if not workspace_path.startswith("/"):
         root = server.workspace_root or "/home/workspace"
         workspace_path = f"{root}/{workspace_path}".rstrip("/")

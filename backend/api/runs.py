@@ -20,6 +20,7 @@ from backend.schemas import (
     PaginatedRunsResponse,
     TaskRunDetail,
 )
+from backend.services.run_factory import default_workspace_path
 from backend.services.workspace.workspace_selector import select_workspace_for_run
 
 logger = logging.getLogger("agentickode.runs")
@@ -103,10 +104,7 @@ async def create_run(req: CreateRunRequest, db: AsyncSession = Depends(get_db)):
         ws_server_id = req.workspace_server_id
     else:
         ws_server_id = await select_workspace_for_run(req.project_id, db)
-    # bimetri yamasi: klasor yapisi Gitea'daki gibi, orn. /workspaces/Bienport-IoT/platform-backend
-    workspace_path = (
-        project.workspace_path or f"/workspaces/{project.repo_owner}/{project.repo_name}"
-    )
+    workspace_path = default_workspace_path(project)
 
     # Build task_source_meta upfront so we never mutate Column objects
     meta: dict = {"labels": req.labels}
