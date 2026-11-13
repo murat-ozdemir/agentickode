@@ -49,6 +49,7 @@ class TestCodexCommand:
         assert "read-only" in cmd
         assert "dangerously" not in cmd
         assert "-c features.apps=false" in cmd
+        assert 'mcp_servers.agentickode.default_tools_approval_mode="approve"' in cmd
 
     def test_later_messages_resume_the_thread(self):
         cmd = codex_command("/tmp/m.txt", THREAD, "http://localhost:8000")
@@ -71,6 +72,16 @@ class TestCodexEvents:
         out = [t for line in RUN for t in events.feed(line)] + events.finish()
         assert out == ["\n[Using tool: list_projects]\n", "3 proje var."]
         assert events.thread_id == THREAD
+
+    def test_messages_before_and_after_tool_calls_stay_apart(self):
+        lines = _lines(
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "Bakıyorum."}},
+            {"type": "item.started", "item": {"type": "mcp_tool_call", "tool": "list_projects"}},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "9 proje var."}},
+        )
+        assert CodexEvents().parse("\n".join(lines)) == (
+            "Bakıyorum.\n[Using tool: list_projects]\n\n\n9 proje var."
+        )
 
     def test_failed_turn_shows_the_error_once(self):
         err = "unexpected status 401 Unauthorized"

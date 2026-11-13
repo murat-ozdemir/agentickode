@@ -35,22 +35,15 @@ install_claude() {
 
 install_codex() {
     echo "Installing OpenAI Codex CLI..."
-    ARCH=$(uname -m)
-    case "$ARCH" in aarch64|arm64) ARCH=aarch64;; x86_64|amd64) ARCH=x86_64;; esac
-    # bimetri patch: codex runs tool calls through codex-code-mode-host, a separate release
-    # asset it looks for next to its own binary; both must come from the same release.
-    TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/openai/codex/releases/latest)
-    TAG=${TAG##*/}
-    mkdir -p "$HOME/.local/bin"
-    for BIN in codex codex-code-mode-host; do
-        URL="https://github.com/openai/codex/releases/download/${TAG}/${BIN}-${ARCH}-unknown-linux-musl.tar.gz"
-        curl -fsSL "$URL" -o "/tmp/${BIN}.tar.gz"
-        tar -xzf "/tmp/${BIN}.tar.gz" -C /tmp
-        mv "/tmp/${BIN}-${ARCH}-unknown-linux-musl" "$HOME/.local/bin/${BIN}"
-        chmod +x "$HOME/.local/bin/${BIN}"
-        rm -f "/tmp/${BIN}.tar.gz"
-    done
-    echo "  Codex ${TAG} installed: $(command -v codex || echo 'not found')"
+    # bimetri patch: use the official standalone installer. It installs the whole package
+    # (codex, codex-code-mode-host, rg, bwrap) under ~/.codex/packages/standalone and links
+    # ~/.local/bin/codex to it. A lone codex binary fails to start ("no complete local
+    # package") and its read-only sandbox cannot run commands without bwrap.
+    curl -fsSL https://github.com/openai/codex/releases/latest/download/install.sh \
+        -o /tmp/codex-install.sh
+    CODEX_NON_INTERACTIVE=true sh /tmp/codex-install.sh
+    rm -f /tmp/codex-install.sh
+    echo "  Codex installed: $(codex --version 2>/dev/null || echo 'not found')"
 }
 
 install_gemini() {

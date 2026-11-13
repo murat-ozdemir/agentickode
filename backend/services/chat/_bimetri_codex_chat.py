@@ -59,6 +59,10 @@ def codex_command(msg_path: str, thread_id: str | None, platform_url: str) -> st
         f"mcp_servers.agentickode.command={json.dumps(sys.executable)}",
         "-c",
         f"mcp_servers.agentickode.args={json.dumps([BRIDGE, f'{platform_url}/mcp/sse'])}",
+        # codex asks before every MCP call by default; with approval_policy=never it then
+        # refuses the call, so the chat agent could not use any platform tool.
+        "-c",
+        'mcp_servers.agentickode.default_tools_approval_mode="approve"',
         # ChatGPT-connected apps (e.g. Supabase's list_projects) shadow the platform tools.
         "-c",
         "features.apps=false",
@@ -77,6 +81,7 @@ class CodexEvents:
         self.thread_id: str | None = None
         self.events: list[dict] = []
         self._answered = False
+        self._said = False
         self._log: list[str] = []
         self._errors: set[str] = set()
 
@@ -96,8 +101,10 @@ class CodexEvents:
         elif etype == "item.started" and item.get("type") == "mcp_tool_call":
             return [f"\n[Using tool: {item.get('tool', '')}]\n"]
         elif etype == "item.completed" and item.get("type") == "agent_message":
-            self._answered = True
-            return [item.get("text", "")]
+            # codex says a short "checking..." before its tool calls; keep it apart from the answer.
+            prefix = "\n\n" if self._said else ""
+            self._answered = self._said = True
+            return [prefix + item.get("text", "")]
         elif etype in ("error", "turn.failed"):
             error = event.get("error") or {}
             message = event.get("message") or error.get("message") or line
