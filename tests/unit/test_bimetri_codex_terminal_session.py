@@ -6,6 +6,9 @@
 
 from unittest.mock import AsyncMock, patch
 
+from sqlalchemy import select
+
+from backend.models.local_sessions import LocalTerminalSession
 from backend.services.workspace._bimetri_agent_launch import agent_launch_command
 from backend.services.workspace.session_service import SessionService
 
@@ -16,15 +19,15 @@ async def test_codex_session_turns_off_chatgpt_apps():
     await SessionService(ssh).create_session("abcdef123456", "codex", "root", "/workspaces/a/b")
     sent = [c.args[0] for c in ssh.run_command.await_args_list if "send-keys" in c.args[0]]
     assert len(sent) == 1
-    assert "'codex -c features.apps=false' Enter" in sent[0]
+    assert "'codex --no-daemon -c features.apps=false' Enter" in sent[0]
 
 
 def test_local_terminals_launch_codex_without_apps():
-    assert agent_launch_command("codex") == "codex -c features.apps=false"
+    assert agent_launch_command("codex") == "codex --no-daemon -c features.apps=false"
     assert agent_launch_command("gemini") == "gemini"
 
 
-async def test_creating_a_local_codex_terminal_sends_the_launch_line(client):
+async def test_creating_a_local_codex_terminal_sends_the_launch_line(client, db_session):
     proc = AsyncMock(returncode=0)
     with (
         patch("backend.api.local_terminals.get_platform_run_as_user", AsyncMock(return_value=None)),
@@ -36,4 +39,6 @@ async def test_creating_a_local_codex_terminal_sends_the_launch_line(client):
         resp = await client.post("/api/local-terminals", json={"agent_name": "codex"})
     assert resp.status_code == 200
     sent = [c.args[0] for c in shell.await_args_list if "send-keys" in c.args[0]]
-    assert sent and "'codex -c features.apps=false' Enter" in sent[0]
+    assert sent and "'codex --no-daemon -c features.apps=false' Enter" in sent[0]
+    stored = (await db_session.execute(select(LocalTerminalSession))).scalar_one()
+    assert stored.last_command == "codex --no-daemon -c features.apps=false"  # used by resume
