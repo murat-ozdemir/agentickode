@@ -20,6 +20,7 @@ from backend.services.adapters.cli_commands import (
 from backend.services.adapters.cli_wrappers import (
     apply_cli_flags,
     apply_env_vars,
+    scope_generate,
     wrap_generate_for_user,
 )
 
@@ -219,6 +220,9 @@ class CLIAdapter:
         else:
             cmd = str(cmds["generate"]).format(prompt_file=prompt_file)
             await log_fn(f"[agent] invoking {self._agent} generate")
+
+        # bimetri patch: start inside the clone (cwd), with the given tools pre-approved
+        cmd = scope_generate(cmd, kwargs.get("cwd"), kwargs.get("allowed_tools"))  # type: ignore[arg-type]
 
         # If SSH user is root and agent needs non-root (or worker_user is set), wrap
         # (session data lives under the coder user, so --resume must run as same user)

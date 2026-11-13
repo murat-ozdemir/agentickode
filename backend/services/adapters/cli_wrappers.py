@@ -82,6 +82,19 @@ def wrap_generate_for_user(cmd: str, prompt_file: str, username: str) -> str:
     return f"{ownership}{run}"
 
 
+def scope_generate(cmd: str, cwd: str | None, allowed_tools: list | tuple | None) -> str:
+    """bimetri patch: run a generate command inside ``cwd`` and pre-approve ``allowed_tools``.
+
+    Must run before wrap_generate_for_user so both end up inside the user's shell. Session
+    commands already ``cd`` into their workspace. Only claude takes ``--allowedTools``.
+    """
+    if allowed_tools and "| claude " in cmd:
+        cmd += " --allowedTools " + " ".join(shlex.quote(t) for t in allowed_tools)
+    if cwd and not cmd.startswith("cd "):
+        cmd = f"cd {shlex.quote(cwd)} && {cmd}"
+    return cmd
+
+
 def apply_cli_flags(cmd: str, cli_flags: dict) -> str:
     """Append extra CLI flags from AgentSettings to the command."""
     for flag, value in cli_flags.items():

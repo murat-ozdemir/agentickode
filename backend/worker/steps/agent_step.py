@@ -44,6 +44,10 @@ def _adapter_kwargs(phase_config: dict[str, Any]) -> dict[str, Any]:
         kwargs["session_id"] = params["session_id"]
     if "new_session" in params:
         kwargs["new_session"] = params["new_session"]
+    # bimetri patch: generate-mode review runs inside the repo clone with read-only tools
+    for key in ("cwd", "allowed_tools"):
+        if params.get(key):
+            kwargs[key] = params[key]
     return kwargs
 
 

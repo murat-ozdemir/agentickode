@@ -30,6 +30,11 @@ from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
 from backend.worker.flow._bimetri_kapsam import kapsam_eki
+from backend.worker.flow._bimetri_review_clone import (
+    REVIEW_ALLOWED_TOOLS,
+    REVIEW_CLONE_RULES,
+    prepare_review_clone,
+)
 from backend.worker.flow.data_sources import fetch_flow_data
 from backend.worker.phases._bimetri_hata import hata_bildir, limit_nedeni
 from backend.worker.phases._bimetri_oto import bekletildi_mi
@@ -202,6 +207,10 @@ async def execute_flow_prompt(
         if flow.agent_mode == "task":
             await _run_phase("workspace_setup", run, session, services)
             await _run_phase("init", run, session, services)
+        # bimetri yamasi: inceleme de klonda, PR dalinda calissin (kod grafi icin)
+        review_cwd = None
+        if flow.flow_type == "pr_review" and flow.agent_mode != "task":
+            review_cwd = await prepare_review_clone(run, session, services, _run_phase)
 
         data = await fetch_flow_data(run, session, services, flow)
         prompt = _compose_prompt(flow.prompt, data)
@@ -216,6 +225,8 @@ async def execute_flow_prompt(
                 "- En sona tek satır: '**Sonuç:** Birleştirilebilir' ya da '**Sonuç:** Değişiklik gerekli'.\n"
                 "- Kod değiştirme.\n"
             )
+            if review_cwd:
+                prompt += REVIEW_CLONE_RULES
             prompt += await kapsam_eki(run, session, "inceleme")
         # bimetri yamasi: test ajani kurallari (yalnizca test kodu, calistir, sabit sonuc satiri)
         elif (run.task_source_meta or {}).get("review_mode") == "test":
@@ -368,7 +379,15 @@ async def execute_flow_prompt(
                     "agent": agent_name,
                     "model": model,
                     "effort": effort or None,
-                    "params": {"prompt": prompt, "mode": flow.agent_mode},
+                    "params": {
+                        "prompt": prompt,
+                        "mode": flow.agent_mode,
+                        **(
+                            {"cwd": review_cwd, "allowed_tools": REVIEW_ALLOWED_TOOLS}
+                            if review_cwd
+                            else {}
+                        ),
+                    },
                 },
             )
         except Exception as _exc:
