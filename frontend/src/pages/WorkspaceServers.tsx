@@ -120,6 +120,15 @@ function SetupProgress({ server, onForceRetry }: { server: WSType; onForceRetry?
         {failed && (
           <span className="text-xs text-red-400">
             Failed: {STEP_LABELS[failed[0]] || failed[0]}
+            {/* bimetri patch: the platform card has no Re-Setup button, so retry from here */}
+            {onForceRetry && server.server_type === "local" && (
+              <button
+                onClick={onForceRetry}
+                className="ml-1 text-red-300 hover:text-red-200 underline"
+              >
+                Retry Setup
+              </button>
+            )}
           </span>
         )}
       </div>

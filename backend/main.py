@@ -77,6 +77,7 @@ from backend.services.notifications.dispatcher import NotificationDispatcher
 from backend.services.queue_service import queue_service
 from backend.services.rules_dispatcher import RulesDispatcher
 from backend.services.task_management.status_sync import StatusSyncer
+from backend.services.workspace._bimetri_setup_recovery import fail_interrupted_setups
 from backend.worker.bimetri_openai_usage_scheduler import OpenAIUsageScheduler
 from backend.worker.engine import WorkerEngine
 from backend.worker.issue_poller_scheduler import IssuePollerScheduler
@@ -369,6 +370,7 @@ async def lifespan(app: FastAPI):
 
     async with async_session() as db:
         await seed_all(db)
+        await fail_interrupted_setups(db)  # bimetri patch
 
     # Mark orphaned local terminal sessions as closed (tmux died on restart)
     await _cleanup_orphaned_sessions()
