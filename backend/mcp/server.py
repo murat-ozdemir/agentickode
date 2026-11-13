@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
+from backend.mcp.bimetri_memory_tools import list_project_memory, search_project_memory
 from backend.mcp.tools.admin import (
     add_server,
     configure_agent,
@@ -92,7 +93,8 @@ mcp = FastMCP(
         "2. Agent Control: query_run_agent, get_run_diff, approve_run, create_run_and_wait\n"
         "3. Admin: list_servers, list_agents, get_health, get_analytics\n"
         "4. Sessions: create_workspace_session, send_to_session, capture_session_output, close_workspace_session\n"
-        "5. Workspace: run_workspace_command, read_workspace_file, list_workspace_directory\n\n"
+        "5. Workspace: run_workspace_command, read_workspace_file, list_workspace_directory\n"
+        "6. Project memory (mem0): search_project_memory, list_project_memory\n\n"
         "WORKFLOW FOR CODING TASKS:\n"
         "1. Use create_workspace_session to start an agent on a workspace server\n"
         "2. Use send_to_session to give it a task\n"
@@ -167,6 +169,9 @@ mcp.add_tool(update_automation_rule)
 mcp.add_tool(query_org_memory)
 mcp.add_tool(store_knowledge)
 mcp.add_tool(sync_obsidian_vault)
+# bimetri patch: read-only project memory (mem0) for chat; proposals stay with run agents.
+mcp.add_tool(search_project_memory)
+mcp.add_tool(list_project_memory)
 
 
 def get_mcp_app():
