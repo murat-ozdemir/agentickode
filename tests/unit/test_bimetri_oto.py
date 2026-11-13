@@ -19,7 +19,12 @@ RP = "org/repo"
 
 def _gitea(oto: int = 0, pr_zorluk: str | None = "easy", issue_zorluk: str | None = "easy"):
     gp = SahteGitea()
-    gp.pr[5] = {"state": "open", "merged": False, "user": {"login": "agentickode"}, "body": "Closes #1"}
+    gp.pr[5] = {
+        "state": "open",
+        "merged": False,
+        "user": {"login": "agentickode"},
+        "body": "Closes #1",
+    }
     gp.yorum[5] = [f"@agentickode duzelt\n{OTO_ISARET}"] * oto
     gp.etiket[5] = [f"difficulty/{pr_zorluk}"] if pr_zorluk else []
     gp.etiket[1] = [f"difficulty/{issue_zorluk}"] if issue_zorluk else []

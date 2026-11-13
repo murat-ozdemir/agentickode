@@ -56,7 +56,9 @@ def create_task_run(
             (
                 n
                 for n in (
-                    __import__("re").sub(r"[^a-z0-9-]+", "-", str(lbl).strip().lower()[7:]).strip("-")
+                    __import__("re")
+                    .sub(r"[^a-z0-9-]+", "-", str(lbl).strip().lower()[7:])
+                    .strip("-")
                     for lbl in (task_source_meta or {}).get("labels") or []
                     if str(lbl).strip().lower().startswith("branch/")
                 )
@@ -66,14 +68,17 @@ def create_task_run(
         )
         + f"/{task_id}-"
         + (
-            __import__("re").sub(
+            __import__("re")
+            .sub(
                 r"[^a-z0-9]+",
                 "-",
                 __import__("unicodedata")
                 .normalize("NFKD", title.replace("ı", "i").replace("İ", "I").lower())
                 .encode("ascii", "ignore")
                 .decode(),
-            ).strip("-")[:40].rstrip("-")
+            )
+            .strip("-")[:40]
+            .rstrip("-")
             or "ai"
         ),
         workspace_path=resolve_workspace_path(project, task_id),

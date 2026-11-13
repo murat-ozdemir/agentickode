@@ -108,7 +108,9 @@ async def gitea_pr_comment_webhook(
         return {"status": "ignored", "reason": "fix_in_progress"}
 
     api = f"{provider._base_url}/api/v1/repos/{full}"
-    resp = await provider._client.get(f"{api}/pulls/{pr_number}", headers=provider._headers(), timeout=30.0)
+    resp = await provider._client.get(
+        f"{api}/pulls/{pr_number}", headers=provider._headers(), timeout=30.0
+    )
     resp.raise_for_status()
     pr = resp.json()
     if pr.get("state") != "open" or pr.get("merged"):
@@ -131,11 +133,15 @@ async def gitea_pr_comment_webhook(
     if komut == "devam":
         await devam_isareti(provider, full, pr_number, login)
     if issue_no:  # ajan/zorluk etiketleri issue'dan gelsin
-        r = await provider._client.get(f"{api}/issues/{issue_no}", headers=provider._headers(), timeout=30.0)
+        r = await provider._client.get(
+            f"{api}/issues/{issue_no}", headers=provider._headers(), timeout=30.0
+        )
         if r.status_code == 200:
             labels += [la.get("name", "") for la in r.json().get("labels") or []]
 
-    instruction = kalan or (DEVAM_VARSAYILAN if komut == "devam" else f"PR #{pr_number} uzerindeki yorumlari ele al")
+    instruction = kalan or (
+        DEVAM_VARSAYILAN if komut == "devam" else f"PR #{pr_number} uzerindeki yorumlari ele al"
+    )
     alinti = "> " + comment_body.strip().replace("\n", "\n> ")
 
     run = create_task_run(

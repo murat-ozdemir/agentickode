@@ -252,7 +252,9 @@ async def gitea_issue_webhook(
         await provider.set_status_label(repo_full_name, int(issue.get("number")), "status/open")
         await provider.assign_self(repo_full_name, int(issue.get("number")))
     except Exception:
-        logger.warning("Issue #%s status/open ya da atama yapilamadi", issue.get("number"), exc_info=True)
+        logger.warning(
+            "Issue #%s status/open ya da atama yapilamadi", issue.get("number"), exc_info=True
+        )
     return {"status": "accepted", "run_id": run.id}
 
 

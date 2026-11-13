@@ -32,7 +32,9 @@ async def son_kosu(db: AsyncSession, project_id: str, n: int, pr_mi: bool) -> Ta
     return r.scalar_one_or_none()
 
 
-async def tekrar_baslat(db: AsyncSession, gp, full: str, project_id: str, n: int, pr_mi: bool) -> str:
+async def tekrar_baslat(
+    db: AsyncSession, gp, full: str, project_id: str, n: int, pr_mi: bool
+) -> str:
     """Kosuyu yeniden baslatir; kullaniciya yazilacak yaniti dondurur."""
     from backend.api.runs_actions import reset_run_for_restart
 

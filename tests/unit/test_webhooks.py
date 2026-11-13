@@ -87,7 +87,7 @@ class TestCreateTaskRun:
         run = _create_task_run(
             task_id="7",
             project=self._make_project(),
-            title="Giriş sayfası hatası",  # noqa: RUF001 - dotless i is the point
+            title="Giriş sayfası hatası",  # dotless i is the point
             description="d",
             task_source="gitea",
             task_source_meta={"labels": ["ai-task", "branch/bug"]},

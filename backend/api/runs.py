@@ -69,7 +69,6 @@ async def create_run(req: CreateRunRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, f"Project {req.project_id} not found")
 
     ts = int(time.time())
-    slug = project.project_slug or project.repo_name
     # bimetri yamasi: elle acilan kosuda da branch/<tur> etiketi + okunur ad, orn. bug/manual-1729-readme-duzelt
     import re
     import unicodedata
@@ -86,13 +85,17 @@ async def create_run(req: CreateRunRequest, db: AsyncSession = Depends(get_db)):
         ),
         "feature",
     )
-    words = re.sub(
-        r"[^a-z0-9]+",
-        "-",
-        unicodedata.normalize("NFKD", req.title.replace("ı", "i").replace("İ", "I").lower())
-        .encode("ascii", "ignore")
-        .decode(),
-    ).strip("-")[:40].rstrip("-")
+    words = (
+        re.sub(
+            r"[^a-z0-9]+",
+            "-",
+            unicodedata.normalize("NFKD", req.title.replace("ı", "i").replace("İ", "I").lower())
+            .encode("ascii", "ignore")
+            .decode(),
+        )
+        .strip("-")[:40]
+        .rstrip("-")
+    )
     branch_name = f"{kind}/manual-{ts}" + (f"-{words}" if words else "")
 
     # workspace_server_id from request; auto-assign if not provided
@@ -101,7 +104,9 @@ async def create_run(req: CreateRunRequest, db: AsyncSession = Depends(get_db)):
     else:
         ws_server_id = await select_workspace_for_run(req.project_id, db)
     # bimetri yamasi: klasor yapisi Gitea'daki gibi, orn. /workspaces/Bienport-IoT/platform-backend
-    workspace_path = project.workspace_path or f"/workspaces/{project.repo_owner}/{project.repo_name}"
+    workspace_path = (
+        project.workspace_path or f"/workspaces/{project.repo_owner}/{project.repo_name}"
+    )
 
     # Build task_source_meta upfront so we never mutate Column objects
     meta: dict = {"labels": req.labels}

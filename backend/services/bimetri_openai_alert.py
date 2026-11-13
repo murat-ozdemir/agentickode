@@ -29,8 +29,8 @@ ALERT_KEY = "bimetri.openai.alert"
 QUOTA_CODES = ("credit_balance_exhausted", "insufficient_quota")
 MESSAGE = (  # Turkish: the team reads the notifications in Turkish
     "OpenAI kredisi bitti\n"
-    "mem0 ve hafıza önerileri durdu ({code}, kaynak: {source}). "  # noqa: RUF001
-    'Kredi yükleyip Dashboard\'daki OpenAI kartında "Kredi ekle" ile girin.'  # noqa: RUF001
+    "mem0 ve hafıza önerileri durdu ({code}, kaynak: {source}). "
+    'Kredi yükleyip Dashboard\'daki OpenAI kartında "Kredi ekle" ile girin.'
 )
 
 
