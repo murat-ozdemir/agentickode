@@ -31,10 +31,19 @@ services:
       - seccomp=unconfined
       - apparmor=unconfined
 
+  # The upstream dev compose gives postgres and redis no restart policy. dev-1 has non-ECC
+  # RAM that flips bits (dmesg: segfaults in unrelated processes, mostly at 0x800000000xx);
+  # on 2026-11-17 the postmaster itself segfaulted, stayed down, and every DB call from the
+  # backend failed with "Temporary failure in name resolution" (Docker drops a stopped
+  # container's DNS name). Restarting is safe: postgres replays WAL on startup.
   postgres:
     image: pgvector/pgvector:pg16
     volumes:
       - pgvdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
 
   mem0:
     build:
