@@ -15,6 +15,17 @@ logger = logging.getLogger("agentickode.webhooks.pr_context")
 
 MAX_CONTEXT_CHARS = 30000
 
+# The fix agent skipped "Oneriler" items and changed nothing because the review said
+# "Birlestirilebilir"; the user asking for a fix is the decision.
+FINDINGS_RULE = (
+    'Yorum incelemedeki bulgularin duzeltilmesini istiyorsa son AI incelemesinin "Bulgular" ve '
+    '"Oneriler" maddelerinin hepsi kastedilir; "Kapsam disi" maddeler yalnizca yorum acikca '
+    'isterse. Incelemenin sonucu "Birlestirilebilir" olsa, madde dusuk onemli ya da soru olarak '
+    "yazilmis olsa da her maddeyi kodda duzelt; duzeltilip duzeltilmeyecegine sen karar verme, "
+    "kullanici istedi. Bir maddeyi yapamiyorsan (repoda olmayan bilgi ya da urun karari "
+    "gerekiyorsa) son mesajinda o madde icin nedenini yaz."
+)
+
 
 async def _get_json(provider: Any, url: str) -> Any:
     resp = await provider._client.get(url, headers=provider._headers(), timeout=30.0)
@@ -88,7 +99,9 @@ def discussion_section(discussion: str) -> str:
         return ""
     return (
         "\n\nPR'daki onceki yorumlar ve incelemeler asagida (eskiden yeniye). Yorumdaki "
-        '"bulgular", "inceleme", "test raporu" gibi atiflar bunlari kasteder:\n\n'
+        '"bulgular", "inceleme", "test raporu" gibi atiflar bunlari kasteder. '
+        + FINDINGS_RULE
+        + "\n\n"
         # blank lines keep the tag a separate HTML block, so the UI still renders the Markdown
         "<pr_discussion>\n\n" + discussion + "\n\n</pr_discussion>"
     )

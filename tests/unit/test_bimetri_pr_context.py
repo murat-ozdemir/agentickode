@@ -99,6 +99,12 @@ class TestDiscussionSection:
         assert "<pr_discussion>\n\n### a\n\nbulgu\n\n</pr_discussion>" in section
         assert "bulgular" in section
 
+    def test_tells_agent_to_fix_suggestions_even_when_mergeable(self):
+        section = discussion_section("### a\n\nbulgu")
+
+        assert '"Oneriler"' in section
+        assert "Birlestirilebilir" in section
+
 
 class TestGiteaGetPrComments:
     async def test_returns_reviews_and_plain_comments(self):

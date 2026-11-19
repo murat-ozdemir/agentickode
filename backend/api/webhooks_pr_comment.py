@@ -39,7 +39,7 @@ async def gitea_pr_comment_webhook(
         bot_yorumu_mu,
         devam_isareti,
         inceleme_komutu,
-        komut_ayikla,
+        pr_komutu,
         yazma_yetkisi,
     )
     from backend.api._bimetri_pr_context import discussion_section, pr_discussion
@@ -85,7 +85,7 @@ async def gitea_pr_comment_webhook(
             full, pr_number, f"{login}: bu komut için repoda yazma yetkin yok; yok sayıldı."
         )
         return {"status": "ignored", "reason": "no_permission"}
-    komut, kalan = komut_ayikla(comment_body)
+    komut, kalan = pr_komutu(comment_body, pr_mi)
     if komut == "tekrar":
         yanit = await tekrar_baslat(db, provider, full, project.project_id, pr_number, pr_mi)
         await provider.post_pr_comment(full, pr_number, yanit)

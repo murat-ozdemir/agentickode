@@ -10,6 +10,7 @@ from backend.api._bimetri_komut import (
     bot_yorumu_mu,
     inceleme_komutu,
     komut_ayikla,
+    pr_komutu,
     yazma_yetkisi,
 )
 from backend.api._bimetri_push import push_karari
@@ -72,6 +73,18 @@ class TestIncelemeKomutu:
         assert gp.durum == {5: "status/review", 1: "status/review"}
         assert "ai-review" in gp.etiket[1]
         assert gp.etiket[5] == ["status/review", "ai-review"]
+
+
+class TestPrKomutu:
+    def test_retry_with_instruction_on_pr_becomes_fix_run(self):
+        govde = "@agentickode tekrar\n\nsorun çıkaranları düzeltmek için tekrar dene"
+        assert pr_komutu(govde, True) == ("duzelt", "sorun çıkaranları düzeltmek için tekrar dene")
+
+    def test_bare_retry_stays_retry(self):
+        assert pr_komutu("@agentickode tekrar", True) == ("tekrar", "")
+
+    def test_retry_with_text_on_issue_stays_retry(self):
+        assert pr_komutu("@agentickode tekrar lütfen", False)[0] == "tekrar"
 
 
 class TestTekrar:

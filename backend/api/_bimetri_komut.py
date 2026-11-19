@@ -39,6 +39,17 @@ def komut_ayikla(govde: str) -> tuple[str, str]:
     return "duzelt", _MENTION_RX.sub("", govde).strip()
 
 
+def pr_komutu(govde: str, pr_mi: bool) -> tuple[str, str]:
+    """komut_ayikla; PR'da `tekrar <talimat>` talimatli duzeltme kosusu olur.
+
+    Yoksa talimat atiliyor, son kosu basariliysa "tekrarlanacak bir sey yok" deniyordu.
+    """
+    komut, kalan = komut_ayikla(govde)
+    if komut == "tekrar" and kalan and pr_mi:
+        return "duzelt", kalan
+    return komut, kalan
+
+
 async def bot_yorumu_mu(gp, login: str | None, govde: str) -> bool:
     """Botun kendi yorumu ve otomatik tur isareti tasimiyor: komut sayilmaz (dongu olmasin)."""
     from backend.worker.phases._bimetri_oto import OTO_ISARET, bot_login
