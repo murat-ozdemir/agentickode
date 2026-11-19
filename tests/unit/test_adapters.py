@@ -122,6 +122,34 @@ class TestCLIAdapter:
         assert result == "generated output"
         assert ssh.run_command.call_count == 3
 
+    async def test_generate_sends_large_prompt_via_stdin(self):
+        # bimetri patch: a >128 KB prompt on the command line failed with E2BIG
+        ssh = AsyncMock()
+        ssh.run_command.side_effect = [
+            ("/tmp/xyz\n", "", 0),
+            ("generated output", "", 0),
+            ("", "", 0),
+        ]
+        prompt = "İnceleme 'diff'\n" * 20000
+        adapter = CLIAdapter(ssh, "claude")
+
+        await adapter.generate(prompt)
+
+        write = ssh.run_command.call_args_list[0]
+        assert write.kwargs["input"] == prompt
+        assert prompt not in write.args[0]
+        assert f"head -c {len(prompt.encode())}" in write.args[0]
+        assert "/tmp/xyz" in ssh.run_command.call_args_list[1].args[0]
+
+    async def test_generate_fails_fast_when_prompt_file_not_written(self):
+        ssh = AsyncMock()
+        ssh.run_command.return_value = ("", "Argument list too long", 1)
+        adapter = CLIAdapter(ssh, "claude")
+
+        with pytest.raises(RuntimeError, match="write-prompt failed"):
+            await adapter.generate("hello prompt")
+        assert ssh.run_command.call_count == 1
+
     async def test_run_task(self):
         ssh = AsyncMock()
         ssh.hostname = "10.0.0.1"

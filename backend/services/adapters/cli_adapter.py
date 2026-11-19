@@ -158,12 +158,15 @@ class CLIAdapter:
         self._commands.update(overrides)
 
     async def _run_ssh(
-        self, cmd: str, timeout: int, log_fn: LogFn, label: str
+        self, cmd: str, timeout: int, log_fn: LogFn, label: str, input: str | None = None
     ) -> tuple[str, str, int]:
         """Run SSH command with logging to both Python logger and UI callback."""
         await log_fn(f"[ssh] {label}: {cmd[:300]}")
         start = time.monotonic()
-        stdout, stderr, rc = await self._ssh.run_command(cmd, timeout=timeout)
+        if input is None:
+            stdout, stderr, rc = await self._ssh.run_command(cmd, timeout=timeout)
+        else:
+            stdout, stderr, rc = await self._ssh.run_command(cmd, timeout=timeout, input=input)
         elapsed = time.monotonic() - start
         await log_fn(f"[ssh] {label} done rc={rc} ({elapsed:.1f}s)")
         if stdout.strip():
@@ -171,6 +174,21 @@ class CLIAdapter:
         if stderr.strip():
             await log_fn(f"[ssh] {label} stderr: {stderr.strip()[:500]}")
         return stdout, stderr, rc
+
+    async def _write_temp_file(self, text: str, log_fn: LogFn, label: str) -> str:
+        """bimetri patch: write ``text`` to a remote temp file via stdin; return its path.
+
+        The old ``echo '<text>'`` form put the whole prompt on the command line, so a large
+        PR review failed with E2BIG and the agent then ran ``cat`` with no file and hung.
+        ``head -c`` stops after the exact byte count, so no stdin EOF is needed.
+        """
+        size = len(text.encode())
+        cmd = f'TMPF=$(mktemp) && head -c {size} > "$TMPF" && echo "$TMPF"'
+        stdout, stderr, rc = await self._run_ssh(cmd, 30, log_fn, label, input=text)
+        path = stdout.strip()
+        if rc != 0 or not path:
+            raise RuntimeError(f"{label} failed (rc={rc}): {stderr.strip()[:300]}")
+        return path
 
     async def generate(self, prompt: str, **kwargs: object) -> str:
         cmds = self._commands
@@ -186,10 +204,7 @@ class CLIAdapter:
             prompt = f"{system_prompt}\n\n{prompt}"
 
         # Write prompt to a temp file, then invoke agent
-        escaped = prompt.replace("'", "'\\''")
-        write_cmd = f'TMPF=$(mktemp) && echo \'{escaped}\' > "$TMPF" && echo "$TMPF"'
-        stdout, _, rc = await self._run_ssh(write_cmd, 10, log_fn, "write-prompt")
-        prompt_file = stdout.strip()
+        prompt_file = await self._write_temp_file(prompt, log_fn, "write-prompt")
 
         # Use session variant if session_id provided and supported
         # workspace is required for session commands — Claude stores sessions per-project

@@ -31,17 +31,22 @@ class LocalCommandService:
         self.port = 0  # parity with SSHService (no real port for local execution)
         self.username = os.environ.get("USER", "root")
 
-    async def run_command(self, cmd: str, timeout: int = 30) -> tuple[str, str, int]:
-        """Run a command locally. Returns (stdout, stderr, exit_code)."""
+    async def run_command(
+        self, cmd: str, timeout: int = 30, input: str | None = None
+    ) -> tuple[str, str, int]:
+        """Run a command locally. Returns (stdout, stderr, exit_code); ``input`` goes to stdin."""
         wrapped = f'export PATH="{_EXTRA_PATH}:$PATH" && {cmd}'
         start = time.monotonic()
         try:
             proc = await asyncio.create_subprocess_shell(
                 wrapped,
+                stdin=asyncio.subprocess.PIPE if input is not None else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(input.encode() if input is not None else None), timeout=timeout
+            )
             return (
                 stdout_bytes.decode(errors="replace"),
                 stderr_bytes.decode(errors="replace"),

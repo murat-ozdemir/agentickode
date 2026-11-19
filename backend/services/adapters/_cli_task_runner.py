@@ -73,10 +73,7 @@ async def run_cli_task(
         }
 
     # Write instruction to temp file on remote
-    escaped = instruction.replace("'", "'\\''")
-    write_cmd = f'TMPF=$(mktemp) && echo \'{escaped}\' > "$TMPF" && echo "$TMPF"'
-    stdout, _, _ = await adapter._run_ssh(write_cmd, 10, log_fn, "write-instruction")
-    instruction_file = stdout.strip()
+    instruction_file = await adapter._write_temp_file(instruction, log_fn, "write-instruction")
 
     # Choose command: session start, session continuation, or fresh start
     new_session: bool = kwargs.get("new_session", False)  # type: ignore[assignment]

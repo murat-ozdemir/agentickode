@@ -188,8 +188,14 @@ class SSHService:
         "$HOME/.local/bin:$HOME/.claude/bin:$HOME/go/bin" ":$HOME/.cargo/bin:$HOME/.npm-global/bin"
     )
 
-    async def run_command(self, cmd: str, timeout: int = 30) -> tuple[str, str, int]:
-        """Run a command via SSH. Returns (stdout, stderr, exit_code)."""
+    async def run_command(
+        self, cmd: str, timeout: int = 30, input: str | None = None
+    ) -> tuple[str, str, int]:
+        """Run a command via SSH. Returns (stdout, stderr, exit_code).
+
+        ``input`` is sent to the command's stdin (bimetri patch: keeps large prompts off the
+        command line, which the kernel caps at 128 KB per argument).
+        """
         wrapped = f'export PATH="{self._EXTRA_PATH}:$PATH" && {cmd}'
         start = time.monotonic()
         try:
@@ -214,7 +220,7 @@ class SSHService:
         try:
             async with conn:
                 result = await asyncio.wait_for(
-                    conn.run(wrapped, timeout=timeout, check=False),
+                    conn.run(wrapped, input=input, timeout=timeout, check=False),
                     timeout=timeout + 5,
                 )
                 return (

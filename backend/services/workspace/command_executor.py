@@ -22,8 +22,10 @@ class CommandExecutor(Protocol):
     hostname: str
     username: str
 
-    async def run_command(self, cmd: str, timeout: int = 30) -> tuple[str, str, int]:
-        """Run a command. Returns (stdout, stderr, exit_code)."""
+    async def run_command(
+        self, cmd: str, timeout: int = 30, input: str | None = None
+    ) -> tuple[str, str, int]:
+        """Run a command, feeding ``input`` to stdin. Returns (stdout, stderr, exit_code)."""
         ...
 
     def run_command_as(
