@@ -89,5 +89,6 @@ def discussion_section(discussion: str) -> str:
     return (
         "\n\nPR'daki onceki yorumlar ve incelemeler asagida (eskiden yeniye). Yorumdaki "
         '"bulgular", "inceleme", "test raporu" gibi atiflar bunlari kasteder:\n\n'
-        "<pr_discussion>\n" + discussion + "\n</pr_discussion>"
+        # blank lines keep the tag a separate HTML block, so the UI still renders the Markdown
+        "<pr_discussion>\n\n" + discussion + "\n\n</pr_discussion>"
     )

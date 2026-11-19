@@ -5,12 +5,14 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
-const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
+// bimetri patch: HTML only when the text starts with a tag (Plane sends `<p>...`). Markdown that
+// merely contains a tag (e.g. `<pr_discussion>` in a fix-run description) must stay Markdown.
+const HTML_TAG_PATTERN = /^\s*<[a-z][\s\S]*>/i;
 
 /**
  * Renders a description string as sanitized HTML.
  *
- * - If the input contains HTML tags, it is sanitized directly with DOMPurify.
+ * - If the input starts with an HTML tag, it is sanitized directly with DOMPurify.
  * - Otherwise it is treated as Markdown, parsed with `marked`, then sanitized.
  *
  * Always sanitizes output to prevent XSS.

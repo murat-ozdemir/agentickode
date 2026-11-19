@@ -62,6 +62,20 @@ describe("renderDescription", () => {
     expect(output).toContain("Styled text");
   });
 
+  it("renders markdown that contains an inline tag as markdown", () => {
+    const input = "Yorum:\n\n<pr_discussion>\n\n### mozdemir\n\nbulgu\n\n</pr_discussion>";
+    const output = renderDescription(input);
+    expect(output).toContain("<h3>mozdemir</h3>");
+    expect(output).toContain("<p>Yorum:</p>");
+    expect(output).not.toContain("pr_discussion");
+  });
+
+  it("strips script tags inside markdown", () => {
+    const output = renderDescription('Metin\n\n<script>alert("xss")</script>');
+    expect(output).not.toContain("<script>");
+    expect(output).toContain("Metin");
+  });
+
   it("strips event handler attributes to prevent XSS", () => {
     const input = '<img src="x" onerror="alert(1)">';
     const output = renderDescription(input);

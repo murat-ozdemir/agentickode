@@ -96,7 +96,7 @@ class TestDiscussionSection:
     def test_wraps_discussion_for_the_agent(self):
         section = discussion_section("### a\n\nbulgu")
 
-        assert "<pr_discussion>\n### a\n\nbulgu\n</pr_discussion>" in section
+        assert "<pr_discussion>\n\n### a\n\nbulgu\n\n</pr_discussion>" in section
         assert "bulgular" in section
 
 
