@@ -88,13 +88,14 @@ class GiteaProvider:
         return resp.text
 
     async def get_pr_comments(self, repo_path: str, pr_number: int) -> list[dict]:
-        resp = await self._client.get(
-            f"{self._base_url}/api/v1/repos/{repo_path}/pulls/{pr_number}/reviews",
-            headers=self._headers(),
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        return resp.json()
+        # bimetri yamasi: formal reviews + plain PR comments (AI reviews are plain comments)
+        api = f"{self._base_url}/api/v1/repos/{repo_path}"
+        items: list[dict] = []
+        for path in (f"pulls/{pr_number}/reviews", f"issues/{pr_number}/comments"):
+            resp = await self._client.get(f"{api}/{path}", headers=self._headers(), timeout=30.0)
+            resp.raise_for_status()
+            items += resp.json() or []
+        return items
 
     async def post_pr_comment(self, repo_path: str, pr_number: int, body: str) -> None:
         resp = await self._client.post(

@@ -42,6 +42,7 @@ async def gitea_pr_comment_webhook(
         komut_ayikla,
         yazma_yetkisi,
     )
+    from backend.api._bimetri_pr_context import discussion_section, pr_discussion
     from backend.api._bimetri_push import proje_saglayici
     from backend.api._bimetri_tekrar import tekrar_baslat
     from backend.api._pr_webhook_helpers import read_verified_body
@@ -143,6 +144,8 @@ async def gitea_pr_comment_webhook(
         DEVAM_VARSAYILAN if komut == "devam" else f"PR #{pr_number} uzerindeki yorumlari ele al"
     )
     alinti = "> " + comment_body.strip().replace("\n", "\n> ")
+    # bimetri yamasi: ajan "bulgulari duzelt" gibi atiflarin metnini gorsun
+    gecmis = discussion_section(await pr_discussion(provider, full, pr_number, comment))
 
     run = create_task_run(
         task_id=f"pr-comment-{pr_number}-{comment.get('id', '')}",
@@ -153,7 +156,7 @@ async def gitea_pr_comment_webhook(
             f"{alinti}\n\n"
             f"Bu PR'in dalindasin (`{pr_branch}`); yeni dal acma. Yalnizca yorumda isteneni yap, "
             "AGENTS.md kurallarina gore commit et. Son mesajinda ne degistirdigini Turkce ozetle; "
-            "bu mesaj PR'a yorum olarak yazilir."
+            "bu mesaj PR'a yorum olarak yazilir." + gecmis
         ),
         task_source="gitea",
         task_source_meta={
