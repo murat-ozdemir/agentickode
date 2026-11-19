@@ -9,6 +9,7 @@ import contextlib
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.models import TaskRun
 
 _TEKRARLANIR = ("failed", "timeout", "cancelled")
@@ -32,6 +33,11 @@ async def son_kosu(db: AsyncSession, project_id: str, n: int, pr_mi: bool) -> Ta
     return r.scalar_one_or_none()
 
 
+def _kosu(run: TaskRun) -> str:
+    """Run link; a bare `#N` would point at Gitea issue N instead."""
+    return f"[#{run.id}]({settings.app_base_url.rstrip('/')}/runs/{run.id})"
+
+
 async def tekrar_baslat(
     db: AsyncSession, gp, full: str, project_id: str, n: int, pr_mi: bool
 ) -> str:
@@ -42,13 +48,13 @@ async def tekrar_baslat(
     if run is None:
         return "Yeniden başlatılacak koşu bulunamadı."
     if run.status in ("pending", "running"):
-        return f"Koşu #{run.id} zaten sürüyor; bitmesini bekle."
+        return f"Koşu {_kosu(run)} zaten sürüyor; bitmesini bekle."
     if run.status not in _TEKRARLANIR:
-        return f"Son koşu #{run.id} başarısız değil ({run.status}); tekrarlanacak bir şey yok."
+        return f"Son koşu {_kosu(run)} başarısız değil ({run.status}); tekrarlanacak bir şey yok."
     await reset_run_for_restart(run, db)
     await db.commit()
     if run.task_id == f"pr-{n}":  # inceleme kosusu: PR yeniden status/review
         with contextlib.suppress(Exception):
             await gp.set_status_label(full, n, "status/review")
     baslik = (run.title or "")[:80].replace("@", "@\u200b")
-    return f"Koşu #{run.id} ({baslik}) yeniden başlatıldı."
+    return f"Koşu {_kosu(run)} ({baslik}) yeniden başlatıldı."

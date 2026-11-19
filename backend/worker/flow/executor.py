@@ -29,6 +29,7 @@ from backend.services.adapters._bimetri_codex import add_credits
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
+from backend.worker.flow._bimetri_iptal import was_cancelled
 from backend.worker.flow._bimetri_kapsam import kapsam_eki
 from backend.worker.flow._bimetri_review_clone import (
     REVIEW_ALLOWED_TOOLS,
@@ -395,6 +396,10 @@ async def execute_flow_prompt(
             raise
         add_credits(result.get("usage"), model, env)
         _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, {**result, "model": model}, None)
+        if await was_cancelled(run, session):  # bimetri patch: no result after a cancel
+            await session.commit()
+            await broadcaster.log(run.id, "Run cancelled; agent result discarded", phase="agent")
+            return
         # bimetri yamasi: CLI hata koduyla bittiyse (limit, kimlik, cokme) kosu basarisiz
         _rd = result.get("response")
         _rc = _rd.get("exit_code") if isinstance(_rd, dict) else None
@@ -438,6 +443,9 @@ async def execute_flow_prompt(
         if flow.flow_type != "pr_review" and not bekletildi_mi(run.id):
             await _bimetri_durum(run, session, "status/review")
 
+        if await was_cancelled(run, session):  # bimetri patch: cancelled during finalization
+            await session.commit()
+            return
         run.status = "completed"
         run.completed_at = datetime.now(UTC)
         await session.commit()
@@ -449,6 +457,9 @@ async def execute_flow_prompt(
         )
     except Exception as e:
         logger.exception("Flow run #%s failed", run.id)
+        if await was_cancelled(run, session):  # bimetri patch: keep the cancel, no failure report
+            await session.commit()
+            return
         run.status = "failed"
         run.error_message = str(e)
         run.completed_at = datetime.now(UTC)

@@ -83,6 +83,8 @@ class TestTekrar:
         yanit = await tekrar_baslat(db_session, gp, RP, "proj-1", 5, True)
         assert "yeniden başlatıldı" in yanit
         assert gp.durum == {5: "status/review"}
+        # a bare "#N" would link to Gitea issue N, not to the run
+        assert "/runs/" in yanit and "](" in yanit
 
     async def test_reports_running_or_nothing_to_retry(self, db_session, seed_proj1, make_task_run):
         gp = SahteGitea()
