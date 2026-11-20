@@ -66,6 +66,15 @@ async def move_issue_card(
             f"{base}/columns", headers=headers, params={"limit": 50}, timeout=30.0
         )
         if rc.status_code != 200:
+            # Usually a permission problem: the bot needs repo.projects write in the org
+            # and a token with write:organization. Say so instead of failing silently.
+            logger.warning(
+                "Board columns not readable: %s #%s project %r (HTTP %s)",
+                repo_path,
+                number,
+                project.get("title") or project.get("id"),
+                rc.status_code,
+            )
             continue
         column = column_for(rc.json(), label)
         if column is None:
