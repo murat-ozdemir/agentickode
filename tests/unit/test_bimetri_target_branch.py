@@ -130,6 +130,21 @@ def test_pr_review_run_uses_pr_base_branch(gitea_project):
     assert run.default_branch == "prj/Y"
 
 
+def test_pr_review_run_records_the_linked_issue(gitea_project):
+    run = helpers.build_pr_review_run(
+        gitea_project,
+        task_source="gitea",
+        pr_number=13,
+        pr_title="t",
+        pr_body="Closes #7\n\nozet",
+        pr_head_branch="improvement/7-x",
+        pr_url="",
+        repo_full_name="myorg/myrepo",
+        labels=["ai-review"],
+    )
+    assert run.task_source_meta["issue_number"] == 7
+
+
 async def _merge(base: str):
     project = SimpleNamespace(
         project_id="p",

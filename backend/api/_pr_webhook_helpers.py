@@ -15,6 +15,7 @@ from backend.models import ProjectConfig, TaskRun
 from backend.repositories.project_config_repo import ProjectConfigRepository
 from backend.services.run_factory import create_task_run
 from backend.services.webhook_security import verify_hmac_sha256
+from backend.worker.phases._bimetri_etiket import issue_no_bul
 
 logger = logging.getLogger("agentickode.webhooks")
 
@@ -79,6 +80,8 @@ def build_pr_review_run(
             "pr_url": pr_url,
             "pr_number": pr_number,
             "pr_title": pr_title,
+            # bimetri yamasi: Slack bildirimi incelemede de issue numarasini yazsin
+            "issue_number": issue_no_bul(pr_body),
             "pr_head_branch": pr_head_branch,
             "pr_head_sha": pr_head_sha,
             "pr_base_branch": pr_base_branch,
