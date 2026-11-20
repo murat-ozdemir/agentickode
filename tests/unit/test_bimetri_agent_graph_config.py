@@ -44,6 +44,7 @@ class TestCodexConfig:
             "command": ENTRY[0],
             "args": ENTRY[1:],
             "startup_timeout_sec": 120,
+            "default_tools_approval_mode": "approve",
         }
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 

@@ -30,7 +30,11 @@ class TestCodexConfig:
         assert config["model"] == "gpt-5"
         assert config["projects"]["/w"] == {"trust_level": "trusted"}
         assert config["mcp_servers"] == {
-            "bimetri-memory": {"url": URL, "http_headers": {"Authorization": "Bearer tok"}}
+            "bimetri-memory": {
+                "url": URL,
+                "http_headers": {"Authorization": "Bearer tok"},
+                "default_tools_approval_mode": "approve",
+            }
         }
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 

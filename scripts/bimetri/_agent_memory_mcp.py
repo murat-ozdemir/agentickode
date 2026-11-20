@@ -40,6 +40,8 @@ def update_codex(path: Path, url: str, token: str) -> None:
         f"[mcp_servers.{NAME}]",
         f"url = {json.dumps(url)}",
         f"http_headers = {{ Authorization = {json.dumps('Bearer ' + token)} }}",
+        # codex exec without the bypass flag (PR review) cannot approve calls; the tools only read
+        'default_tools_approval_mode = "approve"',
     ]
     _write_private(path, "\n".join(kept + ([""] if kept else []) + block) + "\n")
 

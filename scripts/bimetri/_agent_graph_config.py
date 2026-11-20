@@ -28,6 +28,9 @@ TOOLS = ("graphify",)
 # serve answers in ~2 s (loading a 42 MB graph) and updates in the background; the margin is for
 # a busy worker.
 STARTUP_TIMEOUT_SEC = 120
+# Codex asks before every MCP tool call; `codex exec` without the bypass flag (PR review runs
+# in a read-only sandbox) cannot ask, so it refuses them. The graph tools only read.
+CODEX_APPROVAL = 'default_tools_approval_mode = "approve"'
 CLAUDE_ENV = {
     "MCP_TIMEOUT": str(STARTUP_TIMEOUT_SEC * 1000),  # one server's connect attempt; default 30 s
     # How long startup waits for alwaysLoad servers before it builds the tool list; default 5 s.
@@ -86,6 +89,7 @@ def update_codex(path: Path, entry: "list | None") -> None:
     if entry:
         kept += ["", f"[mcp_servers.{NAME}]", f"command = {json.dumps(entry[0])}"]
         kept += [f"args = {json.dumps(entry[1:])}", f"startup_timeout_sec = {STARTUP_TIMEOUT_SEC}"]
+        kept.append(CODEX_APPROVAL)
     text = "\n".join(kept).strip()
     _write_private(path, text + "\n" if text else "")
 
