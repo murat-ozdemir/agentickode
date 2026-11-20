@@ -9,6 +9,7 @@ and messaging command executor.
 """
 
 from backend.models import ProjectConfig, TaskRun
+from backend.services._bimetri_target_branch import run_base_branch
 
 
 def default_workspace_path(project: ProjectConfig) -> str:
@@ -91,7 +92,8 @@ def create_task_run(
         workspace_path=resolve_workspace_path(project, task_id),
         repo_owner=project.repo_owner,
         repo_name=project.repo_name,
-        default_branch=project.default_branch,
+        # bimetri yamasi: issue'daki "Hedef dal:" ya da PR'in base dali (proje dali)
+        default_branch=run_base_branch(str(project.default_branch), description, task_source_meta),
         task_source=task_source,
         git_provider=project.git_provider,
         task_source_meta=task_source_meta,

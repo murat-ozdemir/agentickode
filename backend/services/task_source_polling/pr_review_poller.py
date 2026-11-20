@@ -137,6 +137,7 @@ async def poll_pr_reviews(project: ProjectConfig, session: AsyncSession) -> list
             labels=labels,
             pr_head_sha=head_sha,
             flow_prompt_id=flow_prompt_id,
+            pr_base_branch=pr.get("base_ref", ""),
         )
         session.add(run)
         await session.flush()

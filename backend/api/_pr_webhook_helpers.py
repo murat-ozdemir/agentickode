@@ -62,6 +62,7 @@ def build_pr_review_run(
     labels: list[str],
     pr_head_sha: str = "",
     flow_prompt_id: int | None = None,
+    pr_base_branch: str = "",
 ) -> TaskRun:
     """Create a single-pass, comment-mode PR-review run (ADR-009 flow prompt).
 
@@ -80,6 +81,7 @@ def build_pr_review_run(
             "pr_title": pr_title,
             "pr_head_branch": pr_head_branch,
             "pr_head_sha": pr_head_sha,
+            "pr_base_branch": pr_base_branch,
             "repo_full_name": repo_full_name,
             "labels": labels,
             "review_mode": "comment",
@@ -141,12 +143,20 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
         arka_planda_yaz(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
         # memory proposals from the PR discussion; pending until approved in the UI
         schedule_proposals(provider, f"{project.repo_owner}/{project.repo_name}", full, pr)
-    try:  # code graph on the idle workers, in the background (D2 phase 2)
-        from backend.services.bimetri_graph import schedule_refresh
+    from backend.services._bimetri_target_branch import close_issues, merged_off_default
 
-        await schedule_refresh(db, project)
-    except Exception:
-        logger.warning("graph refresh could not be scheduled", exc_info=True)
+    # project branch merge: the graph tracks the default branch, so it stays as is
+    default = body.get("repository", {}).get("default_branch") or str(
+        getattr(project, "default_branch", None) or "main"
+    )
+    off_default = merged_off_default(pr, default)
+    if not off_default:
+        try:  # code graph on the idle workers, in the background (D2 phase 2)
+            from backend.services.bimetri_graph import schedule_refresh
+
+            await schedule_refresh(db, project)
+        except Exception:
+            logger.warning("graph refresh could not be scheduled", exc_info=True)
     done = []
     for n in issues:
         try:
@@ -154,7 +164,12 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
             done.append(n)
         except Exception:
             logger.warning("#%s status/completed etiketlenemedi", n, exc_info=True)
-    return {"status": "accepted", "completed": done}
+    result: dict = {"status": "accepted", "completed": done}
+    if off_default:  # Gitea closes "Closes #N" issues only on the default branch
+        result["closed"] = await close_issues(
+            provider, full, [n for n in issues if n != pr.get("number")]
+        )
+    return result
 
 
 # bimetri yamasi: ai-test etiketi PR dalinda test kosusu acar (review_mode=test); status/on-hold iken acmaz
@@ -201,6 +216,7 @@ async def _bimetri_test_run(
             "issue_number": issue_no,
             "pr_number": pr_number,
             "pr_head_branch": branch,
+            "pr_base_branch": (pr.get("base") or {}).get("ref") or "",
             "pr_url": pr.get("html_url"),
             "review_mode": "test",
             "trigger": "ai_test",
@@ -282,6 +298,7 @@ async def handle_pr_event(
         repo_full_name=repo_full_name,
         labels=label_names,
         flow_prompt_id=await resolve_pr_review_flow_prompt_id(db),
+        pr_base_branch=(pr.get("base") or {}).get("ref") or "",
     )
     db.add(run)
     await db.commit()

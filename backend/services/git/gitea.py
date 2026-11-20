@@ -139,6 +139,7 @@ class GiteaProvider:
                 "labels": [la.get("name", "") for la in item.get("labels", [])],
                 "head_ref": item.get("head", {}).get("ref", ""),
                 "head_sha": item.get("head", {}).get("sha", ""),
+                "base_ref": item.get("base", {}).get("ref", ""),
                 "html_url": item.get("html_url", ""),
                 "state": item.get("state", "open"),
             }

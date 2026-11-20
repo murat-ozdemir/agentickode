@@ -164,6 +164,7 @@ async def gitea_pr_comment_webhook(
             "issue_number": issue_no,
             "pr_number": pr_number,
             "pr_head_branch": pr_branch,
+            "pr_base_branch": (pr.get("base") or {}).get("ref") or "",
             "pr_url": pr.get("html_url"),
             "review_mode": "fix",
             "comment_id": comment.get("id"),

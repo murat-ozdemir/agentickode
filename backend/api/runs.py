@@ -20,6 +20,7 @@ from backend.schemas import (
     PaginatedRunsResponse,
     TaskRunDetail,
 )
+from backend.services._bimetri_target_branch import target_branch
 from backend.services.run_factory import default_workspace_path
 from backend.services.workspace.workspace_selector import select_workspace_for_run
 
@@ -136,7 +137,8 @@ async def create_run(req: CreateRunRequest, db: AsyncSession = Depends(get_db)):
         workspace_server_id=ws_server_id,
         repo_owner=project.repo_owner,
         repo_name=project.repo_name,
-        default_branch=project.default_branch,
+        # bimetri yamasi: aciklamadaki "Hedef dal:" satiri (proje dali)
+        default_branch=target_branch(req.description) or project.default_branch,
         task_source="manual",
         git_provider=project.git_provider,
         task_source_meta=meta,
