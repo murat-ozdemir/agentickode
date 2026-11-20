@@ -26,35 +26,35 @@ from backend.services.git.gitea import GiteaProvider
 @pytest.mark.parametrize(
     "body",
     [
-        "Hedef dal: proje/TCW242-INTG",
-        "**Hedef dal:** `proje/TCW242-INTG`",
-        "**Hedef dal**: proje/TCW242-INTG.",
-        "<strong>Hedef dal:</strong> proje/TCW242-INTG",
-        "## Kapsam\nbir sey\n\n- hedef DAL: proje/TCW242-INTG\n",
-        "Target branch: proje/TCW242-INTG",
+        "Hedef dal: prj/TCW242-INTG",
+        "**Hedef dal:** `prj/TCW242-INTG`",
+        "**Hedef dal**: prj/TCW242-INTG.",
+        "<strong>Hedef dal:</strong> prj/TCW242-INTG",
+        "## Kapsam\nbir sey\n\n- hedef DAL: prj/TCW242-INTG\n",
+        "Target branch: prj/TCW242-INTG",
     ],
 )
 def test_target_branch_reads_the_line(body):
-    assert target_branch(body) == "proje/TCW242-INTG"
+    assert target_branch(body) == "prj/TCW242-INTG"
 
 
 @pytest.mark.parametrize(
-    "body", ["", None, "Hedef dal:", "Hedef dal: ../main", "Hedef dal: -x", "dal: proje/X"]
+    "body", ["", None, "Hedef dal:", "Hedef dal: ../main", "Hedef dal: -x", "dal: prj/X"]
 )
 def test_target_branch_ignores_missing_or_invalid(body):
     assert target_branch(body) is None
 
 
 def test_run_base_branch_prefers_pr_base_then_issue_line():
-    body = "Hedef dal: proje/A"
-    assert run_base_branch("main", body, {"pr_base_branch": "proje/B"}) == "proje/B"
+    body = "Hedef dal: prj/A"
+    assert run_base_branch("main", body, {"pr_base_branch": "prj/B"}) == "prj/B"
     assert run_base_branch("main", body, {"pr_number": 4}) == "main"
-    assert run_base_branch("main", body, {}) == "proje/A"
+    assert run_base_branch("main", body, {}) == "prj/A"
     assert run_base_branch("main", "no line", None) == "main"
 
 
 def test_merged_off_default():
-    assert merged_off_default({"base": {"ref": "proje/A"}}, "main")
+    assert merged_off_default({"base": {"ref": "prj/A"}}, "main")
     assert not merged_off_default({"base": {"ref": "main"}}, "main")
     assert not merged_off_default({}, "main")
 
@@ -103,8 +103,8 @@ async def _issue_run(client, db_session, body: str) -> TaskRun:
 async def test_issue_with_target_line_runs_on_project_branch(
     client: AsyncClient, gitea_project, db_session
 ):
-    run = await _issue_run(client, db_session, "**Hedef dal:** `proje/TCW242-INTG`\n\nKapsam")
-    assert run.default_branch == "proje/TCW242-INTG"
+    run = await _issue_run(client, db_session, "**Hedef dal:** `prj/TCW242-INTG`\n\nKapsam")
+    assert run.default_branch == "prj/TCW242-INTG"
 
 
 async def test_issue_without_target_line_runs_on_default_branch(
@@ -120,14 +120,14 @@ def test_pr_review_run_uses_pr_base_branch(gitea_project):
         task_source="gitea",
         pr_number=3,
         pr_title="t",
-        pr_body="Hedef dal: proje/X",
+        pr_body="Hedef dal: prj/X",
         pr_head_branch="feature/7-x",
         pr_url="",
         repo_full_name="myorg/myrepo",
         labels=["ai-review"],
-        pr_base_branch="proje/Y",
+        pr_base_branch="prj/Y",
     )
-    assert run.default_branch == "proje/Y"
+    assert run.default_branch == "prj/Y"
 
 
 async def _merge(base: str):
@@ -157,7 +157,7 @@ async def _merge(base: str):
 
 
 async def test_merge_into_project_branch_closes_issue_and_skips_graph():
-    result, gp, refresh, close = await _merge("proje/A")
+    result, gp, refresh, close = await _merge("prj/A")
     assert result["completed"] == [7, 12]
     assert result["closed"] == [7]
     assert close.await_args.args[1:] == ("org/repo", [7])

@@ -4,8 +4,8 @@
 
 """bimetri patch: the runs of a project work on one shared project branch.
 
-The plan agent creates ``proje/<CODE>`` in each repo of the project and writes
-``**Hedef dal:** proje/<CODE>`` into every issue. A run for such an issue
+The plan agent creates ``prj/<CODE>`` in each repo of the project and writes
+``**Hedef dal:** prj/<CODE>`` into every issue. A run for such an issue
 branches off the project branch and opens its PR against it; PR runs (review,
 test, fix) follow the PR's base branch. The project branch reaches the default
 branch later through one human-reviewed PR, after the test environment passes.
