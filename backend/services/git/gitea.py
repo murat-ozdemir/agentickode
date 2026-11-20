@@ -213,10 +213,14 @@ class GiteaProvider:
             logger.warning("Board card move failed: %s #%s", repo_path, number, exc_info=True)
 
     async def _set_status_label(self, repo_path: str, number: int, label: str | None) -> None:
+        # bimetri yamasi: yeni etiket ONCE eklenir, eskiler SONRA silinir. Ters sirada aradaki
+        # label_updated webhook'u "ai-test var, status/on-hold yok" gorup yeni test kosusu aciyordu.
         base = f"{self._base_url}/api/v1/repos/{repo_path}/issues/{number}/labels"
         resp = await self._client.get(base, headers=self._headers(), timeout=30.0)
         resp.raise_for_status()
         current = {la.get("name"): la.get("id") for la in resp.json()}
+        if label and label not in current:
+            await self._add_label_any_scope(repo_path, base, label)
         for name, lid in current.items():
             if (name or "").startswith("status/") and name != label:
                 r = await self._client.delete(
@@ -224,8 +228,8 @@ class GiteaProvider:
                 )
                 if r.status_code != 404:
                     r.raise_for_status()
-        if not label or label in current:
-            return
+
+    async def _add_label_any_scope(self, repo_path: str, base: str, label: str) -> None:
         label_id = await self._label_id(repo_path, label)
         if label_id is None:  # organizasyon etiketi olabilir
             owner = repo_path.split("/", 1)[0]

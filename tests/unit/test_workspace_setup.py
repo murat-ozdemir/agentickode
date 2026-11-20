@@ -110,6 +110,7 @@ class TestWorkspaceSetup:
             mock_remote_git = mock_git_cls.return_value
             mock_remote_git.mkdir = AsyncMock()
             mock_remote_git.has_repo = AsyncMock(return_value=True)
+            mock_remote_git.set_origin_url = AsyncMock()
             mock_remote_git.run_git = AsyncMock()
             mock_remote_git.clone = AsyncMock()
             mock_remote_git._mark_safe_directory = AsyncMock()
@@ -126,6 +127,8 @@ class TestWorkspaceSetup:
             assert (["reset", "--hard", "origin/main"], base) in git_calls
             assert (["clean", "-fd"], base) in git_calls
             mock_remote_git.clone.assert_not_called()
+            # bimetri: origin gets the current token before the fetch
+            mock_remote_git.set_origin_url.assert_awaited_once_with(base, "https://authed@url")
 
             # No per-run copy — workspace used directly
             ssh_cmds = [c.args[0] for c in mock_ssh_instance.run_command.call_args_list]
@@ -190,6 +193,7 @@ class TestWorkspaceSetup:
             mock_remote_git = mock_git_cls.return_value
             mock_remote_git.mkdir = AsyncMock()
             mock_remote_git.has_repo = AsyncMock(return_value=True)
+            mock_remote_git.set_origin_url = AsyncMock()
             mock_remote_git.run_git = AsyncMock()
             mock_remote_git._mark_safe_directory = AsyncMock()
 
@@ -282,6 +286,7 @@ class TestWorkspaceSetup:
             mock_remote_git = mock_git_cls.return_value
             mock_remote_git.mkdir = AsyncMock()
             mock_remote_git.has_repo = AsyncMock(return_value=True)
+            mock_remote_git.set_origin_url = AsyncMock()
             mock_remote_git.run_git = AsyncMock()
             mock_remote_git._mark_safe_directory = AsyncMock()
 
@@ -342,6 +347,7 @@ class TestWorkspaceSetup:
             mock_remote_git = mock_git_cls.return_value
             mock_remote_git.mkdir = AsyncMock()
             mock_remote_git.has_repo = AsyncMock(return_value=True)
+            mock_remote_git.set_origin_url = AsyncMock()
             mock_remote_git.run_git = AsyncMock()
             mock_remote_git._mark_safe_directory = AsyncMock()
 
@@ -440,6 +446,7 @@ class TestWorkspaceSetup:
         ):
             mock_remote_git = mock_git_cls.return_value
             mock_remote_git.has_repo = AsyncMock(return_value=True)
+            mock_remote_git.set_origin_url = AsyncMock()
             mock_remote_git.run_git = AsyncMock()
             mock_remote_git.clone = AsyncMock()
             mock_remote_git._mark_safe_directory = AsyncMock()
@@ -554,6 +561,7 @@ class TestWorkspaceSetup:
         ):
             mock_remote_git = mock_git_cls.return_value
             mock_remote_git.has_repo = AsyncMock(return_value=True)
+            mock_remote_git.set_origin_url = AsyncMock()
             mock_remote_git.run_git = AsyncMock()
             mock_remote_git._mark_safe_directory = AsyncMock()
 

@@ -280,6 +280,7 @@ class TestWorkspaceSetupFinalizationRoundTrip:
             git = mock_git_cls.return_value
             git.mkdir = AsyncMock()
             git.has_repo = AsyncMock(return_value=True)
+            git.set_origin_url = AsyncMock()
             git.run_git = AsyncMock()
             git._mark_safe_directory = AsyncMock()
 

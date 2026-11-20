@@ -168,6 +168,7 @@ async def run(
         # Ensure clone exists and is up-to-date
         if await remote_git.has_repo(workspace):
             await _log(f"Repo found at {workspace}, pulling latest")
+            await _refresh_origin(task_run, ws_cfg, ssh, remote_git, workspace, project_token, _log)
             await remote_git.run_git(["fetch", "origin"], cwd=workspace)
             await remote_git.run_git(["checkout", "-f", branch], cwd=workspace)
             await remote_git.run_git(["reset", "--hard", f"origin/{branch}"], cwd=workspace)
@@ -365,6 +366,34 @@ async def _validate_readiness(
         raise RuntimeError(f"Workspace not ready: {result.summary}\n\n{guide}")
 
     await _log(f"Workspace readiness: all {len(result.checks)} checks passed")
+
+
+async def _refresh_origin(
+    task_run: TaskRun,
+    ws_cfg: dict,
+    ssh: CommandExecutor,
+    remote_git: RemoteGitOps,
+    workspace: str,
+    project_token: str | None,
+    _log: LogFn,
+) -> None:
+    """bimetri yamasi: point an existing clone's origin at the current token before fetching.
+
+    The auth URL used to be applied only at clone time, so a rotated/deleted token left
+    every existing clone failing with 401. SSH remotes are left as they are.
+    """
+    try:
+        repo_url, _ = _resolve_single_repo(task_run, ws_cfg)
+        auth_url, method = await get_auth_url(
+            repo_url, task_run.git_provider, ssh, token_override=project_token
+        )
+    except Exception as exc:
+        await _log(f"Origin refresh skipped: {type(exc).__name__}", level="warning")
+        return
+    if method != "https" or auth_url == repo_url:
+        return
+    await remote_git.set_origin_url(workspace, auth_url)
+    await _log("Origin URL refreshed with the current token")
 
 
 def _resolve_single_repo(task_run: TaskRun, ws_cfg: dict) -> tuple[str, str]:

@@ -20,6 +20,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agentickode.remote_git_ops")
 
 
+def _has_credentials(repo_url: str) -> bool:
+    """True for an https URL with userinfo (token) in it."""
+    if not repo_url.startswith(("http://", "https://")):
+        return False
+    return "@" in repo_url.split("://", 1)[1].split("/", 1)[0]
+
+
 class RemoteGitError(RuntimeError):
     """Raised when a remote git command fails."""
 
@@ -81,6 +88,21 @@ class RemoteGitOps:
         except Exception:
             logger.debug("Could not set safe.directory for %s (non-fatal)", path)
 
+    # bimetri yamasi: token degisince mevcut kopyanin origin'i eski token'la kalmasin
+    async def set_origin_url(self, dest: str, repo_url: str) -> None:
+        """Point origin at ``repo_url``; the URL (it may carry a token) never reaches errors/logs."""
+        cmd = f"cd {shlex.quote(dest)} && git remote set-url origin {shlex.quote(repo_url)}"
+        try:
+            _, _, rc = await self._ssh.run_command(cmd, timeout=30)
+        except Exception as exc:  # SSHCommandError too: its message can quote the command
+            raise RemoteGitError(
+                f"git remote set-url origin on {self.server_label} failed: {type(exc).__name__}"
+            ) from None
+        if rc != 0:
+            raise RemoteGitError(
+                f"git remote set-url origin on {self.server_label} failed (rc={rc})"
+            )
+
     async def pull(self, dest: str, branch: str = "main") -> None:
         """Pull latest using the server's own remote config (no URL rewrite)."""
         await self._mark_safe_directory(dest)
@@ -120,6 +142,8 @@ class RemoteGitOps:
         """Clone a repo if dest doesn't exist, otherwise fetch and reset."""
         await self._mark_safe_directory(dest)
         if await self.has_repo(dest):
+            if _has_credentials(repo_url):
+                await self.set_origin_url(dest, repo_url)
             await self.pull(dest, branch=branch)
         else:
             await self.clone(repo_url, dest, branch=branch)
