@@ -14,6 +14,7 @@ from backend.database import get_db
 from backend.models import ProjectConfig
 from backend.repositories.task_run_repo import TaskRunRepository
 from backend.schemas import RejectRequest, TerminalActionRequest
+from backend.services.run_factory import resolve_workspace_path
 
 logger = logging.getLogger("agentickode.runs")
 router = APIRouter(tags=["runs"])
@@ -92,9 +93,12 @@ async def restart_run(run_id: int, db: AsyncSession = Depends(get_db)):
 
 async def reset_run_for_restart(run, db: AsyncSession) -> None:
     """Reset a finished run so the worker picks it up from scratch (caller commits)."""
-    # Re-derive the original workspace_path from the project config
+    # bimetri patch: derive the path and server the way a new run would. The old code kept
+    # the stale server (e.g. the platform host for a project now bound to workers) and fell
+    # back to the bare repo name, which lost the owner/ folder.
     project = await db.get(ProjectConfig, run.project_id)
-    run.workspace_path = (project.workspace_path if project else None) or run.repo_name
+    run.workspace_path = resolve_workspace_path(project, run.task_id) if project else run.repo_name
+    run.workspace_server_id = None  # the worker picks one of the project's servers again
     run.status = "pending"
     run.error_message = None
     run.approved = None
