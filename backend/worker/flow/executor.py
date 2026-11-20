@@ -31,6 +31,7 @@ from backend.worker.broadcaster import broadcaster
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
 from backend.worker.flow._bimetri_iptal import was_cancelled
 from backend.worker.flow._bimetri_kapsam import kapsam_eki
+from backend.worker.flow._bimetri_olay import run_event_payload
 from backend.worker.flow._bimetri_review_clone import (
     REVIEW_ALLOWED_TOOLS,
     REVIEW_CLONE_RULES,
@@ -165,11 +166,6 @@ async def _run_phase(name: str, run: TaskRun, session: AsyncSession, services: S
     await module.run(run, session, services, None)
 
 
-# bimetri yamasi: bitis/hata olayinda da proje adi gitsin (Slack "Run Completed:  #63" bos kaliyordu)
-def _olay_yuku(run: TaskRun) -> dict[str, Any]:
-    return {"run_id": run.id, "title": run.title, "project_id": run.project_id}
-
-
 async def execute_flow_prompt(
     run: TaskRun, session: AsyncSession, services: ServiceContainer
 ) -> None:
@@ -181,7 +177,9 @@ async def execute_flow_prompt(
         run.completed_at = datetime.now(UTC)
         await session.commit()
         await broadcaster.event(
-            run.id, "run_failed", {**_olay_yuku(run), "error": run.error_message}
+            run.id,
+            "run_failed",
+            {**await run_event_payload(run, session), "error": run.error_message},
         )
         return
 
@@ -196,7 +194,7 @@ async def execute_flow_prompt(
     await broadcaster.event(
         run.id,
         "run_started",
-        {"status": "running", "title": run.title, "project_id": run.project_id, "flow": flow.name},
+        {**await run_event_payload(run, session), "status": "running", "flow": flow.name},
     )
 
     try:
@@ -453,7 +451,7 @@ async def execute_flow_prompt(
         await broadcaster.event(
             run.id,
             "run_completed",
-            {**_olay_yuku(run), "status": "completed"},
+            {**await run_event_payload(run, session), "status": "completed"},
         )
     except Exception as e:
         logger.exception("Flow run #%s failed", run.id)
@@ -464,7 +462,9 @@ async def execute_flow_prompt(
         run.error_message = str(e)
         run.completed_at = datetime.now(UTC)
         await session.commit()
-        await broadcaster.event(run.id, "run_failed", {**_olay_yuku(run), "error": str(e)})
+        await broadcaster.event(
+            run.id, "run_failed", {**await run_event_payload(run, session), "error": str(e)}
+        )
         with contextlib.suppress(Exception):
             await close_run_session(run, session)
         # bimetri yamasi: basarisiz kosu (inceleme dahil): issue (ve varsa PR) status/on-hold

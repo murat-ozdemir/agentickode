@@ -163,6 +163,8 @@ async def gitea_pr_comment_webhook(
             "repo_full_name": full,
             "issue_number": issue_no,
             "pr_number": pr_number,
+            # bimetri yamasi: Slack bildirimi yorum yerine PR adini gostersin
+            "pr_title": pr.get("title") or "",
             "pr_head_branch": pr_branch,
             "pr_base_branch": (pr.get("base") or {}).get("ref") or "",
             "pr_url": pr.get("html_url"),

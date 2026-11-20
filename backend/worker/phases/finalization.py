@@ -576,6 +576,8 @@ async def _bimetri_test_finalize(
         sonuc = "Kural ihlali"
     elif ahead and ahead != "0":
         await _push_to_pr_branch(task_run, pr_branch, session)
+    # bimetri yamasi: Slack bildirimi test sonucunu yazsin
+    task_run.coding_results = {**(task_run.coding_results or {}), "test_outcome": sonuc}
 
     _kosu = f"{_settings.app_base_url.rstrip('/')}/runs/{task_run.id}"
     govde = (

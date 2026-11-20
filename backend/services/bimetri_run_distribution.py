@@ -25,6 +25,11 @@ _DIFFICULTY_ORDER = ["trivial", "easy", "medium", "hard", NO_LABEL]
 _TYPE_ORDER = ["task", "test", "fix", "review"]
 
 
+def run_type(meta: dict[str, Any]) -> str:
+    """task / test / fix / review, from the run's review_mode."""
+    return _TYPE_BY_REVIEW_MODE.get(str(meta.get("review_mode") or ""), "task")
+
+
 @dataclass
 class RunRow:
     id: int
@@ -58,7 +63,7 @@ def classify(row: RunRow) -> dict[str, str | None]:
         "agent": agent,
         "model": (model or UNKNOWN_MODEL) if row.calls else None,
         "difficulty": difficulty,
-        "type": _TYPE_BY_REVIEW_MODE.get(str(row.meta.get("review_mode") or ""), "task"),
+        "type": run_type(row.meta),
         "outcome": row.status,
     }
 

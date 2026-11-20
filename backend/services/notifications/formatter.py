@@ -5,6 +5,7 @@
 """Format notification messages from raw event data."""
 
 from backend.config import settings
+from backend.services.notifications._bimetri_run_message import RUN_EVENTS, format_run_message
 
 
 def _run_link(run_id: int | str) -> str:
@@ -47,6 +48,12 @@ def format_notification(event_type: str, data: dict) -> str:
         label += f" \u2014 {title}"
 
     link = _run_link(run_id)
+
+    # bimetri yamasi: kosu tipi, issue/PR, sunucu ve sonuc yazan mesaj
+    if data.get("run_kind") and event_type in RUN_EVENTS:
+        return format_run_message(
+            event_type, data, link, _duration_str(data.get("duration_seconds"))
+        )
 
     if event_type == "run_started":
         return f"\U0001f680 Run Started: {label}\n\U0001f517 {link}"
