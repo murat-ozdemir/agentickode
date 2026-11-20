@@ -43,6 +43,32 @@ async def _scan_all_roots(proj_discovery, server):
     return discovered
 
 
+async def _import_new_projects(project_repo, server, discovered) -> int:
+    """Create configs for newly discovered repos; return how many were created.
+
+    bimetri patch: a scan never changes an existing project. Before this, a
+    scan replaced the project's whole server list with the scanned server and
+    overwrote its workspace path, so scanning the platform container (which had
+    a stale clone) left platform-backend running only on the platform server.
+    Server lists are edited on the Projects page or by add-agent-to-repo.py.
+    """
+    imported = 0
+    for dp in discovered:
+        if await project_repo.find_by_repo(dp.owner, dp.name) is not None:
+            continue
+        proj = ProjectConfig(
+            project_id=f"{dp.owner}/{dp.name}",
+            project_slug=dp.name,
+            repo_owner=dp.owner,
+            repo_name=dp.name,
+            git_provider=dp.git_provider,
+            workspace_path=dp.path,
+        )
+        await project_repo.create(proj, workspace_server_ids=[server.id])
+        imported += 1
+    return imported
+
+
 @router.post("/workspace-servers/{server_id}/deploy-key", response_model=SSHTestResult)
 async def deploy_key_to_server(
     server_id: int,
@@ -105,23 +131,7 @@ async def deploy_key_to_server(
 
         proj_discovery = ProjectDiscoveryService(ssh)
         discovered = await _scan_all_roots(proj_discovery, server)
-        for dp in discovered:
-            existing = await project_repo.find_by_repo(dp.owner, dp.name)
-            if existing is None:
-                proj = ProjectConfig(
-                    project_id=f"{dp.owner}/{dp.name}",
-                    project_slug=dp.name,
-                    repo_owner=dp.owner,
-                    repo_name=dp.name,
-                    git_provider=dp.git_provider,
-                    workspace_path=dp.path,
-                )
-                await project_repo.create(proj, workspace_server_ids=[server.id])
-            else:
-                await project_repo.update(
-                    existing,
-                    {"workspace_path": dp.path, "workspace_server_ids": [server.id]},
-                )
+        await _import_new_projects(project_repo, server, discovered)
     else:
         await repo.update(server, {"status": "error", "error_message": result.error})
 
@@ -196,25 +206,7 @@ async def scan_workspace_server(
     except Exception as exc:
         await repo.update(server, {"status": "error", "error_message": str(exc)})
         raise HTTPException(502, f"Project discovery failed: {exc}") from exc
-    imported = 0
-    for dp in discovered:
-        existing = await project_repo.find_by_repo(dp.owner, dp.name)
-        if existing is None:
-            proj = ProjectConfig(
-                project_id=f"{dp.owner}/{dp.name}",
-                project_slug=dp.name,
-                repo_owner=dp.owner,
-                repo_name=dp.name,
-                git_provider=dp.git_provider,
-                workspace_path=dp.path,
-            )
-            await project_repo.create(proj, workspace_server_ids=[server.id])
-            imported += 1
-        else:
-            await project_repo.update(
-                existing,
-                {"workspace_path": dp.path, "workspace_server_ids": [server.id]},
-            )
+    imported = await _import_new_projects(project_repo, server, discovered)
 
     await repo.update(
         server,

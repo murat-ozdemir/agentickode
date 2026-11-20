@@ -634,6 +634,62 @@ class TestScan:
             assert data["projects_found"] == 2
             assert data["projects_imported"] == 0
 
+    async def test_scan_keeps_existing_project_servers_and_path(self, client: AsyncClient):
+        """bimetri: a scan that finds a clone of a known project must not move it."""
+        ids = []
+        for name in ("keep-w1", "keep-w2", "keep-platform"):
+            r = await client.post(
+                "/api/workspace-servers", json={"name": name, "hostname": "10.0.0.1"}
+            )
+            ids.append(r.json()["id"])
+        w1, w2, platform = ids
+        await client.post(
+            "/api/projects",
+            json={
+                "project_id": "org/kept",
+                "project_slug": "kept",
+                "repo_owner": "org",
+                "repo_name": "kept",
+                "workspace_path": "",
+                "workspace_server_ids": [w1, w2],
+            },
+        )
+        stale_clone = [
+            DiscoveredProject(
+                path="/workspaces/kept-stale",
+                remote_url="https://gitea.local/org/kept.git",
+                owner="org",
+                name="kept",
+                git_provider="gitea",
+            )
+        ]
+        with (
+            patch(
+                "backend.api.servers.workspace_servers_discovery.executor_for_server"
+            ) as mock_factory,
+            patch(
+                "backend.api.servers.workspace_servers_discovery.AgentDiscoveryService"
+            ) as mock_agent_cls,
+            patch(
+                "backend.api.servers.workspace_servers_discovery.ProjectDiscoveryService"
+            ) as mock_proj_cls,
+        ):
+            scan_ssh = AsyncMock()
+            mock_factory.return_value = scan_ssh
+            scan_ssh.test_connection = AsyncMock(
+                return_value=SSHTestResultData(success=True, latency_ms=5.0)
+            )
+            mock_agent_cls.return_value.discover_all = AsyncMock(return_value=[])
+            mock_proj_cls.return_value.scan_workspace = AsyncMock(return_value=stale_clone)
+
+            resp = await client.post(f"/api/workspace-servers/{platform}/scan")
+            assert resp.status_code == 200
+            assert resp.json()["projects_imported"] == 0
+
+        proj = (await client.get("/api/projects/org/kept")).json()
+        assert proj["workspace_server_ids"] == [w1, w2]
+        assert proj["workspace_path"] == ""
+
 
 class TestSetupLog:
     async def test_get_setup_log(self, client: AsyncClient):
