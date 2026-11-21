@@ -42,6 +42,8 @@ def update_codex(path: Path, url: str, token: str) -> None:
         f"http_headers = {{ Authorization = {json.dumps('Bearer ' + token)} }}",
         # codex exec without the bypass flag (PR review) cannot approve calls; the tools only read
         'default_tools_approval_mode = "approve"',
+        # an optional server still connecting at the first turn is left out of the session
+        "required = true",
     ]
     _write_private(path, "\n".join(kept + ([""] if kept else []) + block) + "\n")
 

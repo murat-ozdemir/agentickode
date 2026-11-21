@@ -31,6 +31,10 @@ STARTUP_TIMEOUT_SEC = 120
 # Codex asks before every MCP tool call; `codex exec` without the bypass flag (PR review runs
 # in a read-only sandbox) cannot ask, so it refuses them. The graph tools only read.
 CODEX_APPROVAL = 'default_tools_approval_mode = "approve"'
+# Codex leaves out an optional server that is still starting when the first turn begins (run
+# #252: ~2 s, while a graph update loaded the worker), and the session never gets its tools.
+# A required server is waited for (up to the startup timeout); if it fails, the run fails.
+CODEX_REQUIRED = "required = true"
 CLAUDE_ENV = {
     "MCP_TIMEOUT": str(STARTUP_TIMEOUT_SEC * 1000),  # one server's connect attempt; default 30 s
     # How long startup waits for alwaysLoad servers before it builds the tool list; default 5 s.
@@ -89,7 +93,7 @@ def update_codex(path: Path, entry: "list | None") -> None:
     if entry:
         kept += ["", f"[mcp_servers.{NAME}]", f"command = {json.dumps(entry[0])}"]
         kept += [f"args = {json.dumps(entry[1:])}", f"startup_timeout_sec = {STARTUP_TIMEOUT_SEC}"]
-        kept.append(CODEX_APPROVAL)
+        kept += [CODEX_APPROVAL, CODEX_REQUIRED]
     text = "\n".join(kept).strip()
     _write_private(path, text + "\n" if text else "")
 

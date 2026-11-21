@@ -34,6 +34,7 @@ class TestCodexConfig:
                 "url": URL,
                 "http_headers": {"Authorization": "Bearer tok"},
                 "default_tools_approval_mode": "approve",
+                "required": True,
             }
         }
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
