@@ -4,6 +4,8 @@
 
 """bimetri yamasi: yorum komutlari, yazma yetkisi, tekrar ve insan push'u."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from backend.api._bimetri_komut import (
@@ -161,3 +163,95 @@ class TestPushKarari:
         assert karar["reason"] == "human_push_ci"
         assert gp.dispatch[0][1] == {"ref": "f", "inputs": {"sha": "abc123"}}
         assert await push_karari(gp, _push("mozdemir"), ["ai-review"]) is None
+
+
+class _BlobluGitea(SahteGitea):
+    """contents yanitlarini ref'e gore ayiran sahte Gitea."""
+
+    def __init__(self):
+        super().__init__()
+        self.blob: dict[tuple[str, str], str] = {}
+
+    async def _get(self, url: str, params: dict | None = None, **kw):
+        yol = url.removeprefix("https://gitea.test/api/v1")
+        onek = f"/repos/{RP}/contents/"
+        if yol.startswith(onek) and ".gitea/workflows" not in yol and "mvnw" not in yol:
+            sha = self.blob.get((yol.removeprefix(onek), (params or {}).get("ref", "")))
+            veri = {"type": "file", "sha": sha} if sha else {}
+            return SimpleNamespace(
+                status_code=200 if sha else 404, json=lambda: veri, raise_for_status=lambda: None
+            )
+        return await super()._get(url, params=params, **kw)
+
+
+def _birlesme_kur(dosya_hedefte: str = "b1", cakisma: bool = False) -> _BlobluGitea:
+    """M = merge(P1, P2); P2 hedef dalda; P1'de ci-kapisi var; M, A.java'yi P2'den alir."""
+    gp = _BlobluGitea()
+    gp.yanitlar[f"/repos/{RP}/contents/mvnw"] = (200, {})
+    gp.yanitlar[f"/repos/{RP}/git/commits/M"] = (
+        200,
+        {"parents": [{"sha": "P1"}, {"sha": "P2"}], "files": [{"filename": "A.java"}]},
+    )
+    gp.yanitlar[f"/repos/{RP}/compare/prj%2Fx...P2"] = (200, {"total_commits": 0})
+    gp.ci_durum["P1"] = ["ci-kapisi"]
+    gp.blob[("A.java", "M")] = "b2" if cakisma else "b1"
+    gp.blob[("A.java", "P2")] = dosya_hedefte
+    gp.pr[5] = {"head": {"sha": "M", "ref": "f"}}
+    gp.etiket[5] = ["test/passed", "ai-tested", "ai-reviewed"]
+    return gp
+
+
+def _birlesme_push() -> dict:
+    govde = _push("mozdemir")
+    govde["pull_request"]["head"] = {"ref": "f", "sha": "M"}
+    govde["pull_request"]["base"] = {"ref": "prj/x"}
+    return govde
+
+
+class TestHedefDalBirlesmesi:
+    async def test_update_branch_merge_runs_only_ci(self):
+        gp = _birlesme_kur()
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "base_merge_ci"
+        assert gp.etiket[5] == ["test/passed", "ai-tested", "ai-reviewed"]
+        assert gp.dispatch[0][1] == {"ref": "f", "inputs": {"sha": "M"}}
+
+    async def test_merge_with_own_change_restarts_test(self):
+        gp = _birlesme_kur(cakisma=True)
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "human_push_test"
+        assert "ai-test" in gp.etiket[5]
+
+    async def test_second_parent_outside_base_restarts_test(self):
+        gp = _birlesme_kur()
+        gp.yanitlar[f"/repos/{RP}/compare/prj%2Fx...P2"] = (200, {"total_commits": 1})
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "human_push_test"
+
+    async def test_unfinished_chain_on_previous_head_restarts_test(self):
+        gp = _birlesme_kur()
+        gp.ci_durum["P1"] = []
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "human_push_test"
+
+    async def test_single_parent_commit_restarts_test(self):
+        gp = _birlesme_kur()
+        gp.yanitlar[f"/repos/{RP}/git/commits/M"] = (200, {"parents": [{"sha": "P1"}]})
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "human_push_test"
+
+    async def test_deleted_file_matches_when_absent_in_base(self):
+        gp = _birlesme_kur()
+        gp.blob.clear()  # A.java ne M'de ne P2'de: hedef dalda silinmis
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "base_merge_ci"
+
+    async def test_api_error_falls_back_to_test(self):
+        gp = _birlesme_kur()
+        del gp.yanitlar[f"/repos/{RP}/git/commits/M"]
+        karar = await push_karari(gp, _birlesme_push(), list(gp.etiket[5]))
+        assert karar["reason"] == "human_push_test"
+
+    async def test_pending_review_is_left_to_review_flow(self):
+        gp = _birlesme_kur()
+        assert await push_karari(gp, _birlesme_push(), ["ai-review"]) is None

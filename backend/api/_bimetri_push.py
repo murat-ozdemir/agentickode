@@ -7,6 +7,7 @@
 import contextlib
 import logging
 from types import SimpleNamespace
+from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +43,68 @@ async def mvnw_var_mi(gp, full: str, dal: str) -> bool:
     return r.status_code == 200
 
 
+_SALT_BIRLESME_DOSYA_SINIRI = 100
+
+
+async def _api(gp, yol: str, params: dict | None = None):
+    return await gp._client.get(
+        f"{gp._base_url}/api/v1{yol}", params=params, headers=gp._headers(), timeout=30.0
+    )
+
+
+async def _blob(gp, full: str, yol: str, ref: str) -> str | None:
+    """Dosyanin o ref'teki blob sha'si; dosya yoksa None. Dosya degilse (dizin vb.) hata."""
+    r = await _api(gp, f"/repos/{full}/contents/{quote(yol)}", {"ref": ref})
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    veri = r.json()
+    if not isinstance(veri, dict) or veri.get("type") not in ("file", "symlink"):
+        raise ValueError(f"dosya degil: {yol}")
+    return veri.get("sha")
+
+
+async def salt_hedef_birlesmesi(gp, full: str, pr: dict) -> bool:
+    """PR'in son commit'i yalnizca hedef dali iceri alan bir merge mi ("Update branch").
+
+    Kosullar: iki ebeveyn; ikinci ebeveyn hedef dalda; ilk ebeveynde zincir bitmis (ci-kapisi
+    durumu var); merge commit'in ilk ebeveynden farki olan her dosya ikinci ebeveyndekiyle
+    birebir ayni (ne cakisma cozumu ne elle ek degisiklik). Belirsizlikte False: test kosar."""
+    from backend.worker.phases._bimetri_ci import CI_BAGLAM
+
+    sha = (pr.get("head") or {}).get("sha") or ""
+    hedef = (pr.get("base") or {}).get("ref") or ""
+    if not sha or not hedef:
+        return False
+    try:
+        r = await _api(gp, f"/repos/{full}/git/commits/{sha}", {"files": "true"})
+        r.raise_for_status()
+        commit = r.json()
+        ebeveyn = [e.get("sha") for e in commit.get("parents") or []]
+        if len(ebeveyn) != 2 or not all(ebeveyn):
+            return False
+        once, hedeften = ebeveyn
+        r = await _api(gp, f"/repos/{full}/compare/{quote(hedef, safe='')}...{hedeften}")
+        r.raise_for_status()
+        if r.json().get("total_commits") != 0:
+            return False  # ikinci ebeveyn hedef dalda degil
+        r = await _api(gp, f"/repos/{full}/commits/{once}/status")
+        r.raise_for_status()
+        if not any(s.get("context") == CI_BAGLAM for s in r.json().get("statuses") or []):
+            return False  # onceki commit'te zincir bitmemis
+        dosyalar = commit.get("files") or []
+        if len(dosyalar) >= _SALT_BIRLESME_DOSYA_SINIRI:
+            return False
+        for d in dosyalar:
+            for yol in {d.get("filename"), d.get("previous_filename")} - {None, ""}:
+                if await _blob(gp, full, yol, sha) != await _blob(gp, full, yol, hedeften):
+                    return False
+        return True
+    except Exception:
+        logger.warning("%s: salt hedef birlesmesi denetlenemedi (%s)", full, sha, exc_info=True)
+        return False
+
+
 async def insan_pr_ci(gp, full: str, n: int, label_names: list[str]) -> dict | None:
     """Insanin kendi PR'i: zincir yok; inceleme ya da test istenmediyse CI kapisi hemen baslar."""
     from backend.worker.phases._bimetri_ci import ci_baslat
@@ -55,8 +118,8 @@ async def insan_pr_ci(gp, full: str, n: int, label_names: list[str]) -> dict | N
 
 async def push_karari(gp, body: dict, label_names: list[str]) -> dict | None:
     """opened/reopened/synchronized: bot olayi -> yok say (zincir etiketlerle ilerler); insanin
-    kendi PR'i -> CI; insan push'u botun PR'inda -> ai-test (test gerekliyse), istenmisse
-    inceleme, degilse CI. None: karar yok, normal akis devam etsin."""
+    kendi PR'i -> CI; insan push'u botun PR'inda -> salt hedef dal birlesmesiyse yalniz CI,
+    degilse ai-test (test gerekliyse), istenmisse inceleme, degilse CI. None: karar yok, normal akis devam etsin."""
     from backend.worker.phases._bimetri_ci import ajan_testi_gerekli, ci_baslat
     from backend.worker.phases._bimetri_oto import bot_login
 
@@ -75,6 +138,12 @@ async def push_karari(gp, body: dict, label_names: list[str]) -> dict | None:
         return None  # botun PR'i acildi: zincir etiketlerle ilerler
     if "ai-test" in label_names or "status/on-hold" in label_names:
         return {"status": "ignored", "reason": "test_not_on_push"}
+    if await salt_hedef_birlesmesi(gp, full, pr):
+        if "ai-review" in label_names:
+            return None  # bekleyen inceleme kosar; CI sonra
+        sonuc = await ci_baslat(gp, full, n)  # kod degismedi: test/inceleme etiketleri gecerli
+        logger.info("%s PR #%s: hedef dal birlesmesi (%s), %s", full, n, gonderen, sonuc)
+        return {"status": "accepted", "reason": "base_merge_ci"}
     dal = (pr.get("head") or {}).get("ref", "")
     if not await ajan_testi_gerekli(gp, full, n, await mvnw_var_mi(gp, full, dal)):
         if "ai-review" in label_names:
