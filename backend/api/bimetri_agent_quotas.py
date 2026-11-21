@@ -20,6 +20,19 @@ class QuotaWindowOut(BaseModel):
     minutes: int | None = None
     used_percent: float
     resets_at: str | None = None
+    scope: str | None = None  # model the limit applies to; None = the whole account
+
+
+class QuotaCreditsOut(BaseModel):
+    """Usage credits bought on top of the subscription (Claude extra usage)."""
+
+    enabled: bool = False
+    used: float | None = None
+    limit: float | None = None
+    balance: float | None = None
+    currency: str | None = None
+    used_percent: float | None = None
+    limit_reached: bool = False
 
 
 class QuotaWorkerOut(BaseModel):
@@ -36,6 +49,7 @@ class QuotaAccountOut(BaseModel):
     org_name: str | None = None
     windows: list[QuotaWindowOut] = []
     limit_reached: bool = False
+    credits: QuotaCreditsOut | None = None
     workers: list[QuotaWorkerOut] = []
     error: str | None = None
     observed_at: str | None = None

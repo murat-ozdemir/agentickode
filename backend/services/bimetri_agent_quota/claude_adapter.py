@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+from backend.services.bimetri_agent_quota.claude_extras import credits_of, scoped_windows
 from backend.services.bimetri_agent_quota.types import (
     FIVE_HOUR_MINUTES,
     WEEK_MINUTES,
     AccountReading,
+    account_limit_hit,
     to_percent,
     window_for,
 )
@@ -38,5 +40,8 @@ class ClaudeQuotaAdapter:
                 continue
             used = to_percent(window.get("utilization"))
             reading.windows.append(window_for(minutes, used, window.get("resets_at")))
-        reading.limit_reached = any(w.used_percent >= 100 for w in reading.windows)
+        if reading.windows:
+            reading.windows += scoped_windows(usage)
+            reading.credits = credits_of(usage)
+        reading.limit_reached = account_limit_hit(reading.windows)
         return reading

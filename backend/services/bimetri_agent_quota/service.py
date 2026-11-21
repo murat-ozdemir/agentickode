@@ -22,7 +22,11 @@ from backend.repositories.app_setting_repo import AppSettingRepository
 from backend.repositories.workspace_server_repo import WorkspaceServerRepository
 from backend.services.bimetri_agent_quota import ADAPTERS
 from backend.services.bimetri_agent_quota.probe import ProbeResult, probe_server
-from backend.services.bimetri_agent_quota.types import AccountReading
+from backend.services.bimetri_agent_quota.types import (
+    AccountReading,
+    QuotaWindow,
+    account_limit_hit,
+)
 
 SYNC_KEY = "bimetri_agent_quota_sync"
 _lock = asyncio.Lock()
@@ -40,6 +44,7 @@ def _apply(account: AgentQuotaAccount, reading: AccountReading, fresh: bool, now
     account.checked_at = now
     if reading.windows:
         account.windows = [w.to_dict() for w in reading.windows]
+        account.credits = reading.credits
         account.limit_reached = reading.limit_reached
         account.observed_at = now
         account.error = None
@@ -98,6 +103,17 @@ def _has_reset(window: dict, now: datetime) -> bool:
         return False
 
 
+def _as_window(w: dict) -> QuotaWindow:
+    return QuotaWindow(
+        w.get("key", ""),
+        w.get("label", ""),
+        w.get("minutes"),
+        w.get("used_percent", 0),
+        w.get("resets_at"),
+        w.get("scope"),
+    )
+
+
 def current_windows(account: AgentQuotaAccount, now: datetime) -> tuple[list[dict], bool]:
     """Windows as of ``now``, and whether a limit is hit.
 
@@ -110,7 +126,7 @@ def current_windows(account: AgentQuotaAccount, now: datetime) -> tuple[list[dic
     windows = [
         {**w, "used_percent": 0.0, "resets_at": None} if _has_reset(w, now) else w for w in windows
     ]
-    return windows, any(w.get("used_percent", 0) >= 100 for w in windows)
+    return windows, account_limit_hit([_as_window(w) for w in windows])
 
 
 async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
@@ -130,6 +146,7 @@ async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
                 "org_name": a.org_name,
                 "windows": windows,
                 "limit_reached": limit_reached,
+                "credits": a.credits,
                 "workers": a.workers,
                 "error": a.error,
                 "observed_at": _iso(a.observed_at),

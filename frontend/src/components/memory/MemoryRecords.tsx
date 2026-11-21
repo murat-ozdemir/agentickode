@@ -6,11 +6,12 @@
 import { useEffect, useRef, useState } from "react";
 import { getMemoryRecords, getProjects } from "../../api";
 import type { MemoryRecordPage } from "../../api";
+import usePageSize, { PAGE_SIZES } from "../../hooks/usePageSize";
 import Pagination from "../shared/Pagination";
 import { useToast } from "../shared/Toast";
 
-const PAGE_SIZE = 50;
-const EMPTY: MemoryRecordPage = { items: [], total: 0, offset: 0, limit: PAGE_SIZE, kinds: [] };
+const PAGE_SIZE_KEY = "memory.records.pageSize";
+const EMPTY: MemoryRecordPage = { items: [], total: 0, offset: 0, limit: PAGE_SIZES[0], kinds: [] };
 
 const SELECT =
   "bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200";
@@ -23,6 +24,7 @@ export default function MemoryRecords() {
   const [project, setProject] = useState("");
   const [kind, setKind] = useState("");
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = usePageSize(PAGE_SIZE_KEY);
   const [page, setPage] = useState<MemoryRecordPage>(EMPTY);
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +42,7 @@ export default function MemoryRecords() {
     if (!project) return;
     let stale = false;
     setLoading(true);
-    getMemoryRecords(project, kind, offset, PAGE_SIZE)
+    getMemoryRecords(project, kind, offset, pageSize)
       .then((p) => !stale && setPage(p))
       .catch((e) => {
         if (stale) return;
@@ -51,7 +53,7 @@ export default function MemoryRecords() {
     return () => {
       stale = true;
     };
-  }, [project, kind, offset]);
+  }, [project, kind, offset, pageSize]);
 
   const selectProject = (value: string) => {
     setProject(value);
@@ -60,6 +62,10 @@ export default function MemoryRecords() {
   };
   const selectKind = (value: string) => {
     setKind(value);
+    setOffset(0);
+  };
+  const selectPageSize = (n: number) => {
+    setPageSize(n);
     setOffset(0);
   };
 
@@ -117,7 +123,14 @@ export default function MemoryRecords() {
           </li>
         ))}
       </ul>
-      <Pagination total={page.total} offset={offset} limit={PAGE_SIZE} onPageChange={setOffset} />
+      <Pagination
+        total={page.total}
+        offset={offset}
+        limit={pageSize}
+        onPageChange={setOffset}
+        pageSizes={PAGE_SIZES}
+        onLimitChange={selectPageSize}
+      />
     </div>
   );
 }

@@ -26,6 +26,7 @@ workers show as "N issue(s)" in the header. Refresh probes all workers at once. 
 | `backend/services/bimetri_agent_quota/{claude,codex}_adapter.py`, `types.py`, `__init__.py` | Section → `AccountReading`; `ADAPTERS` registry |
 | `backend/services/bimetri_agent_quota/service.py` | `collect` (account ↔ worker mapping), `summary` |
 | `backend/worker/bimetri_agent_quota_scheduler.py`, `backend/api/bimetri_agent_quotas.py` | Poll loop; `GET /api/bimetri/agent-quotas`, `POST /sync` |
+| `alembic/versions/049_bimetri_agent_quota_credits.py`, `backend/services/bimetri_agent_quota/claude_extras.py`, `frontend/src/components/shared/CreditsLine.tsx` | Claude usage credits (`credits` JSON column) and model-scoped limits |
 | `frontend/src/components/shared/AgentQuotaStrip.tsx`, `AgentQuotaCard.tsx`, `QuotaBar.tsx`, `quotaFormat.ts`, `hooks/useAgentQuotas.ts` | Strip, card, bar, colour/pace/countdown helpers, 60 s poll |
 
 ## How It Works
@@ -34,6 +35,13 @@ workers show as "N issue(s)" in the header. Refresh probes all workers at once. 
   (`anthropic-beta: oauth-2025-04-20`); `five_hour` / `seven_day` utilization and `resets_at`.
   Account from `~/.claude.json` `oauthAccount`, plan from `subscriptionType`. An expired token is
   not sent (the card shows the error until the agent's next run refreshes it).
+- **Claude credits and model limits**: the probe also passes `spend`, `extra_usage`, `limits`,
+  `seven_day_opus` and `seven_day_sonnet`. Bought usage credits become a "Credits" line
+  (`$used / $cap`, balance in the tooltip), shown only when credits are on or were used this
+  month. At the limit with credits on and under the cap the card is amber ("On credits") instead
+  of red. A limit scoped to one model (e.g. Fable, Opus) is its own bar and does not set
+  `limit_reached`, since the other models still work. Money is read only from
+  `{amount_minor, exponent}` or `used_credits` + `decimal_places`; other shapes show "—".
 - **Codex**: `codex app-server` over stdio, `account/read` + `account/rateLimits/read`; windows
   named by length (300 min = 5h, 10080 = Weekly). An API-key login gets an error, no limits.
 - **Mapping**: a worker that answers is detached from every account and attached to the one it

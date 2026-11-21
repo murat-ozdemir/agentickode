@@ -4,6 +4,20 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-22 — bimetri: Claude usage credits and model limits on the subscription cards (fork)
+
+**Tests**: 1686 backend (unit + integration), 323 frontend passing; ruff, pyright, eslint, tsc clean
+
+- `backend/services/bimetri_agent_quota/claude_extras.py`, `worker_probe.py`, `claude_adapter.py`
+  — usage credits (`spend` / `extra_usage`) and model-scoped limits (`limits`, `seven_day_opus`,
+  `seven_day_sonnet`); scoped windows do not count toward `limit_reached`
+- `alembic/versions/049_bimetri_agent_quota_credits.py` — `credits` JSON column; API carries
+  `credits` and window `scope`
+- `frontend/src/components/shared/CreditsLine.tsx`, `AgentQuotaCard.tsx` — "Credits" line, amber
+  "On credits" state when past the limit but paying from credits
+- `frontend/src/hooks/usePageSize.ts`, `components/memory/MemoryRecords.tsx` — Memory → Records
+  gets the Dashboard's "Per page" choice (10 / 25 / 50 / 100, default 10, remembered per browser)
+
 ## 2026-11-22 — bimetri: agent subscription limits on the Dashboard (fork)
 
 **Tests**: 1677 backend (unit + integration), 317 frontend passing; ruff, pyright, eslint, tsc clean

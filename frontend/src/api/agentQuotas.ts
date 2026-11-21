@@ -11,6 +11,19 @@ export interface QuotaWindow {
   minutes: number | null;
   used_percent: number;
   resets_at: string | null;
+  /** Model the limit applies to; null/absent = the whole account. */
+  scope?: string | null;
+}
+
+/** Usage credits bought on top of the subscription (Claude extra usage). */
+export interface QuotaCredits {
+  enabled: boolean;
+  used: number | null;
+  limit: number | null;
+  balance: number | null;
+  currency: string | null;
+  used_percent: number | null;
+  limit_reached: boolean;
 }
 
 export interface QuotaWorker {
@@ -27,6 +40,7 @@ export interface QuotaAccount {
   org_name: string | null;
   windows: QuotaWindow[];
   limit_reached: boolean;
+  credits: QuotaCredits | null;
   workers: QuotaWorker[];
   error: string | null;
   observed_at: string | null;

@@ -13,7 +13,7 @@ from backend.models.base import Base
 class AgentQuotaAccount(Base):
     """One subscription account (Claude, Codex, ...) and the workers that use it.
 
-    ``windows`` holds ``{key, label, minutes, used_percent, resets_at}`` items and ``workers``
+    ``windows`` holds ``{key, label, minutes, used_percent, resets_at, scope}`` items and ``workers``
     holds ``{server_id, server_name, user}`` items. Tokens never reach this table.
     """
 
@@ -27,6 +27,7 @@ class AgentQuotaAccount(Base):
     plan = Column(Text, nullable=True)
     org_name = Column(Text, nullable=True)
     windows = Column(JSONB, nullable=False, default=list)
+    credits = Column(JSONB, nullable=True)  # usage credits past the plan limits, when on
     limit_reached = Column(Boolean, nullable=False, default=False)
     workers = Column(JSONB, nullable=False, default=list)
     error = Column(Text, nullable=True)

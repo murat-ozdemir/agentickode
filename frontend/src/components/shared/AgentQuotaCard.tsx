@@ -5,28 +5,34 @@
 // bimetri patch: one subscription account — who it is, its limit windows, the workers on it.
 import { AlertTriangle } from "lucide-react";
 import type { QuotaAccount } from "../../api";
+import CreditsLine from "./CreditsLine";
 import QuotaBar from "./QuotaBar";
 import { providerLabel, shortTime, untilText } from "./quotaFormat";
 
-/** Earliest reset among the windows that are at their limit. */
+/** Earliest reset among the account-wide windows that are at their limit. */
 function nextRelease(account: QuotaAccount): string | null {
   const times = account.windows
-    .filter((w) => w.used_percent >= 100 && w.resets_at)
+    .filter((w) => !w.scope && w.used_percent >= 100 && w.resets_at)
     .map((w) => w.resets_at as string)
     .sort();
   return times[0] ?? null;
 }
 
 export default function AgentQuotaCard({ account }: { account: QuotaAccount }) {
-  const { email, plan, org_name: org, windows, workers, error, observed_at: observed } = account;
+  const { email, plan, org_name: org, windows, workers, credits, error, observed_at: observed } = account;
   const hit = account.limit_reached;
   const release = hit ? nextRelease(account) : null;
+  // At the limit but still working, paid from usage credits.
+  const onCredits = hit && !!credits?.enabled && !credits.limit_reached;
+  const frame = onCredits
+    ? "bg-amber-500/10 border-amber-500/50"
+    : hit
+      ? "bg-red-500/10 border-red-500/60"
+      : "bg-gray-900/50 border-gray-800/60";
 
   return (
     <div
-      className={`border rounded-xl p-4 space-y-3 ${
-        hit ? "bg-red-500/10 border-red-500/60" : "bg-gray-900/50 border-gray-800/60"
-      }`}
+      className={`border rounded-xl p-4 space-y-3 ${frame}`}
       data-testid="quota-account"
     >
       <div className="flex items-start justify-between gap-2">
@@ -52,8 +58,12 @@ export default function AgentQuotaCard({ account }: { account: QuotaAccount }) {
           </div>
         </div>
         {hit && (
-          <span className="shrink-0 text-xs font-medium text-red-400" data-testid="quota-hit">
-            Limit hit{release ? ` · ${untilText(release)}` : ""}
+          <span
+            className={`shrink-0 text-xs font-medium ${onCredits ? "text-amber-400" : "text-red-400"}`}
+            data-testid="quota-hit"
+          >
+            {onCredits ? "On credits" : "Limit hit"}
+            {release ? ` · ${untilText(release)}` : ""}
           </span>
         )}
       </div>
@@ -62,6 +72,7 @@ export default function AgentQuotaCard({ account }: { account: QuotaAccount }) {
         {windows.map((w) => (
           <QuotaBar key={w.key} window={w} />
         ))}
+        {credits && <CreditsLine credits={credits} />}
         {windows.length === 0 && <div className="text-xs text-gray-500">No usage data yet</div>}
       </div>
 

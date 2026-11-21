@@ -20,6 +20,7 @@ import urllib.request
 
 HOME = os.path.expanduser("~")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+MODEL_SLOTS = ("seven_day_opus", "seven_day_sonnet")
 ACCOUNT_KEYS = ("accountUuid", "emailAddress", "organizationUuid", "organizationName")
 
 
@@ -58,7 +59,9 @@ def claude():
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             usage = json.load(resp)
-        out["usage"] = {k: usage.get(k) for k in ("five_hour", "seven_day")}
+        # windows, per-model weekly slots, scoped limits and usage-credit spend; no ids/tokens
+        keep = ("five_hour", "seven_day", "limits", "spend", "extra_usage")
+        out["usage"] = {k: v for k, v in usage.items() if k in keep or k in MODEL_SLOTS}
     except urllib.error.HTTPError as e:
         out["error"] = f"usage request failed: HTTP {e.code}"
     except Exception as e:

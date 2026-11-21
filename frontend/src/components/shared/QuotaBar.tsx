@@ -19,7 +19,9 @@ export default function QuotaBar({ window: w }: { window: QuotaWindow }) {
 
   return (
     <div className="flex items-center gap-2 text-xs" data-testid={`quota-bar-${w.key}`} title={resetTitle}>
-      <span className="w-12 shrink-0 text-gray-400">{w.label}</span>
+      <span className="w-12 shrink-0 truncate text-gray-400" title={w.scope ? `${w.label} only` : undefined}>
+        {w.label}
+      </span>
       <div className="relative h-2 flex-1 rounded-full bg-gray-800">
         <div
           className={`h-2 rounded-full ${FILL[tone]}`}

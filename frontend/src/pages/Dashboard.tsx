@@ -17,21 +17,11 @@ import Pagination from "../components/shared/Pagination";
 import StatsBar from "../components/shared/StatsBar";
 import TaskRunTable from "../components/runs/TaskRunTable";
 import useOpenAIUsage from "../hooks/useOpenAIUsage";
+import usePageSize, { PAGE_SIZES } from "../hooks/usePageSize";
 import type { AnalyticsSummary, Stats, TaskRun } from "../types";
 
 // bimetri: sayfa basina kosu sayisi secilebilir; secim tarayicida hatirlanir
-const PAGE_SIZES = [10, 25, 50, 100];
 const PAGE_SIZE_KEY = "dashboard.pageSize";
-
-function initialPageSize(): number {
-  try {
-    const n = Number(window.localStorage.getItem(PAGE_SIZE_KEY));
-    if (PAGE_SIZES.includes(n)) return n;
-  } catch {
-    // storage unavailable: use default
-  }
-  return PAGE_SIZES[0];
-}
 
 export default function Dashboard() {
   const [runs, setRuns] = useState<TaskRun[]>([]);
@@ -43,7 +33,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [pageSize, setPageSize] = usePageSize(PAGE_SIZE_KEY);
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
   const [dist, setDist] = useState<DistributionFilter | null>(null);
@@ -90,11 +80,6 @@ export default function Dashboard() {
   const handlePageSize = (n: number) => {
     setPageSize(n);
     setOffset(0);
-    try {
-      window.localStorage.setItem(PAGE_SIZE_KEY, String(n));
-    } catch {
-      // storage unavailable: selection lasts until reload
-    }
   };
 
   // Initial load + SSE

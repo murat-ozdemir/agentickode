@@ -23,6 +23,7 @@ class QuotaWindow:
     minutes: int | None
     used_percent: float  # 0-100
     resets_at: str | None = None  # ISO 8601, UTC
+    scope: str | None = None  # model the limit applies to; None = the whole account
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -44,6 +45,7 @@ class AccountReading:
     org_name: str | None = None
     windows: list[QuotaWindow] = field(default_factory=list)
     limit_reached: bool = False
+    credits: dict | None = None  # paid usage beyond the plan: used/limit/balance, see claude_extras
     error: str | None = None
 
 
@@ -53,6 +55,11 @@ class QuotaAdapter(Protocol):
     provider: str
 
     def parse(self, section: dict) -> AccountReading: ...
+
+
+def account_limit_hit(windows: list[QuotaWindow]) -> bool:
+    """A full model-scoped window leaves the other models usable, so only account-wide count."""
+    return any(w.used_percent >= 100 for w in windows if not w.scope)
 
 
 def window_for(minutes: int | None, used: float, resets_at: str | None) -> QuotaWindow:

@@ -60,6 +60,98 @@ class TestClaudeAdapter:
         assert r.account_key == "x@example.com"
 
 
+def _usage(**extra):
+    return {**CLAUDE_SECTION, "usage": {**CLAUDE_SECTION["usage"], **extra}}
+
+
+def _usd(cents):
+    return {"amount_minor": cents, "currency": "USD", "exponent": 2}
+
+
+class TestClaudeCredits:
+    def test_off_and_unused_credits_are_left_out(self):
+        off = {"enabled": False, "used": _usd(0)}
+        r = ClaudeQuotaAdapter().parse(_usage(spend=off, extra_usage={"is_enabled": False}))
+        assert r.credits is None
+
+    def test_enabled_credits_report_spend_limit_and_balance(self):
+        spend = {"enabled": True, "used": _usd(1240), "limit": _usd(5000), "balance": _usd(3760)}
+        r = ClaudeQuotaAdapter().parse(_usage(spend=spend, extra_usage={"is_enabled": True}))
+        assert r.credits == {
+            "enabled": True,
+            "used": 12.4,
+            "limit": 50.0,
+            "balance": 37.6,
+            "currency": "USD",
+            "used_percent": 24.8,
+            "limit_reached": False,
+        }
+
+    def test_falls_back_to_extra_usage_in_minor_units(self):
+        extra = {
+            "is_enabled": True,
+            "used_credits": 5000,
+            "decimal_places": 2,
+            "utilization": 100,
+            "currency": "EUR",
+            "spend_limit_reached": True,
+        }
+        credits = ClaudeQuotaAdapter().parse(_usage(extra_usage=extra)).credits or {}
+        assert (credits["used"], credits["currency"], credits["used_percent"]) == (
+            50.0,
+            "EUR",
+            100.0,
+        )
+        assert credits["limit_reached"] is True and credits["limit"] is None
+
+    def test_unknown_money_shapes_are_not_guessed(self):
+        spend = {"enabled": True, "used": 12, "limit": "50"}
+        credits = ClaudeQuotaAdapter().parse(_usage(spend=spend)).credits or {}
+        assert (credits["used"], credits["limit"], credits["used_percent"]) == (None, None, None)
+
+
+class TestClaudeScopedLimits:
+    def test_model_limit_gets_its_own_bar_but_does_not_hit_the_account(self):
+        limits = [
+            {"kind": "session", "group": "session", "percent": 40},
+            {"kind": "weekly_all", "group": "weekly", "percent": 9},
+            {
+                "kind": "weekly_model",
+                "group": "weekly",
+                "percent": 100,
+                "scope": "fable",
+                "resets_at": "2026-11-28T01:00:00+00:00",
+            },
+        ]
+        usage = {"five_hour": {"utilization": 40.0}, "seven_day": {"utilization": 9.0}}
+        r = ClaudeQuotaAdapter().parse({**CLAUDE_SECTION, "usage": {**usage, "limits": limits}})
+        assert [(w.key, w.label, w.scope, w.minutes) for w in r.windows[2:]] == [
+            ("scope_fable", "Fable", "Fable", 10080)
+        ]
+        assert r.windows[2].used_percent == 100.0 and r.limit_reached is False
+
+    def test_model_slots_fill_in_and_are_not_doubled(self):
+        limits = [{"kind": "weekly_opus", "group": "weekly", "percent": 30}]
+        r = ClaudeQuotaAdapter().parse(
+            _usage(
+                limits=limits,
+                seven_day_opus={"utilization": 30.0},
+                seven_day_sonnet={"utilization": 12.0},
+            )
+        )
+        assert [(w.label, w.used_percent) for w in r.windows[2:]] == [
+            ("Opus", 30.0),
+            ("Sonnet", 12.0),
+        ]
+
+    def test_scope_object_uses_its_display_name(self):
+        limits = [
+            {"kind": "x", "group": "other", "percent": 5, "scope": {"display_name": "Fable 5"}}
+        ]
+        [w] = ClaudeQuotaAdapter().parse(_usage(limits=limits)).windows[2:]
+        assert (w.key, w.label, w.minutes) == ("scope_fable_5", "Fable 5", None)
+
+
 class TestCodexAdapter:
     def test_names_windows_by_length_not_slot(self):
         section = {
@@ -109,7 +201,13 @@ class TestWorkerProbeClaude:
 
     def test_prints_usage_without_the_token(self, tmp_path, monkeypatch):
         self._home(tmp_path, monkeypatch, (time.time() + 3600) * 1000)
-        body = {"five_hour": {"utilization": 3.0}, "seven_day": {"utilization": 1.0}, "x": 1}
+        body = {
+            "five_hour": {"utilization": 3.0},
+            "seven_day": {"utilization": 1.0},
+            "spend": {"enabled": False},
+            "seven_day_opus": None,
+            "x": 1,
+        }
         seen = {}
 
         def fake_urlopen(req, timeout):
@@ -119,7 +217,7 @@ class TestWorkerProbeClaude:
         monkeypatch.setattr(worker_probe.urllib.request, "urlopen", fake_urlopen)
         out = worker_probe.claude()
         assert seen["auth"] == "Bearer secret-token"
-        assert out["usage"] == {"five_hour": body["five_hour"], "seven_day": body["seven_day"]}
+        assert out["usage"] == {k: v for k, v in body.items() if k != "x"}
         assert out["plan"] == "max" and out["account"]["accountUuid"] == "acc-9"
         assert "secret-token" not in json.dumps(out)
 

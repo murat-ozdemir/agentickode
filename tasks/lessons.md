@@ -42,3 +42,7 @@
 ## 2026-11-22 — Showed layout options as ASCII drawings
 **What went wrong:** I offered two layouts for the Subscription limits panel with character-drawn previews. The user could not read them and the choice stalled.
 **Rule for next time:** Show layout options as a rendered visual mockup (or a short plain description of what goes where), never as ASCII/box-drawing diagrams.
+
+## 2026-11-22 — Full suite run twice for a small change
+- **What went wrong**: after adding "Per page" to Memory → Records I re-ran the whole frontend suite, though it had already run once in the same turn.
+- **Rule**: after a small change, run only the edited files' tests. Run each full suite once, right before the commit, and say why it is needed (e.g. a model or API schema change).

@@ -45,3 +45,13 @@ export function shortTime(iso: string): string {
   if (d.toDateString() === new Date().toDateString()) return time;
   return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })} ${time}`;
 }
+
+/** "$12.40"; falls back to "12.40 XYZ" when the currency code is unknown to Intl. */
+export function moneyText(amount: number, currency: string | null): string {
+  const code = currency || "USD";
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${code}`;
+  }
+}

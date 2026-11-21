@@ -51,8 +51,10 @@ class TestAgentQuotasApi:
                 "minutes": 300,
                 "used_percent": 72.0,
                 "resets_at": "2026-11-22T10:00:00+00:00",
+                "scope": None,
             }
         ]
+        assert account["credits"] is None
         assert account["workers"] == [
             {"server_id": server.id, "server_name": "worker-1", "user": "coder"}
         ]

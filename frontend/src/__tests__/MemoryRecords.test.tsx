@@ -22,7 +22,7 @@ const page = (items: ReturnType<typeof record>[], total: number, offset = 0) => 
   items,
   total,
   offset,
-  limit: 50,
+  limit: 10,
   kinds: ["karar", "modul"],
 });
 
@@ -48,6 +48,7 @@ const renderPage = (url = "/memory?tab=records") =>
 describe("MemoryRecords", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mockProjects.mockResolvedValue([
       { repo_owner: "Org", repo_name: "repo" },
       { repo_owner: "Org", repo_name: "other" },
@@ -65,7 +66,7 @@ describe("MemoryRecords", () => {
   it("loads the first project's records with PR and date", async () => {
     renderPage();
     expect(await screen.findByText("Use ByteFifo.get()")).toBeInTheDocument();
-    expect(mockRecords).toHaveBeenCalledWith("Org/other", "", 0, 50);
+    expect(mockRecords).toHaveBeenCalledWith("Org/other", "", 0, 10);
     expect(screen.getByText("PR #49")).toBeInTheDocument();
     expect(screen.getByText("2 records")).toBeInTheDocument();
   });
@@ -75,27 +76,40 @@ describe("MemoryRecords", () => {
     await screen.findByTestId("record-a");
     fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "modul" } });
     await waitFor(() => expect(screen.queryByTestId("record-a")).not.toBeInTheDocument());
-    expect(mockRecords).toHaveBeenLastCalledWith("Org/other", "modul", 0, 50);
+    expect(mockRecords).toHaveBeenLastCalledWith("Org/other", "modul", 0, 10);
     expect(screen.getByTestId("record-b")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Project"), { target: { value: "Org/repo" } });
-    await waitFor(() => expect(mockRecords).toHaveBeenLastCalledWith("Org/repo", "", 0, 50));
+    await waitFor(() => expect(mockRecords).toHaveBeenLastCalledWith("Org/repo", "", 0, 10));
     expect(screen.getByLabelText("Kind")).toHaveValue("");
   });
 
   it("pages through the records", async () => {
     mockRecords.mockImplementation((_p: string, _k: string, offset: number) =>
       Promise.resolve(
-        page([record(offset ? "p2" : "p1", "modul", `page at ${offset}`, null)], 120, offset),
+        page([record(offset ? "p2" : "p1", "modul", `page at ${offset}`, null)], 25, offset),
       ),
     );
     renderPage();
     expect(await screen.findByText("page at 0")).toBeInTheDocument();
-    expect(screen.getByText("120 records")).toBeInTheDocument();
+    expect(screen.getByText("25 records")).toBeInTheDocument();
     expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
-    expect(await screen.findByText("page at 50")).toBeInTheDocument();
-    expect(mockRecords).toHaveBeenLastCalledWith("Org/other", "", 50, 50);
+    expect(await screen.findByText("page at 10")).toBeInTheDocument();
+    expect(mockRecords).toHaveBeenLastCalledWith("Org/other", "", 10, 10);
     expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+  });
+
+  it("shows 10 per page by default and remembers a new size from the first page", async () => {
+    mockRecords.mockImplementation((_p: string, _k: string, offset: number) =>
+      Promise.resolve(page([record(`r${offset}`, "modul", `page at ${offset}`, null)], 120, offset)),
+    );
+    renderPage();
+    expect(await screen.findByTestId("page-size")).toHaveValue("10");
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    expect(await screen.findByText("page at 10")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("page-size"), { target: { value: "25" } });
+    await waitFor(() => expect(mockRecords).toHaveBeenLastCalledWith("Org/other", "", 0, 25));
+    expect(window.localStorage.getItem("memory.records.pageSize")).toBe("25");
   });
 
   it("shows the API error", async () => {

@@ -96,6 +96,20 @@ class TestCollect:
         account = summary["accounts"][0]
         assert account["error"] == "HTTP 401" and account["windows"][0]["used_percent"] == 40.0
 
+    async def test_claude_credits_are_stored_and_returned(self, db_session):
+        await _servers(db_session, 1)
+        usd = {"amount_minor": 1240, "currency": "USD", "exponent": 2}
+        usage = {
+            "five_hour": {"utilization": 100.0},
+            "seven_day": {"utilization": 9.0},
+            "spend": {"enabled": True, "used": usd},
+        }
+        claude = {"account": {"accountUuid": "acc-1"}, "usage": usage}
+        summary = await _collect(db_session, {"worker-1": ProbeResult("coder", {"claude": claude})})
+        [account] = summary["accounts"]
+        assert account["credits"]["used"] == 12.4 and account["credits"]["enabled"] is True
+        assert account["limit_reached"] is True
+
     async def test_unknown_provider_section_is_ignored(self, db_session):
         await _servers(db_session, 1)
         summary = await _collect(db_session, {"worker-1": ProbeResult("coder", {"other": {}})})
@@ -158,6 +172,13 @@ class TestCurrentWindows:
         now = datetime(2026, 11, 22, 0, 0, tzinfo=UTC)
         windows, hit = service.current_windows(self._account("2026-11-21T22:20:00+00:00"), now)
         assert windows[0]["used_percent"] == 0.0 and windows[0]["resets_at"] is None
+        assert hit is False
+
+    def test_full_model_window_after_a_reset_does_not_hit_the_account(self):
+        now = datetime(2026, 11, 22, 0, 0, tzinfo=UTC)
+        account = self._account("2026-11-21T22:20:00+00:00")
+        account.windows.append({"key": "scope_fable", "used_percent": 100.0, "scope": "Fable"})
+        _, hit = service.current_windows(account, now)
         assert hit is False
 
     def test_window_before_its_reset_keeps_the_reading(self):

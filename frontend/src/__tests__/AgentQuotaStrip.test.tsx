@@ -4,7 +4,7 @@
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentQuotaSummary, QuotaAccount, QuotaWindow } from "../api";
+import type { AgentQuotaSummary, QuotaAccount, QuotaCredits, QuotaWindow } from "../api";
 
 vi.mock("../api", () => ({ getAgentQuotas: vi.fn(), syncAgentQuotas: vi.fn() }));
 
@@ -23,9 +23,15 @@ const account = (over: Partial<QuotaAccount> = {}): QuotaAccount => ({
   id: 1, provider: "codex", email: "dev@example.com", plan: "plus", org_name: null,
   windows: [win(), win({ key: "weekly", label: "Weekly", minutes: 10080, used_percent: 29, resets_at: inHours(70) })],
   limit_reached: false,
+  credits: null,
   workers: [{ server_id: 1, server_name: "worker-1", user: "coder" }],
   error: null, observed_at: "2026-11-21T19:55:00Z", checked_at: "2026-11-21T19:55:00Z",
   ...over,
+});
+
+const credits = (over: Partial<QuotaCredits> = {}): QuotaCredits => ({
+  enabled: true, used: 12.4, limit: 50, balance: 37.6, currency: "USD", used_percent: 24.8,
+  limit_reached: false, ...over,
 });
 
 const summary = (over: Partial<AgentQuotaSummary> = {}): AgentQuotaSummary => ({
@@ -85,6 +91,57 @@ describe("AgentQuotaStrip", () => {
     render(<AgentQuotaStrip />);
     expect(await screen.findByTestId("quota-hit")).toHaveTextContent("Limit hit · 1h 00m");
     expect(screen.getByTestId("quota-fill").dataset.tone).toBe("hit");
+  });
+
+  it("shows bought usage credits only when the account has them", async () => {
+    vi.mocked(getAgentQuotas).mockResolvedValue(summary({
+      accounts: [account({ id: 1 }), account({ id: 2, provider: "claude", credits: credits() })],
+    }));
+    render(<AgentQuotaStrip />);
+    const line = await screen.findByTestId("quota-credits");
+    expect(screen.getAllByTestId("quota-credits")).toHaveLength(1);
+    expect(screen.getByTestId("quota-credits-amount")).toHaveTextContent("$12.40 / $50.00");
+    expect(line.title).toContain("balance $37.60");
+    expect(screen.getByTestId("quota-credits-fill").dataset.tone).toBe("ok");
+  });
+
+  it("marks an account past its limit but running on credits in amber", async () => {
+    vi.mocked(getAgentQuotas).mockResolvedValue(summary({
+      accounts: [account({
+        provider: "claude", limit_reached: true, credits: credits(),
+        windows: [win({ used_percent: 100, resets_at: inHours(2) })],
+      })],
+    }));
+    render(<AgentQuotaStrip />);
+    expect(await screen.findByTestId("quota-hit")).toHaveTextContent("On credits · 2h 00m");
+  });
+
+  it("goes red when the credit cap is reached too", async () => {
+    vi.mocked(getAgentQuotas).mockResolvedValue(summary({
+      accounts: [account({
+        limit_reached: true, credits: credits({ used: 50, used_percent: 100, limit_reached: true }),
+        windows: [win({ used_percent: 100, resets_at: inHours(2) })],
+      })],
+    }));
+    render(<AgentQuotaStrip />);
+    expect(await screen.findByTestId("quota-hit")).toHaveTextContent("Limit hit · 2h 00m");
+    expect(screen.getByTestId("quota-credits-fill").dataset.tone).toBe("hit");
+  });
+
+  it("shows a model-scoped limit as its own bar without counting its reset", async () => {
+    vi.mocked(getAgentQuotas).mockResolvedValue(summary({
+      accounts: [account({
+        limit_reached: true,
+        windows: [
+          win({ used_percent: 100, resets_at: inHours(3) }),
+          win({ key: "scope_fable", label: "Fable", minutes: 10080, used_percent: 100,
+            resets_at: inHours(1), scope: "Fable" }),
+        ],
+      })],
+    }));
+    render(<AgentQuotaStrip />);
+    expect(await screen.findByTestId("quota-bar-scope_fable")).toHaveTextContent("Fable");
+    expect(screen.getByTestId("quota-hit")).toHaveTextContent("Limit hit · 3h 00m");
   });
 
   it("shows read errors and unreachable workers", async () => {
