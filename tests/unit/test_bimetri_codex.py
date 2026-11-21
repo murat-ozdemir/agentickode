@@ -29,6 +29,11 @@ def _jsonl(*events: dict) -> str:
     return "\n".join(json.dumps(e) for e in events) + "\n"
 
 
+LIMIT_TEXT = (
+    "You\u2019ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit "
+    "https://chatgpt.com/settings/usage to purchase more credits or try again at "
+    "Nov 22nd, 2026 1:32 AM."
+)
 USAGE = {"input_tokens": 120_000, "cached_input_tokens": 100_000, "output_tokens": 4_000}
 STDOUT = _jsonl(
     {"type": "thread.started", "thread_id": "t1"},
@@ -53,12 +58,53 @@ class TestParseJsonl:
     def test_plain_text_is_not_codex_jsonl(self):
         assert parse_jsonl("just the final message\n") is None
 
-    def test_failed_turn_has_no_message_or_tokens(self):
+    def test_failed_turn_returns_failure_and_no_tokens(self):
         message, usage = parse_jsonl(
             _jsonl({"type": "turn.started"}, {"type": "turn.failed", "error": {"message": "x"}})
         )
-        assert message is None
+        assert message == "x"
         assert "input_tokens" not in usage
+
+    def test_failure_wins_over_the_last_agent_message(self):
+        # run #252: an intermediate agent message, then the usage limit
+        message, _ = parse_jsonl(
+            _jsonl(
+                {"type": "turn.started"},
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "working"}},
+                {"type": "error", "message": LIMIT_TEXT},
+                {"type": "turn.failed", "error": {"message": LIMIT_TEXT}},
+            )
+        )
+        assert message == LIMIT_TEXT
+
+    def test_error_event_without_turn_failed(self):
+        message, _ = parse_jsonl(
+            _jsonl({"type": "turn.started"}, {"type": "error", "message": LIMIT_TEXT})
+        )
+        assert message == LIMIT_TEXT
+
+    def test_retry_notice_of_a_completed_turn_is_not_a_failure(self):
+        message, _ = parse_jsonl(
+            _jsonl(
+                {"type": "turn.started"},
+                {"type": "error", "message": "Reconnecting... 1/5"},
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "done"}},
+                {"type": "turn.completed", "usage": USAGE},
+            )
+        )
+        assert message == "done"
+
+    def test_limit_reaches_the_run_stopped_reason(self):
+        from backend.worker.phases._bimetri_hata import cli_hata_nedeni
+
+        stdout = _jsonl(
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "working"}},
+            {"type": "turn.failed", "error": {"message": LIMIT_TEXT}},
+        )
+        rd = {"output": parse_jsonl(stdout)[0], "stderr": "", "exit_code": 1}
+        assert cli_hata_nedeni("codex", rd, 1) == (
+            "Kullanım limiti doldu (codex, sıfırlanma: Nov 22nd, 2026 1:32 AM)"
+        )
 
 
 class TestCredits:

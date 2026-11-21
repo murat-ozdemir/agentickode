@@ -48,11 +48,31 @@ def _events(stdout: str) -> list[dict[str, Any]]:
     return events
 
 
+def _failure(events: list[dict[str, Any]]) -> str | None:
+    """Why the turn failed (usage limit, credits, ...): ``turn.failed`` error, else the last
+    top-level ``error`` event when no turn completed (retry notices of a finished turn are not
+    failures)."""
+    failed = [e for e in events if e["type"] == "turn.failed"]
+    if failed:
+        error = failed[-1].get("error")
+        text = error.get("message") if isinstance(error, dict) else error
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    if any(e["type"] == "turn.completed" for e in events):
+        return None
+    for event in reversed(events):
+        text = event.get("message")
+        if event["type"] == "error" and isinstance(text, str) and text.strip():
+            return text.strip()
+    return None
+
+
 def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     """(last agent message, usage) from ``codex exec --json``; None if stdout is not its JSONL.
 
     ``cached_input_tokens`` is part of ``input_tokens``. Usage is summed over
-    ``turn.completed`` events (``codex exec`` runs a single turn).
+    ``turn.completed`` events (``codex exec`` runs a single turn). When the turn failed, the
+    message is the failure text instead, so the run-stopped comment shows the real reason.
     """
     events = _events(stdout)
     if not any(e["type"] in _CODEX_EVENTS for e in events):
@@ -77,7 +97,7 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     result: dict[str, Any] = {"cost_usd": None, "billing": "chatgpt"}
     if has_usage:
         result.update(totals)
-    return message, result
+    return _failure(events) or message, result
 
 
 def parse_rates(spec: str | None) -> dict[str, tuple[float, float, float]]:
