@@ -307,6 +307,10 @@ async def execute_flow_prompt(
                     level="warning",
                     phase="agent",
                 )
+        if _canli:  # keep the stored labels in step with what this attempt used
+            from backend.worker.phases._bimetri_etiket import with_live_labels
+
+            run.task_source_meta = with_live_labels(_m, _canli)
         labels = [
             str(lbl).strip().lower().replace("ı", "i")
             for lbl in _canli + list(_m.get("labels") or [])

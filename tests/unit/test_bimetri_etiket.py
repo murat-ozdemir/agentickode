@@ -10,6 +10,7 @@ from backend.worker.phases._bimetri_etiket import (
     inceleme_istendi,
     issue_no_bul,
     pr_acilis_etiketleri,
+    with_live_labels,
 )
 from tests.unit.bimetri_sahte import SahteGitea
 
@@ -26,6 +27,20 @@ class TestYardimcilar:
         assert ajan_adi("agent/claude@agent-1") == "claude"
         assert ajan_adi("codex") == "codex"
         assert ajan_adi(None) is None
+
+
+class TestWithLiveLabels:
+    def test_restart_stores_the_labels_read_at_run_start(self):
+        # run 245 on dev-1: created with agent/claude, restarted after switching to codex
+        meta = {"issue_number": 92, "labels": ["agent/claude", "difficulty/hard"]}
+        out = with_live_labels(meta, ["agent/codex", "difficulty/medium", "agent/codex"])
+        assert out == {"issue_number": 92, "labels": ["agent/codex", "difficulty/medium"]}
+        assert meta["labels"] == ["agent/claude", "difficulty/hard"]  # input not mutated
+
+    def test_keeps_stored_labels_when_gitea_could_not_be_read(self):
+        meta = {"labels": ["agent/claude"]}
+        assert with_live_labels(meta, []) == meta
+        assert with_live_labels(None, []) == {}
 
 
 class TestPrAcilisEtiketleri:

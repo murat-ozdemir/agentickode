@@ -33,6 +33,19 @@ def grup_degeri(etiketler: list[str], onek: str) -> str | None:
     return next((e.split("/", 1)[1] for e in etiketler if e.startswith(onek)), None)
 
 
+def with_live_labels(meta: dict | None, live: list[str]) -> dict:
+    """Run meta with `labels` replaced by the labels read from Gitea at run start.
+
+    A restart reuses the run, so without this the stored labels stay as they were
+    when the run was created (e.g. agent/claude after switching to agent/codex).
+    Returns the meta unchanged when nothing could be read.
+    """
+    meta = dict(meta or {})
+    if live:
+        meta["labels"] = list(dict.fromkeys(live))
+    return meta
+
+
 async def etiketler(gp, rp: str, n: int | None) -> list[str]:
     """Issue ya da PR'in guncel etiketleri; okunamazsa bos liste."""
     if not n:
