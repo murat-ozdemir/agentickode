@@ -10,6 +10,7 @@ from backend.models.agents import (
     ScheduledTask,
 )
 from backend.models.base import Base
+from backend.models.bimetri_agent_quota import AgentQuotaAccount
 from backend.models.bimetri_memory import MemoryProposal
 from backend.models.bimetri_openai import OpenAICredit, OpenAIDailyCost
 from backend.models.chat import ChatSession
@@ -33,6 +34,7 @@ __all__ = [
     "AgentInvocation",
     "AgentLoopExecution",
     "AgentPolicy",
+    "AgentQuotaAccount",
     "AgentSettings",
     "AppSetting",
     "Base",

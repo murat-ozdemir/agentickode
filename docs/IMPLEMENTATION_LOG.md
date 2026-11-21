@@ -4,6 +4,22 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-22 — bimetri: agent subscription limits on the Dashboard (fork)
+
+**Tests**: 1677 backend (unit + integration), 317 frontend passing; ruff, pyright, eslint, tsc clean
+**Plan**: `claudedocs/plans/2026-11-22-bimetri-agent-subscription-limits.md`
+
+- `backend/services/bimetri_agent_quota/` — stdlib worker probe sent over stdin (no token leaves
+  the worker), Claude OAuth usage and Codex `app-server` adapters, `ADAPTERS` registry,
+  `collect` (account ↔ worker mapping) and `summary`
+- `alembic/versions/048_bimetri_agent_quotas.py`, `backend/models/bimetri_agent_quota.py` — one
+  row per `(provider, account_key)`
+- `backend/worker/bimetri_agent_quota_scheduler.py`, `backend/api/bimetri_agent_quotas.py` —
+  `AGENT_QUOTA_POLL_SECONDS` (600) loop; `GET /api/bimetri/agent-quotas`, `POST /sync`
+- `frontend/src/components/shared/AgentQuotaStrip.tsx`, `AgentQuotaCard.tsx`, `QuotaBar.tsx` —
+  "Subscription limits" strip under the stats row: card per account, 5h / Weekly bars with pace
+  tick and reset countdown, workers, errors
+
 ## 2026-11-11 — bimetri: pending count on the Memory menu (fork)
 
 **Tests**: 299 frontend passing; eslint, tsc clean

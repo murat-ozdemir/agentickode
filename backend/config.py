@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     # Off while empty.
     openai_admin_key: str = ""
     openai_usage_poll_seconds: int = 900
+    agent_quota_poll_seconds: int = 600  # bimetri patch: Dashboard subscription limits
 
     # Redis
     redis_url: str = "redis://redis:6379/0"

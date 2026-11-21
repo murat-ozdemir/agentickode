@@ -8,6 +8,7 @@ import { getAnalytics, getRuns, getStats } from "../api";
 import type { DistributionFilter } from "../api";
 import { BASE } from "../api/client";
 import TaskDistributionCard from "../components/distribution/TaskDistributionCard";
+import AgentQuotaStrip from "../components/shared/AgentQuotaStrip";
 import AnalyticsCharts from "../components/shared/AnalyticsCharts";
 import FilterBar from "../components/shared/FilterBar";
 import OpenAIBalanceCard from "../components/shared/OpenAIBalanceCard";
@@ -135,6 +136,7 @@ export default function Dashboard() {
         Dashboard
       </h1>
       <StatsBar stats={stats} />
+      <AgentQuotaStrip />
       <AnalyticsCharts
         data={analytics}
         extraMetric={<OpenAIBalanceCard usage={openai} />}

@@ -16,5 +16,6 @@ export * from "./gitConnections";
 export * from "./sessions";
 export * from "./memoryProposals";
 export * from "./memoryRecords";
+export * from "./agentQuotas";
 export * from "./openaiUsage";
 export * from "./runDistribution";

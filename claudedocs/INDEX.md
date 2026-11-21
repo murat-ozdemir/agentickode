@@ -21,6 +21,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [bimetri: Task Distribution card](plans/2026-11-11-bimetri-task-distribution.md) | implemented | 2026-11-11 | Dashboard card: runs per day and per server/agent/model/difficulty/type/outcome; a row filters the Runs list |
 | [bimetri: Codex credits](plans/2026-11-11-bimetri-codex-credits.md) | implemented | 2026-11-11 | `codex exec --json` usage (input/cached/output) and ChatGPT plan credits from the codex agent's `CODEX_CREDIT_RATES` env var; dollar equivalent from `CODEX_CREDIT_USD` |
 | [bimetri: request effort in Gitea's time tracker](plans/2026-11-21-bimetri-time-tracking.md) | implemented | 2026-11-21 | Agent (run start→end), CI (`dev.yml` run up to the `ci-kapisi` status) and human time (trace windows capped 1 h / 10 min, own records win) written to Gitea's time tracker |
+| [bimetri: agent subscription limits](plans/2026-11-22-bimetri-agent-subscription-limits.md) | implemented | 2026-11-22 | Dashboard strip: 5h / weekly usage of every Claude and Codex subscription on the workers, one card per account with e-mail, plan and workers |
 | *Plans are in `docs/plans/` — migrate here as they are updated* | | | |
 
 ## Implementations
@@ -43,6 +44,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [bimetri: Task Distribution card](implementations/2026-11-11-bimetri-task-distribution.md) | 2026-11-11 | Pure run classifier shared by `/api/bimetri/analytics/distribution` and the `/api/runs` `dist_*` filter; `TaskDistributionCard` |
 | [bimetri: Codex credits](implementations/2026-11-11-bimetri-codex-credits.md) | 2026-11-11 | JSONL parsing in `CLIAdapter`, credits in the executor, seed upgrade (`--json` + rates env var), `CodexUsageNote` on the run page |
 | [bimetri: request effort in Gitea's time tracker](implementations/2026-11-21-bimetri-time-tracking.md) | 2026-11-21 | `_bimetri_time_tracking` (idempotent `add_time`, agent + CI), `_bimetri_human_time` (estimate at merge), hooks in `execute_pipeline`, `/webhooks/gitea-ci`, `_bimetri_pr_merged` |
+| [bimetri: agent subscription limits](implementations/2026-11-22-bimetri-agent-subscription-limits.md) | 2026-11-22 | Worker probe over stdin (no tokens leave), Claude OAuth usage + Codex app-server adapters, account ↔ worker mapping, 10-min poll; migration 048 |
 | [Flow prompts — live validation + fixes](implementations/2026-06-09-flow-prompts-validation.md) | 2026-06-09 | Live PR-review run validated the flow engine; fixed CI-endpoint flow binding + executor server resolution; local non-root agent-user caveat |
 
 ## Decisions

@@ -32,6 +32,7 @@ vi.mock("../api", () => ({
     first_credit_on: null, spent_since_first_credit_usd: 0, remaining_usd: null,
     last_sync_at: null, sync_error: null, alert: null,
   }),
+  getAgentQuotas: vi.fn().mockResolvedValue({ accounts: [], last_sync_at: null, errors: [] }),
   getRunDistribution: vi.fn().mockResolvedValue({
     range: "all", total: 1, since: "2026-11-11",
     days: [{ date: "2026-11-11", total: 1, by: { agent: { codex: 1 } } }],
