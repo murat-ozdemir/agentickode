@@ -38,7 +38,7 @@ from backend.worker.flow._bimetri_review_clone import (
     prepare_review_clone,
 )
 from backend.worker.flow.data_sources import fetch_flow_data
-from backend.worker.phases._bimetri_hata import hata_bildir, limit_nedeni
+from backend.worker.phases._bimetri_hata import cli_hata_nedeni, hata_bildir
 from backend.worker.phases._bimetri_oto import bekletildi_mi
 from backend.worker.phases._helpers import (
     close_run_session,
@@ -402,10 +402,7 @@ async def execute_flow_prompt(
         _rd = result.get("response")
         _rc = _rd.get("exit_code") if isinstance(_rd, dict) else None
         if _rc not in (None, 0):
-            raise RuntimeError(
-                limit_nedeni(result.get("agent") or agent_name, _rd)
-                or f"Ajan CLI hata koduyla bitti ({_rc})"
-            )
+            raise RuntimeError(cli_hata_nedeni(result.get("agent") or agent_name, _rd, _rc))
         run.coding_results = {
             "flow_prompt": flow.name,
             "agent": result.get("agent"),

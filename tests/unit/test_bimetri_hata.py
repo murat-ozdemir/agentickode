@@ -8,7 +8,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from backend.worker.phases import _bimetri_hata as hata
-from backend.worker.phases._bimetri_hata import hata_yorumu, limit_nedeni, yorum_gerekli
+from backend.worker.phases._bimetri_hata import (
+    cli_hata_nedeni,
+    hata_yorumu,
+    limit_nedeni,
+    yorum_gerekli,
+)
 from tests.unit.bimetri_sahte import SahteGitea
 
 
@@ -29,9 +34,54 @@ class TestLimitNedeni:
         rd = {"output": "", "stderr": "You've hit your usage limit. Try again at 3:05 PM."}
         assert limit_nedeni("codex", rd) == "Kullanım limiti doldu (codex, sıfırlanma: 3:05 PM)"
 
+    def test_claude_5_hour_format(self):
+        rd = {"output": "You've hit your 5-hour limit · resets 1:20am (Europe/Istanbul)"}
+        assert limit_nedeni("claude", rd) == (
+            "Kullanım limiti doldu (claude, sıfırlanma: 1:20am (Europe/Istanbul))"
+        )
+
+    def test_api_error_code_alone(self):
+        rd = {"output": {"api_error": "usage_limit_reached", "result": ""}}
+        assert limit_nedeni("claude", rd) == "Kullanım limiti doldu (claude)"
+
     def test_other_errors_are_not_limit(self):
         assert limit_nedeni("claude", {"output": "compilation failed", "stderr": ""}) is None
         assert limit_nedeni("claude", None) is None
+
+
+class TestCliHataNedeni:
+    _KREDI = (
+        "Fable 5.2 requires usage credits. Switch to another model, or manage usage credits "
+        "at https://claude.ai/settings/usage?from=cc_cli_limit_message, to continue."
+    )
+
+    def test_limit_wins(self):
+        rd = {"output": "You've hit your 5-hour limit · resets 1:20am (Europe/Istanbul)"}
+        assert cli_hata_nedeni("claude", rd, 1).startswith("Kullanım limiti doldu (claude")
+
+    def test_usage_credits(self):
+        assert cli_hata_nedeni("claude", {"output": self._KREDI}, 1) == (
+            f"Model kullanım kredisi istiyor (claude): {self._KREDI}"
+        )
+
+    def test_unknown_error_carries_cli_message(self):
+        rd = {"output": {"result": "Invalid model name"}, "stderr": "warn"}
+        assert cli_hata_nedeni("claude", rd, 1) == (
+            "Ajan CLI hata koduyla bitti (1): Invalid model name"
+        )
+
+    def test_falls_back_to_stderr_tail(self):
+        rd = {"output": "", "stderr": "a\n\nb\nc\nERROR: auth expired\n"}
+        assert cli_hata_nedeni("codex", rd, 2) == (
+            "Ajan CLI hata koduyla bitti (2): b c ERROR: auth expired"
+        )
+
+    def test_long_message_keeps_the_end(self):
+        neden = cli_hata_nedeni("codex", {"output": "x" * 900 + "SON"}, 1)
+        assert neden.endswith("SON") and len(neden) < 560
+
+    def test_no_output(self):
+        assert cli_hata_nedeni("claude", None, 1) == "Ajan CLI hata koduyla bitti (1)"
 
 
 class TestHataYorumu:
@@ -44,6 +94,10 @@ class TestHataYorumu:
         govde = hata_yorumu(9, "https://crew.test/runs/9", "Kullanım limiti doldu (claude)")
         assert "[#9](https://crew.test/runs/9)" in govde
         assert "Limit sıfırlanınca" in govde
+
+    def test_credit_comment_says_waiting_does_not_help(self):
+        govde = hata_yorumu(9, "u", "Model kullanım kredisi istiyor (claude): x")
+        assert "Beklemek düzeltmez" in govde
 
     def test_mentions_are_neutralised(self):
         govde = hata_yorumu(9, "u", "@agentickode boom")
