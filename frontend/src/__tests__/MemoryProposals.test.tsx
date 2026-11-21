@@ -52,6 +52,7 @@ const renderPage = () =>
 describe("MemoryProposals", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mockGet.mockResolvedValue([
       proposal(1, "Org/repo", "Run ruff before push"),
       proposal(2, "Org/other", "Pin the modem firmware"),
@@ -121,5 +122,35 @@ describe("MemoryProposals", () => {
     expect(await screen.findByText("No pending proposals.")).toBeInTheDocument();
     fireEvent.click(screen.getByText("approved"));
     await waitFor(() => expect(mockGet).toHaveBeenLastCalledWith("approved"));
+  });
+
+  it("pages approved proposals 10 at a time and remembers the page size", async () => {
+    const many = Array.from({ length: 25 }, (_, i) => proposal(i + 1, "Org/repo", `Lesson ${i + 1}`));
+    mockGet.mockResolvedValue(many);
+    renderPage();
+    expect(await screen.findByTestId("proposal-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("proposal-11")).not.toBeInTheDocument();
+    expect(screen.getByTestId("page-size")).toHaveValue("10");
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    expect(screen.getByTestId("proposal-11")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("approved"));
+    await waitFor(() => expect(mockGet).toHaveBeenLastCalledWith("approved"));
+    expect(await screen.findByText("Page 1 of 3")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("page-size"), { target: { value: "25" } });
+    expect(screen.getByTestId("proposal-25")).toBeInTheDocument();
+    expect(window.localStorage.getItem("memory.proposals.pageSize")).toBe("25");
+  });
+
+  it("moves back a page when the last card of the last page is rejected", async () => {
+    const many = Array.from({ length: 11 }, (_, i) => proposal(i + 1, "Org/repo", `Lesson ${i + 1}`));
+    mockGet.mockResolvedValue(many);
+    renderPage();
+    await screen.findByTestId("proposal-1");
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    const last = screen.getByTestId("proposal-11");
+    fireEvent.click(within(last).getByRole("button", { name: /Reject/ }));
+    expect(await screen.findByTestId("proposal-1")).toBeInTheDocument();
+    expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
   });
 });

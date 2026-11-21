@@ -13,10 +13,13 @@ import {
 } from "../api";
 import type { MemoryProposal, MemoryProposalKind, MemoryProposalStatus } from "../api";
 import ProposalCard from "../components/memory/ProposalCard";
+import Pagination from "../components/shared/Pagination";
 import { useToast } from "../components/shared/Toast";
 import { notifyMemoryProposalsChanged } from "../hooks/useMemoryPendingCount";
+import usePageSize, { PAGE_SIZES } from "../hooks/usePageSize";
 
 const STATUSES: MemoryProposalStatus[] = ["pending", "approved", "rejected"];
+const PAGE_SIZE_KEY = "memory.proposals.pageSize";
 
 export default function MemoryProposals() {
   const toast = useToast();
@@ -27,6 +30,8 @@ export default function MemoryProposals() {
   const [project, setProject] = useState("");
   const [items, setItems] = useState<MemoryProposal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = usePageSize(PAGE_SIZE_KEY);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,6 +50,23 @@ export default function MemoryProposals() {
 
   const projects = useMemo(() => [...new Set(items.map((p) => p.project))].sort(), [items]);
   const shown = project ? items.filter((p) => p.project === project) : items;
+  // The API returns every proposal of a status; page them here so the project filter sees all.
+  // After the last card of the last page is approved/rejected, fall back to the new last page.
+  const lastPage = Math.max(0, Math.ceil(shown.length / pageSize) - 1);
+  const start = offset < shown.length ? offset : lastPage * pageSize;
+  const page = shown.slice(start, start + pageSize);
+  const selectStatus = (s: MemoryProposalStatus) => {
+    setStatus(s);
+    setOffset(0);
+  };
+  const selectProject = (value: string) => {
+    setProject(value);
+    setOffset(0);
+  };
+  const selectPageSize = (n: number) => {
+    setPageSize(n);
+    setOffset(0);
+  };
 
   const approve = async (p: MemoryProposal, kind: MemoryProposalKind, text: string) => {
     try {
@@ -97,7 +119,7 @@ export default function MemoryProposals() {
         {STATUSES.map((s) => (
           <button
             key={s}
-            onClick={() => setStatus(s)}
+            onClick={() => selectStatus(s)}
             className={`px-3 py-1.5 rounded text-sm capitalize ${
               s === status ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white"
             }`}
@@ -108,7 +130,7 @@ export default function MemoryProposals() {
         <select
           aria-label="Project"
           value={project}
-          onChange={(e) => setProject(e.target.value)}
+          onChange={(e) => selectProject(e.target.value)}
           className="ml-auto bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200"
         >
           <option value="">All projects</option>
@@ -123,10 +145,18 @@ export default function MemoryProposals() {
         <p className="text-gray-500 text-sm">No {status} proposals.</p>
       )}
       <div className="space-y-3">
-        {shown.map((p) => (
+        {page.map((p) => (
           <ProposalCard key={p.id} proposal={p} onApprove={approve} onReject={reject} />
         ))}
       </div>
+      <Pagination
+        total={shown.length}
+        offset={start}
+        limit={pageSize}
+        onPageChange={setOffset}
+        pageSizes={PAGE_SIZES}
+        onLimitChange={selectPageSize}
+      />
     </div>
   );
 }

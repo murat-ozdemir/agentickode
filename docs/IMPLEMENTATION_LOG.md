@@ -4,6 +4,14 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-22 — bimetri: paging on Memory → Proposals (fork)
+
+**Tests**: 14 memory frontend tests passing; eslint, tsc clean
+
+- `frontend/src/pages/MemoryProposals.tsx` — pending / approved / rejected are paged in the
+  browser with "Per page" (10 / 25 / 50 / 100, default 10, remembered); the API still returns
+  every proposal of a status, so the project filter keeps listing all projects
+
 ## 2026-11-22 — bimetri: Claude usage credits and model limits on the subscription cards (fork)
 
 **Tests**: 1686 backend (unit + integration), 323 frontend passing; ruff, pyright, eslint, tsc clean

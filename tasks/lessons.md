@@ -46,3 +46,7 @@
 ## 2026-11-22 — Full suite run twice for a small change
 - **What went wrong**: after adding "Per page" to Memory → Records I re-ran the whole frontend suite, though it had already run once in the same turn.
 - **Rule**: after a small change, run only the edited files' tests. Run each full suite once, right before the commit, and say why it is needed (e.g. a model or API schema change).
+
+## 2026-11-22 — "Is X missing?" answered but not fixed
+- **What went wrong**: the user asked whether Proposals had no paging or only fetched the latest records. I answered ("paging is missing") and only offered to add it. They had to ask again after deploying.
+- **Rule**: when the user points at something missing in the UI next to a related change, treat it as part of the request. Fix it in the same change, or say clearly before the commit that it is left out.
