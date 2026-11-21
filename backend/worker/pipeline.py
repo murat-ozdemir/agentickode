@@ -74,5 +74,9 @@ async def execute_pipeline(run: TaskRun, session: AsyncSession, services: Servic
         await session.commit()
 
     from backend.worker.flow.executor import execute_flow_prompt
+    from backend.worker.phases._bimetri_time_tracking import record_run_time
 
-    await execute_flow_prompt(run, session, services)
+    try:
+        await execute_flow_prompt(run, session, services)
+    finally:  # bimetri patch: agent time to Gitea's time tracker (every end, cancel included)
+        await record_run_time(run, session)

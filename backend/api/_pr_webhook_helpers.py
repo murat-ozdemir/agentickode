@@ -109,6 +109,9 @@ async def resolve_pr_review_flow_prompt_id(db) -> int | None:
     return int(flow.id) if flow else None
 
 
+_HUMAN_TIME_TASKS: set = set()  # keep background tasks referenced until done
+
+
 # bimetri yamasi: merge edilen PR'a ve aciklamasindaki "Closes #N" issue'larina status/completed
 async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRepository) -> dict:
     import re
@@ -167,6 +170,15 @@ async def _bimetri_pr_merged(body: dict, db: AsyncSession, repo: ProjectConfigRe
             done.append(n)
         except Exception:
             logger.warning("#%s status/completed etiketlenemedi", n, exc_info=True)
+    if pr.get("number"):  # bimetri patch: human time at merge, in the background
+        import asyncio
+
+        from backend.worker.phases._bimetri_human_time import record_human_time_safely
+
+        first = next((n for n in issues if n != pr["number"]), None)
+        _bg = asyncio.create_task(record_human_time_safely(project, full, first, pr))
+        _HUMAN_TIME_TASKS.add(_bg)
+        _bg.add_done_callback(_HUMAN_TIME_TASKS.discard)
     result: dict = {"status": "accepted", "completed": done}
     if off_default:  # Gitea closes "Closes #N" issues only on the default branch
         result["closed"] = await close_issues(

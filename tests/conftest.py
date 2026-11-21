@@ -113,6 +113,19 @@ def _no_real_server_setup():
         yield kick_off
 
 
+@pytest.fixture(autouse=True)
+def _no_real_time_tracking():
+    """bimetri patch: run ends and merges in tests write no time to a real Gitea.
+
+    Both entry points open their own token lookup / session and HTTP client. Tests of
+    the time modules import the functions at collection time and call them directly.
+    """
+    run_time = "backend.worker.phases._bimetri_time_tracking.record_run_time"
+    human = "backend.worker.phases._bimetri_human_time.record_human_time_safely"
+    with patch(run_time, AsyncMock()), patch(human, AsyncMock()):
+        yield
+
+
 @pytest.fixture()
 def mock_services() -> ServiceContainer:
     """ServiceContainer with all services mocked."""

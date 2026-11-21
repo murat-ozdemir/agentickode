@@ -30,3 +30,11 @@
 ## 2026-11-13 — Full test suite in the production container set up the platform server
 **What went wrong:** I ran the full pytest suite inside `agentickode-backend-1` on dev-1. Three integration tests create a server through the API without mocking `ServerSetupService`; its background task opens `backend.database.async_session` (production Postgres), so it set up the real server with id 1, the platform. The platform had only ever been seeded `online` and never run the 9 setup steps, so latent upstream bugs (`playwright` binary name, dash `&>`, a `coder` user that does not exist in the container) surfaced. The task died with the pytest event loop and left "System Deps running" behind; I first blamed a backend restart and re-did the setup several times.
 **Rule for next time:** Never run tests against a deployed container's real settings. Run them with `DATABASE_URL=sqlite+aiosqlite:///<throwaway>` and keep the conftest guard that blocks real setups. When production state changes unexpectedly, first check what I ran at that minute.
+
+## 2026-11-21 — Time tracking: proposed a model before reading the flows, and left CI out
+**What went wrong:** I first proposed attributing time from status labels without reading agentickode-bimetri's flows. The bot adds nearly every label, and `status/review` covers AI review, CI and human waiting, so the user had to stop me and ask me to read the code first. In the next model I left CI time out as "machine work"; the user corrected that they sit at the screen waiting for CI, so it is spent time.
+**Rule for next time:** Before proposing a measurement over a workflow, read the code that drives each state change and map who triggers it. Count what the person waits for, not only what they type: effort is the person's time, whoever does the work.
+
+## 2026-11-21 — Built per-person attribution the user did not need
+**What went wrong:** I wrote human time per person with `user_name`, which needs repo admin on the bot's token, and flagged that as a limitation. The user only needed the request's total time and said writing everything under the bot is fine.
+**Rule for next time:** Ask which question the number answers (total per request vs. who) before adding attribution that needs extra permissions. Default to the simplest write that gives the asked total.

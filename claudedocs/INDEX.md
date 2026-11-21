@@ -20,6 +20,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [bimetri: OpenAI usage card](plans/2026-11-10-bimetri-openai-usage.md) | implemented | 2026-11-10 | Dashboard widgets in the analytics rows: OpenAI Balance card (hand-entered credits via an "Add credit" popup minus spend) and OpenAI Spend chart (this month per UTC day, from the Costs API, same as the platform), 15-min sync, red card + one Slack message on `insufficient_quota`/`credit_balance_exhausted` |
 | [bimetri: Task Distribution card](plans/2026-11-11-bimetri-task-distribution.md) | implemented | 2026-11-11 | Dashboard card: runs per day and per server/agent/model/difficulty/type/outcome; a row filters the Runs list |
 | [bimetri: Codex credits](plans/2026-11-11-bimetri-codex-credits.md) | implemented | 2026-11-11 | `codex exec --json` usage (input/cached/output) and ChatGPT plan credits from the codex agent's `CODEX_CREDIT_RATES` env var; dollar equivalent from `CODEX_CREDIT_USD` |
+| [bimetri: request effort in Gitea's time tracker](plans/2026-11-21-bimetri-time-tracking.md) | implemented | 2026-11-21 | Agent (run start→end), CI (`dev.yml` run up to the `ci-kapisi` status) and human time (trace windows capped 1 h / 10 min, own records win) written to Gitea's time tracker |
 | *Plans are in `docs/plans/` — migrate here as they are updated* | | | |
 
 ## Implementations
@@ -41,6 +42,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [bimetri: OpenAI usage card](implementations/2026-11-10-bimetri-openai-usage.md) | 2026-11-10 | Costs API sync every 15 min, hand-entered credits (popup), remaining balance, quota alert (red card + one notification); migration 047 |
 | [bimetri: Task Distribution card](implementations/2026-11-11-bimetri-task-distribution.md) | 2026-11-11 | Pure run classifier shared by `/api/bimetri/analytics/distribution` and the `/api/runs` `dist_*` filter; `TaskDistributionCard` |
 | [bimetri: Codex credits](implementations/2026-11-11-bimetri-codex-credits.md) | 2026-11-11 | JSONL parsing in `CLIAdapter`, credits in the executor, seed upgrade (`--json` + rates env var), `CodexUsageNote` on the run page |
+| [bimetri: request effort in Gitea's time tracker](implementations/2026-11-21-bimetri-time-tracking.md) | 2026-11-21 | `_bimetri_time_tracking` (idempotent `add_time`, agent + CI), `_bimetri_human_time` (estimate at merge), hooks in `execute_pipeline`, `/webhooks/gitea-ci`, `_bimetri_pr_merged` |
 | [Flow prompts — live validation + fixes](implementations/2026-06-09-flow-prompts-validation.md) | 2026-06-09 | Live PR-review run validated the flow engine; fixed CI-endpoint flow binding + executor server resolution; local non-root agent-user caveat |
 
 ## Decisions

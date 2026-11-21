@@ -139,17 +139,30 @@ async def gitea_ci_status_webhook(
     from backend.api._pr_webhook_helpers import read_verified_body
     from backend.worker.phases._bimetri_ci import CI_BAGLAM
     from backend.worker.phases._bimetri_ci_kirmizi import ci_kirmizi
+    from backend.worker.phases._bimetri_time_tracking import parse_time, record_ci_time
 
     body = await read_verified_body(request, settings.gitea_webhook_secret, "X-Gitea-Signature")
-    if body.get("context") != CI_BAGLAM or body.get("state") not in ("failure", "error"):
-        return {"status": "ignored", "reason": "not_red_gate"}
+    state = body.get("state")
+    if body.get("context") != CI_BAGLAM or state not in ("success", "failure", "error"):
+        return {"status": "ignored", "reason": "not_final_gate"}
     full = (body.get("repository") or {}).get("full_name", "")
     owner, name = full.split("/", 1) if "/" in full else ("", full)
     project = await repo.get_by_git_repo("gitea", owner, name)
     if not project:
         return {"status": "ignored", "reason": "unknown_project"}
-    sonuc = await ci_kirmizi(
-        await proje_saglayici(project, db), full, body.get("sha", ""), body.get("target_url") or ""
-    )
+    gp = await proje_saglayici(project, db)
+    sha = body.get("sha", "")
+    try:  # bimetri patch: CI time counts as spent time (people wait for it)
+        logger.info(
+            "CI time %s %s: %s",
+            full,
+            sha[:8],
+            await record_ci_time(gp, full, sha, parse_time(body.get("updated_at"))),
+        )
+    except Exception:
+        logger.warning("CI time not written %s %s", full, sha[:8], exc_info=True)
+    if state == "success":
+        return {"status": "accepted", "reason": "ci_time"}
+    sonuc = await ci_kirmizi(gp, full, sha, body.get("target_url") or "")
     logger.info("Kirmizi CI %s %s: %s", full, str(body.get("sha", ""))[:8], sonuc)
     return {"status": "accepted", "reason": sonuc}
