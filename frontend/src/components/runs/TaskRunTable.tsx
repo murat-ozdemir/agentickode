@@ -5,6 +5,7 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, Clock, DollarSign, Inbox } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { TaskRun } from "../../types";
+import RunKindBadge from "../shared/RunKindBadge";
 import StatusBadge from "../shared/StatusBadge";
 
 function timeAgo(iso: string): string {
@@ -82,6 +83,7 @@ export default function TaskRunTable({ runs, sortBy, sortOrder, onSort }: Props)
                 Status {onSort && <SortIcon column="status" sortBy={sortBy} sortOrder={sortOrder} />}
               </span>
             </th>
+            <th className="py-2.5 pr-4 text-gray-500 font-medium text-xs uppercase tracking-wider">Type</th>
             <th className="py-2.5 pr-4 text-gray-500 font-medium text-xs uppercase tracking-wider">Phase</th>
             <th className="py-2.5 pr-4 hidden lg:table-cell text-gray-500 font-medium text-xs uppercase tracking-wider">Mode</th>
             <th className="py-2.5 pr-4 hidden md:table-cell text-gray-500 font-medium text-xs uppercase tracking-wider">
@@ -123,6 +125,9 @@ export default function TaskRunTable({ runs, sortBy, sortOrder, onSort }: Props)
                 </td>
                 <td className="py-2.5 pr-4">
                   <StatusBadge status={r.status} />
+                </td>
+                <td className="py-2.5 pr-4">
+                  <RunKindBadge kind={r.kind} />
                 </td>
                 <td className="py-2.5 pr-4 text-gray-400">
                   {r.current_phase ?? "—"}

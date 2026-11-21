@@ -5,7 +5,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, computed_field
+
+from backend.services.bimetri_run_distribution import run_type as _run_kind
 
 
 class TaskRunOut(BaseModel):
@@ -31,8 +33,16 @@ class TaskRunOut(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+    # bimetri: read only to derive `kind`; TaskRunDetail exposes it in full
+    task_source_meta: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
     model_config = {"from_attributes": True}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def kind(self) -> str:
+        """bimetri: task / test / fix / review, same as the Run type card."""
+        return _run_kind(self.task_source_meta or {})
 
 
 class TaskRunDetail(TaskRunOut):

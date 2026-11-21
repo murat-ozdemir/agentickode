@@ -20,7 +20,7 @@ vi.mock("../api", () => ({
     workspace_result: null, planning_result: null, coding_results: null,
     test_results: null, review_result: null, approval_requested_at: null,
     phase_started_at: null,
-    flow_prompt_id: null, parent_run_id: null, execution_mode: "structured",
+    flow_prompt_id: null, parent_run_id: null, execution_mode: "structured", kind: "task",
   }),
   getRunInvocations: vi.fn().mockResolvedValue([]),
   getRunLogs: vi.fn().mockResolvedValue([]),

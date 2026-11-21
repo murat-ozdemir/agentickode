@@ -4,6 +4,8 @@
 
 """Unit tests for Pydantic schemas."""
 
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -74,3 +76,41 @@ class TestTaskRunOut:
     def test_from_attributes(self):
         """Ensure from_attributes is set for ORM compatibility."""
         assert TaskRunOut.model_config.get("from_attributes") is True
+
+    def _run(self, meta: dict | None) -> TaskRunOut:
+        now = datetime.now(UTC)
+        data = {
+            "id": 1,
+            "run_type": "ai_task",
+            "task_id": "T-1",
+            "project_id": "p",
+            "title": "t",
+            "description": "",
+            "branch_name": "b",
+            "status": "completed",
+            "current_phase": None,
+            "retry_count": 0,
+            "error_message": None,
+            "pr_url": None,
+            "approved": None,
+            "rejection_reason": None,
+            "created_at": now,
+            "updated_at": now,
+            "started_at": None,
+            "completed_at": None,
+        }
+        if meta is not None:
+            data["task_source_meta"] = meta
+        return TaskRunOut(**data)
+
+    def test_kind_follows_review_mode(self):
+        assert self._run({"review_mode": "comment"}).kind == "review"
+        assert self._run({"review_mode": "test"}).kind == "test"
+        assert self._run({"review_mode": "fix"}).kind == "fix"
+        assert self._run({"labels": ["x"]}).kind == "task"
+        assert self._run(None).kind == "task"
+
+    def test_kind_is_serialized_but_meta_is_not(self):
+        dumped = self._run({"review_mode": "fix", "secret": "x"}).model_dump()
+        assert dumped["kind"] == "fix"
+        assert "task_source_meta" not in dumped

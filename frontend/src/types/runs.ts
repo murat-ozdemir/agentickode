@@ -21,6 +21,8 @@ export interface TaskRun {
   flow_prompt_id: number | null;
   total_cost_usd: number | null;
   execution_mode: string;
+  // bimetri: task / test / fix / review
+  kind: string;
   created_at: string;
   updated_at: string;
   started_at: string | null;

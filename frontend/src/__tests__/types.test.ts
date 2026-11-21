@@ -30,6 +30,7 @@ describe("TypeScript interfaces", () => {
       flow_prompt_id: null,
       total_cost_usd: null,
       execution_mode: "structured",
+      kind: "task",
     };
     expect(run.id).toBe(1);
     expect(run.status).toBe("pending");
@@ -76,6 +77,7 @@ describe("TypeScript interfaces", () => {
       phase_started_at: null,
       total_cost_usd: null,
       execution_mode: "structured",
+      kind: "task",
     };
     expect(detail.max_retries).toBe(3);
     expect(detail.workspace_path).toBe("/workspaces/proj-1");

@@ -27,6 +27,7 @@ const baseMockRun: TaskRun = {
   flow_prompt_id: null,
   total_cost_usd: null,
   execution_mode: "structured",
+  kind: "task",
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   started_at: null,
@@ -51,6 +52,20 @@ describe("TaskRunTable", () => {
     render(<MemoryRouter><TaskRunTable runs={[mockRun]} /></MemoryRouter>);
     const link = screen.getByText("Fix bug").closest("a");
     expect(link).toHaveAttribute("href", "/runs/1");
+  });
+
+  it("shows a colored type badge per run kind", () => {
+    const runs = (["task", "test", "fix", "review"] as const).map((kind, i) => ({
+      ...baseMockRun,
+      id: i + 1,
+      kind,
+    }));
+    render(<MemoryRouter><TaskRunTable runs={runs} /></MemoryRouter>);
+    expect(screen.getByText("Type")).toBeInTheDocument();
+    expect(screen.getByText("fix")).toHaveClass("text-amber-300");
+    expect(screen.getByText("review")).toHaveClass("text-fuchsia-300");
+    expect(screen.getByText("test")).toHaveClass("text-teal-300");
+    expect(screen.getByText("task")).toHaveClass("text-sky-300");
   });
 
 });
