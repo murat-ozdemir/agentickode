@@ -7,6 +7,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from backend.worker.phases import _bimetri_hata as hata
 from backend.worker.phases._bimetri_hata import (
     cli_hata_nedeni,
@@ -63,6 +65,29 @@ class TestCliHataNedeni:
         assert cli_hata_nedeni("claude", {"output": self._KREDI}, 1) == (
             f"Model kullanım kredisi istiyor (claude): {self._KREDI}"
         )
+
+    @pytest.mark.parametrize(
+        "mesaj",
+        [
+            "You're out of credits. Your workspace is out of credits. Add credits to continue.",
+            "You've reached your workspace credit limit",
+            "You hit your spend cap set by the owner of your workspace. Ask an owner to increase "
+            "your spend cap to continue.",
+            '{"error": {"code": "workspace_member_credits_depleted"}}',
+            '{"error": {"code": "spend_control_reached"}}',
+        ],
+    )
+    def test_codex_credit_messages(self, mesaj):
+        neden = cli_hata_nedeni("codex", {"output": "", "stderr": mesaj}, 1)
+        assert neden.startswith("Model kullanım kredisi istiyor (codex): ")
+
+    def test_codex_limit_that_mentions_credits_stays_limit(self):
+        rd = {
+            "output": "",
+            "stderr": "You've hit your usage limit. Visit https://chatgpt.com/settings/usage to "
+            "purchase more credits or try again at 3:05 PM.",
+        }
+        assert cli_hata_nedeni("codex", rd, 1).startswith("Kullanım limiti doldu (codex")
 
     def test_unknown_error_carries_cli_message(self):
         rd = {"output": {"result": "Invalid model name"}, "stderr": "warn"}

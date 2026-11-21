@@ -24,8 +24,13 @@ _LIMIT_RX = re.compile(
     r"(?i)(hit your ([\w-]+ )?limit|usage[ _]limit[ _]reached|limit reached|rate limit exceeded|"
     r"quota exceeded|insufficient_quota)"
 )
-# Claude: "Fable 5.2 requires usage credits. Switch to another model, ..." (bekleyince gecmez)
-_KREDI_RX = re.compile(r"(?i)(requires usage credits|credits_required)")
+# Bekleyince gecmez. Claude: "Fable 5.2 requires usage credits. Switch to another model, ...";
+# Codex: "You're out of credits", "You've reached your workspace credit limit", "You hit your
+# spend cap ...", kodlar workspace_member_credits_depleted / spend_control_reached
+_KREDI_RX = re.compile(
+    r"(?i)(requires usage credits|credits_required|out of credits|credit limit|"
+    r"credits_depleted|spend cap|spend_control_reached)"
+)
 _OZET_SINIRI = 500
 _SIFIRLANMA_RX = re.compile(r"(?i)(?:resets|try again (?:at|in))\s+([^\"\\\n.]{1,60})")
 _EPOCH_RX = re.compile(r"limit reached\|(\d{10})")
@@ -93,7 +98,8 @@ def hata_yorumu(run_id: int, kosu_url: str, hata: str) -> str:
     elif hata.startswith(KREDI_ONEK):
         sonra = (
             "Beklemek düzeltmez: `difficulty/` ya da `agent/` etiketini değiştir (veya ajan "
-            f"ayarındaki modeli), sonra {komut} yaz."
+            "ayarındaki modeli; kredi ya da harcama tavanı dolduysa hesaba kredi ekle), sonra "
+            f"{komut} yaz."
         )
     else:
         sonra = f"Nedeni giderdikten sonra {komut} ile yeniden başlatabilirsin."
