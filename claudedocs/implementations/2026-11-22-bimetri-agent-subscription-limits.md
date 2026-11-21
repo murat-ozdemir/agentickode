@@ -9,7 +9,7 @@ related: [plans/2026-11-22-bimetri-agent-subscription-limits.md]
 
 ## What Was Built
 
-A **Subscription limits** strip on the Dashboard, under the stats row. Each Claude or Codex
+A **Subscription limits** panel on the Dashboard, styled like Task Distribution and placed right above it; the account cards share the row equally (2 accounts in halves, 3 in thirds). Each Claude or Codex
 subscription the workers use is one card: provider, plan, e-mail, a bar per window (5h, Weekly)
 with a pace tick and the time to reset, and the workers (server + user) signed in with it. Red at
 100 % ("Limit hit · <countdown>"), amber at 70 % or when usage runs more than 10 points ahead of

@@ -38,3 +38,7 @@
 ## 2026-11-21 — Built per-person attribution the user did not need
 **What went wrong:** I wrote human time per person with `user_name`, which needs repo admin on the bot's token, and flagged that as a limitation. The user only needed the request's total time and said writing everything under the bot is fine.
 **Rule for next time:** Ask which question the number answers (total per request vs. who) before adding attribution that needs extra permissions. Default to the simplest write that gives the asked total.
+
+## 2026-11-22 — Showed layout options as ASCII drawings
+**What went wrong:** I offered two layouts for the Subscription limits panel with character-drawn previews. The user could not read them and the choice stalled.
+**Rule for next time:** Show layout options as a rendered visual mockup (or a short plain description of what goes where), never as ASCII/box-drawing diagrams.

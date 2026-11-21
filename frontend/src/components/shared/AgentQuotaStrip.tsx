@@ -2,7 +2,7 @@
 // Licensed under AGPLv3. See LICENSE file.
 // Commercial licensing: info@mechemsi.com
 
-// bimetri patch: Dashboard strip with one card per agent subscription account.
+// bimetri patch: Dashboard panel with one card per agent subscription account.
 import { AlertTriangle, Gauge, RefreshCw } from "lucide-react";
 import useAgentQuotas from "../../hooks/useAgentQuotas";
 import AgentQuotaCard from "./AgentQuotaCard";
@@ -17,14 +17,20 @@ export default function AgentQuotaStrip() {
   ];
 
   return (
-    <section className="space-y-2" data-testid="agent-quota-strip">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-gray-400">
-          <Gauge className="h-4 w-4" />
-          Subscription limits
+    <section
+      aria-labelledby="quota-title"
+      className="bg-gray-900/50 border border-gray-800/60 rounded-xl p-5 mb-6 flex flex-col gap-4"
+      data-testid="agent-quota-strip"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Gauge className="w-5 h-5 text-blue-400" aria-hidden="true" />
+          <h2 id="quota-title" className="m-0 text-base font-semibold">
+            Subscription limits
+          </h2>
           {problems.length > 0 && (
             <span
-              className="flex items-center gap-1 normal-case tracking-normal text-amber-400"
+              className="flex items-center gap-1 text-xs text-amber-400"
               title={problems.join("\n")}
               data-testid="quota-problems"
             >
@@ -32,8 +38,8 @@ export default function AgentQuotaStrip() {
               {problems.length === 1 ? "1 issue" : `${problems.length} issues`}
             </span>
           )}
-        </h2>
-        <div className="flex items-center gap-2 text-[11px] text-gray-500">
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
           {data?.last_sync_at && (
             <span data-testid="quota-updated">Updated {shortTime(data.last_sync_at)}</span>
           )}
@@ -50,14 +56,12 @@ export default function AgentQuotaStrip() {
         </div>
       </div>
       {accounts.length === 0 ? (
-        <div
-          className="rounded-xl border border-gray-800/60 bg-gray-900/50 p-4 text-xs text-gray-500"
-          data-testid="quota-empty"
-        >
+        <div className="text-xs text-gray-500" data-testid="quota-empty">
           {data ? "No agent subscriptions found on the workers yet." : "Loading…"}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        // Equal-width cards: 2 accounts split the row in half, 3 in thirds; no empty slot.
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]">
           {accounts.map((a) => (
             <AgentQuotaCard key={a.id} account={a} />
           ))}

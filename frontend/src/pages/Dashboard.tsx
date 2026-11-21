@@ -136,12 +136,12 @@ export default function Dashboard() {
         Dashboard
       </h1>
       <StatsBar stats={stats} />
-      <AgentQuotaStrip />
       <AnalyticsCharts
         data={analytics}
         extraMetric={<OpenAIBalanceCard usage={openai} />}
         extraChart={<OpenAISpendChart data={openai.data} />}
       />
+      <AgentQuotaStrip />
       <TaskDistributionCard onSelect={setDist} />
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="relative flex-1 min-w-[200px] max-w-md">

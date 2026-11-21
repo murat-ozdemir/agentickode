@@ -104,6 +104,7 @@ describe("AgentQuotaStrip", () => {
     vi.mocked(syncAgentQuotas).mockResolvedValue(summary());
     render(<AgentQuotaStrip />);
     expect(await screen.findByText(/No agent subscriptions found/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Subscription limits" })).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("quota-sync"));
     expect(await screen.findByTestId("quota-account")).toBeInTheDocument();
     expect(syncAgentQuotas).toHaveBeenCalledOnce();

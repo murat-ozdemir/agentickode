@@ -73,6 +73,12 @@ describe("Dashboard", () => {
     expect(screen.getByPlaceholderText("Search runs...")).toBeInTheDocument();
   });
 
+  it("places the subscription limits panel right above Task Distribution", async () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const dist = await screen.findByTestId("task-distribution");
+    expect(dist.previousElementSibling).toBe(screen.getByTestId("agent-quota-strip"));
+  });
+
   it("filters runs by a Task Distribution row and clears it", async () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     const group = await screen.findByTestId("distribution-group-agent");
