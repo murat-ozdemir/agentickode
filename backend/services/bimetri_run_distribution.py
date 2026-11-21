@@ -57,7 +57,9 @@ def classify(row: RunRow) -> dict[str, str | None]:
         ),
         NO_LABEL,
     )
-    agent, model = row.calls[0] if row.calls else (NO_AGENT, None)
+    # The last call is the one that finished the run: a restart keeps the failed calls
+    # of earlier attempts (e.g. claude failed, then the run was restarted on codex).
+    agent, model = row.calls[-1] if row.calls else (NO_AGENT, None)
     return {
         "server": row.server or NO_SERVER,
         "agent": agent,

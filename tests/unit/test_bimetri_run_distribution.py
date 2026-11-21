@@ -21,7 +21,7 @@ class TestClassify:
         row = _row(
             1,
             meta={"labels": ["agent/codex", "difficulty/easy"], "review_mode": "test"},
-            calls=[("codex", "gpt-6.1-terra"), ("claude", "claude-sonnet-5-5")],
+            calls=[("claude", "claude-sonnet-5-5"), ("codex", "gpt-6.1-terra")],
         )
         assert dist.classify(row) == {
             "server": "agent-1",
@@ -39,6 +39,20 @@ class TestClassify:
         assert cls["model"] is None
         assert cls["difficulty"] == dist.NO_LABEL
         assert cls["type"] == "task"
+
+    def test_restarted_run_counts_the_agent_that_finished_it(self):
+        # run 245 on dev-1: two failed claude/fable attempts, restarted on codex
+        row = _row(
+            1,
+            meta={"labels": ["agent/claude"]},
+            calls=[
+                ("claude", "claude-fable-5-2"),
+                ("claude", "claude-fable-5-2"),
+                ("codex", "gpt-6-astra"),
+            ],
+        )
+        cls = dist.classify(row)
+        assert (cls["agent"], cls["model"]) == ("codex", "gpt-6-astra")
 
     def test_model_unknown_when_call_has_no_model(self):
         assert dist.classify(_row(1, calls=[("claude", None)]))["model"] == dist.UNKNOWN_MODEL
