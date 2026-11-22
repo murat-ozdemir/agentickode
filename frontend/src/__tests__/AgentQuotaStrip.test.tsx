@@ -167,3 +167,25 @@ describe("AgentQuotaStrip", () => {
     expect(syncAgentQuotas).toHaveBeenCalledOnce();
   });
 });
+
+describe("AgentQuotaStrip with an aside card", () => {
+  const aside = <div data-testid="aside">graph</div>;
+  const accounts = (n: number) => Array.from({ length: n }, (_, i) => account({ id: i + 1 }));
+
+  it("puts the aside beside up to 2 accounts and stacks their cards", async () => {
+    vi.mocked(getAgentQuotas).mockResolvedValue(summary({ accounts: accounts(2) }));
+    render(<AgentQuotaStrip aside={aside} />);
+    await screen.findAllByTestId("quota-account");
+    expect(screen.getByTestId("quota-row")).toHaveAttribute("data-layout", "side");
+    expect(screen.getByTestId("quota-cards").className).toContain("grid-cols-1");
+    expect(screen.getByTestId("aside")).toBeInTheDocument();
+  });
+
+  it("gives the panel the full width from 3 accounts and moves the aside below", async () => {
+    vi.mocked(getAgentQuotas).mockResolvedValue(summary({ accounts: accounts(3) }));
+    render(<AgentQuotaStrip aside={aside} />);
+    await screen.findAllByTestId("quota-account");
+    expect(screen.getByTestId("quota-row")).toHaveAttribute("data-layout", "stacked");
+    expect(screen.getByTestId("quota-cards").className).toContain("auto-fit");
+  });
+});

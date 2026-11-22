@@ -23,6 +23,7 @@ from backend.api import (
     backup,
     bimetri_agent_quotas,
     bimetri_distribution,
+    bimetri_graph_usage,
     bimetri_memories,
     bimetri_memory_proposals,
     bimetri_openai,
@@ -491,6 +492,7 @@ app.include_router(bimetri_memory_proposals.router, prefix="/api")  # bimetri pa
 app.include_router(bimetri_openai.router, prefix="/api")  # bimetri patch
 app.include_router(bimetri_agent_quotas.router, prefix="/api")  # bimetri patch
 app.include_router(bimetri_distribution.router, prefix="/api")  # bimetri patch
+app.include_router(bimetri_graph_usage.router, prefix="/api")  # bimetri patch
 app.include_router(webhooks_slack.router, prefix="/api")
 app.include_router(webhooks_discord.router, prefix="/api")
 app.include_router(ws.router)

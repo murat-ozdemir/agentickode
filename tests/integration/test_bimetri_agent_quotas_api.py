@@ -4,6 +4,7 @@
 
 """bimetri patch: GET/POST /api/bimetri/agent-quotas."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from backend.models import WorkspaceServer
@@ -11,11 +12,13 @@ from backend.services.bimetri_agent_quota import service
 from backend.services.bimetri_agent_quota.probe import ProbeResult
 
 URL = "/api/bimetri/agent-quotas"
+# A reset still ahead: a passed one means a fresh window (used 0%).
+RESETS_AT = (datetime.now(UTC) + timedelta(hours=3)).replace(microsecond=0).isoformat()
 
 CLAUDE = {
     "account": {"accountUuid": "acc-1", "emailAddress": "dev@example.com"},
     "plan": "pro",
-    "usage": {"five_hour": {"utilization": 72.0, "resets_at": "2026-11-22T10:00:00+00:00"}},
+    "usage": {"five_hour": {"utilization": 72.0, "resets_at": RESETS_AT}},
 }
 
 
@@ -50,7 +53,7 @@ class TestAgentQuotasApi:
                 "label": "5h",
                 "minutes": 300,
                 "used_percent": 72.0,
-                "resets_at": "2026-11-22T10:00:00+00:00",
+                "resets_at": RESETS_AT,
                 "scope": None,
             }
         ]

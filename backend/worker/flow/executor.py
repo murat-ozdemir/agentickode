@@ -28,6 +28,8 @@ from backend.repositories.flow_prompt_repo import FlowPromptRepository
 from backend.services.adapters._bimetri_codex import add_credits
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
+from backend.worker.flow._bimetri_graph_calls import collect as graph_calls
+from backend.worker.flow._bimetri_graph_calls import run_env
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
 from backend.worker.flow._bimetri_iptal import was_cancelled
 from backend.worker.flow._bimetri_kapsam import kapsam_eki
@@ -92,6 +94,8 @@ def _bimetri_cagri_kaydi(run, session, agent, phase, t0, result, exc) -> None:
                 metadata_={
                     "model": result.get("model"),
                     "bimetri": True,
+                    # bimetri patch: code graph calls and estimated savings (_bimetri_graph_calls)
+                    **({"graph": result["graph"]} if result.get("graph") else {}),
                     # bimetri patch: Codex token breakdown and ChatGPT credits
                     **{k: usage[k] for k in _USAGE_EXTRAS if usage.get(k) is not None},
                 },
@@ -387,6 +391,8 @@ async def execute_flow_prompt(
                     "agent": agent_name,
                     "model": model,
                     "effort": effort or None,
+                    # bimetri patch: the graph MCP server logs its calls under this run id
+                    "environment_vars": run_env(run.id),
                     "params": {
                         "prompt": prompt,
                         "mode": flow.agent_mode,
@@ -399,10 +405,14 @@ async def execute_flow_prompt(
                 },
             )
         except Exception as _exc:
-            _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, None, _exc)
+            _graph = await graph_calls(resolved.adapter, run.id)
+            _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, {"graph": _graph}, _exc)
             raise
         add_credits(result.get("usage"), model, env)
-        _bimetri_cagri_kaydi(run, session, _ajan, flow.name, _t0, {**result, "model": model}, None)
+        _graph = await graph_calls(resolved.adapter, run.id)
+        _bimetri_cagri_kaydi(
+            run, session, _ajan, flow.name, _t0, {**result, "model": model, "graph": _graph}, None
+        )
         if await was_cancelled(run, session):  # bimetri patch: no result after a cancel
             await session.commit()
             await broadcaster.log(run.id, "Run cancelled; agent result discarded", phase="agent")

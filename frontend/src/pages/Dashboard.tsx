@@ -9,6 +9,7 @@ import type { DistributionFilter } from "../api";
 import { BASE } from "../api/client";
 import TaskDistributionCard from "../components/distribution/TaskDistributionCard";
 import AgentQuotaStrip from "../components/shared/AgentQuotaStrip";
+import CodeGraphCard from "../components/graph/CodeGraphCard";
 import AnalyticsCharts from "../components/shared/AnalyticsCharts";
 import FilterBar from "../components/shared/FilterBar";
 import OpenAIBalanceCard from "../components/shared/OpenAIBalanceCard";
@@ -126,7 +127,7 @@ export default function Dashboard() {
         extraMetric={<OpenAIBalanceCard usage={openai} />}
         extraChart={<OpenAISpendChart data={openai.data} />}
       />
-      <AgentQuotaStrip />
+      <AgentQuotaStrip aside={<CodeGraphCard />} />
       <TaskDistributionCard onSelect={setDist} />
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="relative flex-1 min-w-[200px] max-w-md">

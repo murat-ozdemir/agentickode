@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _graph_calls import Recorder, run_id  # bundle: drop
 from _graph_flow import CAPS, OUTPUT_LINES, callers, continue_flow  # bundle: drop
 from _graph_read import read  # bundle: drop
 
@@ -126,7 +127,7 @@ def scorer(score_nodes, query_terms):
     return score
 
 
-def build_server(flow: Flow):
+def build_server(flow: Flow, record=None):
     from mcp import types  # pyright: ignore[reportMissingImports]
     from mcp.server import Server  # pyright: ignore[reportMissingImports]
 
@@ -147,6 +148,8 @@ def build_server(flow: Flow):
             text, error = flow.call(params.name, dict(params.arguments or {}))
         except Exception as exc:  # report, keep serving
             text, error = f"{params.name} failed: {exc}", True
+        if record:  # calls/<run>.jsonl for the dashboard (_graph_calls.py)
+            record(params.name, dict(params.arguments or {}), text, error)
         content = [types.TextContent(type="text", text=text)]
         return types.CallToolResult(content=content, isError=error)
 
@@ -167,7 +170,8 @@ def main(graph_path: Path, root: Path) -> int:
     flow = Flow(graph_path, root, _load_graph, scorer(_score_nodes, _query_terms))
     if graph_path.exists():
         flow.graph()
-    server = build_server(flow)
+    record = Recorder(root, run_id(), Path(__file__).resolve().parent / "calls")
+    server = build_server(flow, record)
 
     async def run() -> None:
         async with stdio_server() as streams:

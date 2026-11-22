@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { X, Bot, ChevronDown, ChevronRight, Copy, Check, Loader2 } from "lucide-react";
 import { getInvocationDetail } from "../../api";
 import type { AgentInvocationDetail } from "../../types";
+import InvocationGraphNote from "./InvocationGraphNote";
 import CodexUsageNote from "./CodexUsageNote";
 
 function formatDuration(seconds: number | null): string {
@@ -195,6 +196,7 @@ export default function InvocationDetailDrawer({ runId, invocationId, onClose }:
                 )}
                 <CodexUsageNote metadata={detail.metadata_} />
               </div>
+              <InvocationGraphNote metadata={detail.metadata_} />
 
               {/* Session ID */}
               {detail.session_id && (

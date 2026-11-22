@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Bot, Link, Eye, X } from "lucide-react";
 import { getRunInvocations } from "../../api";
 import type { AgentInvocation } from "../../types";
 import InvocationDetailDrawer from "./InvocationDetailDrawer";
+import InvocationGraphNote from "./InvocationGraphNote";
 import CodexUsageNote from "./CodexUsageNote";
 import { codexUsage, formatCredits, totalCodexCredits } from "../../utils/codexUsage";
 
@@ -175,6 +176,8 @@ function InvocationRow({
               <span>Started: {new Date(inv.started_at).toLocaleTimeString()}</span>
             )}
           </div>
+
+          <InvocationGraphNote metadata={inv.metadata_} />
 
           {/* Session info */}
           {sessionId && (

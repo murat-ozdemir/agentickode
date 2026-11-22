@@ -33,6 +33,10 @@ vi.mock("../api", () => ({
     last_sync_at: null, sync_error: null, alert: null,
   }),
   getAgentQuotas: vi.fn().mockResolvedValue({ accounts: [], last_sync_at: null, errors: [] }),
+  getGraphUsage: vi.fn().mockResolvedValue({
+    range: "7d", total_runs: 0, since: "2026-11-16", agents: {}, days: [], workers: [],
+    totals: { runs: 0, calls: 0, saved_tokens: 0, saved_usd: 0, returned_chars: 0, full_chars: 0, saved_pct: null },
+  }),
   getRunDistribution: vi.fn().mockResolvedValue({
     range: "all", total: 1, since: "2026-11-11",
     days: [{ date: "2026-11-11", total: 1, by: { agent: { codex: 1 } } }],
@@ -73,10 +77,13 @@ describe("Dashboard", () => {
     expect(screen.getByPlaceholderText("Search runs...")).toBeInTheDocument();
   });
 
-  it("places the subscription limits panel right above Task Distribution", async () => {
+  it("places the subscription limits and Code graph row right above Task Distribution", async () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     const dist = await screen.findByTestId("task-distribution");
-    expect(dist.previousElementSibling).toBe(screen.getByTestId("agent-quota-strip"));
+    const row = screen.getByTestId("quota-row");
+    expect(dist.previousElementSibling).toBe(row);
+    expect(within(row).getByTestId("agent-quota-strip")).toBeInTheDocument();
+    expect(within(row).getByTestId("code-graph-card")).toBeInTheDocument();
   });
 
   it("filters runs by a Task Distribution row and clears it", async () => {

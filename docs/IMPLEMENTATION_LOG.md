@@ -4,6 +4,21 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-22 — bimetri: Code graph usage and savings card (fork)
+
+**Tests**: new graph tests (unit + integration) and 333 frontend passing; ruff, pyright, eslint, tsc clean. Full backend suite not run here (no Docker; network-bound tests stall)
+
+- `scripts/bimetri/_graph_calls.py`, `_graph_flow_server.py`, `agent-graph-mcp.sh` — graph MCP
+  server logs each tool call to `calls/<run>.jsonl`; run id from `BIMETRI_RUN_ID` or an
+  ancestor's `/proc/PID/environ` (Codex)
+- `backend/worker/flow/_bimetri_graph_calls.py`, `executor.py` — exports the run id, collects the
+  log after each agent call into `agent_invocations.metadata_.graph` (failed calls too)
+- `backend/api/bimetri_graph_usage.py` (+ service, repository) — `GET /api/bimetri/analytics/graph`
+- `frontend/src/components/graph/*` — Code graph card beside Subscription limits (stacked from 3
+  accounts); `InvocationGraphNote.tsx` on Run detail
+- `tests/integration/test_bimetri_agent_quotas_api.py` — reset time now relative (the fixed
+  2026-11-22T10:00 had passed)
+
 ## 2026-11-22 — bimetri: paging on Memory → Proposals (fork)
 
 **Tests**: 14 memory frontend tests passing; eslint, tsc clean
