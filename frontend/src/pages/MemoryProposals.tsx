@@ -68,15 +68,24 @@ export default function MemoryProposals() {
     setOffset(0);
   };
 
-  const approve = async (p: MemoryProposal, kind: MemoryProposalKind, text: string) => {
+  const approve = async (
+    p: MemoryProposal,
+    kind: MemoryProposalKind,
+    text: string,
+    replaces: string | null,
+  ) => {
     try {
-      if (kind !== p.kind || text !== p.text) await updateMemoryProposal(p.id, { kind, text });
+      const replacesChanged = replaces !== (p.replaces_mem0_id ?? null);
+      if (kind !== p.kind || text !== p.text || replacesChanged) {
+        await updateMemoryProposal(p.id, {
+          kind,
+          text,
+          ...(replacesChanged ? { replaces_mem0_id: replaces } : {}),
+        });
+      }
       await approveMemoryProposal(p.id);
-      toast.success(
-        p.pr_number !== null
-          ? `Saved to project memory (PR #${p.pr_number})`
-          : "Saved to project memory",
-      );
+      const saved = replaces ? "Updated a project memory record" : "Saved to project memory";
+      toast.success(p.pr_number !== null ? `${saved} (PR #${p.pr_number})` : saved);
       setItems((all) => all.filter((x) => x.id !== p.id));
       notifyMemoryProposalsChanged();
     } catch (e) {

@@ -9,7 +9,7 @@ decisions (source "merge"); agents propose them during a run through the memory 
 (source "agent"). They wait here until someone approves (written to mem0) or rejects them.
 """
 
-from sqlalchemy import Column, DateTime, Index, Integer, Text, func
+from sqlalchemy import JSON, Column, DateTime, Index, Integer, Text, func
 
 from backend.models.base import Base
 
@@ -34,5 +34,8 @@ class MemoryProposal(Base):
     mem0_id = Column(Text, nullable=True)  # set on approval
     source = Column(Text, nullable=False, default="merge", server_default="merge")
     run_id = Column(Integer, nullable=True)  # the proposing run, for "agent"
+    # Records already in mem0 that say nearly the same: [{id, text, kind, similarity}]
+    similar = Column(JSON, nullable=True)
+    replaces_mem0_id = Column(Text, nullable=True)  # approval updates this record instead of adding
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     decided_at = Column(DateTime(timezone=True), nullable=True)

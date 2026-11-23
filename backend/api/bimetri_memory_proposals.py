@@ -4,8 +4,8 @@
 
 """bimetri patch: review the memory proposals made on PR merges or by agents.
 
-Approving writes the (possibly edited) text to mem0 under the project's user_id; rejecting
-only marks the row. Decided proposals are kept so the LLM does not propose them again.
+Approving writes the (possibly edited) text to mem0 under the project's user_id, or rewrites
+the record in ``replaces_mem0_id`` when the proposal updates one; rejecting only marks the row. Decided proposals are kept so the LLM does not propose them again.
 """
 
 import logging
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.models import MemoryProposal
 from backend.repositories.memory_proposal_repo import MemoryProposalRepository
-from backend.services.bimetri_mem0 import add_memory, mem0_enabled
+from backend.services.bimetri_mem0 import add_memory, mem0_enabled, update_memory
 from backend.worker.flow._bimetri_proposals import KIND_TO_TUR
 
 logger = logging.getLogger("agentickode.api.bimetri_memory_proposals")
@@ -41,6 +41,8 @@ class MemoryProposalResponse(BaseModel):
     text: str
     status: str
     mem0_id: str | None = None
+    similar: list[dict] | None = None
+    replaces_mem0_id: str | None = None
     created_at: datetime | None = None
     decided_at: datetime | None = None
 
@@ -48,6 +50,8 @@ class MemoryProposalResponse(BaseModel):
 class MemoryProposalUpdate(BaseModel):
     kind: Kind | None = None
     text: str | None = Field(default=None, min_length=1, max_length=2000)
+    # null adds the text as a new record; an id must be one of the proposal's similar records
+    replaces_mem0_id: str | None = None
 
 
 async def _pending(repo: MemoryProposalRepository, proposal_id: int) -> MemoryProposal:
@@ -78,6 +82,11 @@ async def update_proposal(
         proposal.kind = body.kind  # type: ignore[assignment]
     if body.text is not None:
         proposal.text = body.text.strip()  # type: ignore[assignment]
+    if "replaces_mem0_id" in body.model_fields_set:
+        target = body.replaces_mem0_id
+        if target is not None and target not in {r.get("id") for r in proposal.similar or []}:
+            raise HTTPException(status_code=422, detail="Only a similar record can be replaced")
+        proposal.replaces_mem0_id = target  # type: ignore[assignment]
     await db.commit()
     return MemoryProposalResponse.model_validate(proposal)
 
@@ -98,7 +107,11 @@ async def approve_proposal(
     if proposal.pr_number is not None:
         metadata["pr"] = proposal.pr_number
     try:
-        mem0_id = await add_memory(str(proposal.project), str(proposal.text), metadata)
+        if proposal.replaces_mem0_id:
+            mem0_id = str(proposal.replaces_mem0_id)
+            await update_memory(mem0_id, str(proposal.text), metadata)
+        else:
+            mem0_id = await add_memory(str(proposal.project), str(proposal.text), metadata)
     except Exception as e:
         logger.warning("mem0 write failed for proposal %s", proposal_id, exc_info=True)
         raise HTTPException(status_code=502, detail=f"mem0 write failed: {e}") from e

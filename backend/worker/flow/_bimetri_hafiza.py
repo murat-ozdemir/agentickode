@@ -48,7 +48,9 @@ _TOOLS = (
     "- `list_project_memory`: bir türün kayıtlarını yeniden eskiye listele.\n"
     "- `propose_memory`: koddan okunamayan bir karar, tuzak ya da ders öğrendiysen öner. "
     "Öneri insan onayından sonra hafızaya girer. İş özeti, koddan okunabilen bilgi "
-    "ve gizli bilgi önerme.\n"
+    "ve gizli bilgi önerme. Araç `similar` dönerse kayıtları oku: biri zaten söylüyorsa "
+    "vazgeç; eskimiş ya da yanlışsa `replaces` = o kaydın id'siyle güncelleme öner; "
+    "seninki yeni bir bilgiyse `force` = true ile öner.\n"
 )
 _KNOWLEDGE_SEARCH_KINDS = tuple(k for k in KNOWLEDGE_KINDS if k != "proje")
 

@@ -9,6 +9,14 @@ export type MemoryProposalKind = "lesson" | "pitfall" | "decision";
 export type MemoryProposalStatus = "pending" | "approved" | "rejected";
 export type MemoryProposalSource = "merge" | "agent";
 
+// A record already in mem0 that says nearly the same as the proposal (cosine similarity 0-1).
+export interface SimilarMemory {
+  id: string;
+  text: string;
+  kind: string | null;
+  similarity?: number;
+}
+
 export interface MemoryProposal {
   id: number;
   project: string;
@@ -19,6 +27,8 @@ export interface MemoryProposal {
   text: string;
   status: MemoryProposalStatus;
   mem0_id: string | null;
+  similar: SimilarMemory[] | null;
+  replaces_mem0_id: string | null;
   created_at: string | null;
   decided_at: string | null;
 }
@@ -35,7 +45,7 @@ export const getMemoryProposals = (status?: MemoryProposalStatus, project?: stri
 
 export async function updateMemoryProposal(
   id: number,
-  body: { kind?: MemoryProposalKind; text?: string },
+  body: { kind?: MemoryProposalKind; text?: string; replaces_mem0_id?: string | null },
 ): Promise<MemoryProposal> {
   const res = await fetch(`${BASE}${PATH}/${id}`, {
     method: "PATCH",

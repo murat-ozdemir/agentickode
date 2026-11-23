@@ -92,3 +92,42 @@ class TestMemoryProposalsApi:
             assert (await client.post(f"{BASE}/{proposal.id}/approve")).status_code == 502
         resp = await client.get(BASE, params={"status": "pending", "project": "Org/repo"})
         assert len(resp.json()) == 1
+
+
+class TestReplacingProposals:
+    RID = "0b6f1b8e-2f53-4a4e-9c55-0f6f1a2b3c4d"
+
+    @pytest.fixture
+    async def replacing(self, db_session):
+        row = MemoryProposal(
+            project="Org/repo",
+            kind="pitfall",
+            text="Flyway needs baselineOnMigrate",
+            source="agent",
+            similar=[{"id": self.RID, "text": "Flyway needs a baseline", "kind": "tuzak"}],
+            replaces_mem0_id=self.RID,
+        )
+        db_session.add(row)
+        await db_session.commit()
+        return row
+
+    async def test_approve_updates_the_replaced_record(self, client, replacing, mem0_on):
+        update = AsyncMock()
+        with patch.object(api, "update_memory", update):
+            data = (await client.post(f"{BASE}/{replacing.id}/approve")).json()
+        mem0_on.assert_not_awaited()
+        memory_id, text, metadata = update.call_args.args
+        assert (memory_id, text, metadata["tur"]) == (self.RID, replacing.text, "tuzak")
+        assert data["status"] == "approved" and data["mem0_id"] == self.RID
+        assert data["similar"][0]["id"] == self.RID
+
+    async def test_reviewer_can_add_as_new_or_pick_only_a_similar_record(
+        self, client, replacing, mem0_on
+    ):
+        url = f"{BASE}/{replacing.id}"
+        bad = await client.patch(url, json={"replaces_mem0_id": "someone-else"})
+        assert bad.status_code == 422
+        resp = await client.patch(url, json={"replaces_mem0_id": None})
+        assert resp.json()["replaces_mem0_id"] is None
+        assert (await client.patch(url, json={"text": "x"})).json()["replaces_mem0_id"] is None
+        assert (await client.post(f"{url}/approve")).json()["mem0_id"] == "m-1"

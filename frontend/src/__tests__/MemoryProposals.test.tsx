@@ -12,7 +12,13 @@ const proposal = (
   id: number,
   project: string,
   text: string,
-  extra: { pr_number?: number | null; source?: string; run_id?: number | null } = {},
+  extra: {
+    pr_number?: number | null;
+    source?: string;
+    run_id?: number | null;
+    similar?: { id: string; text: string; kind: string; similarity?: number }[];
+    replaces_mem0_id?: string | null;
+  } = {},
 ) => ({
   id,
   project,
@@ -114,6 +120,51 @@ describe("MemoryProposals", () => {
     expect(within(card).queryByText(/PR #/)).not.toBeInTheDocument();
     fireEvent.click(within(card).getByText("Approve"));
     expect(await screen.findByText("Saved to project memory")).toBeInTheDocument();
+  });
+
+  it("shows similar records and lets the reviewer choose what to replace", async () => {
+    const similar = [
+      { id: "m-1", text: "Flyway needs a baseline", kind: "tuzak", similarity: 0.81 },
+      { id: "m-2", text: "Run migrations on boot", kind: "karar", similarity: 0.64 },
+    ];
+    mockGet.mockResolvedValue([
+      proposal(4, "Org/repo", "Flyway needs baselineOnMigrate", {
+        source: "agent",
+        similar,
+        replaces_mem0_id: "m-1",
+      }),
+    ]);
+    renderPage();
+    const card = await screen.findByTestId("proposal-4");
+    const records = within(card).getByTestId("similar-records");
+    expect(within(records).getByText("81%")).toBeInTheDocument();
+    expect(within(records).getByText("Will be replaced")).toBeInTheDocument();
+    expect(within(card).getByText("Approve and replace")).toBeInTheDocument();
+    fireEvent.click(within(records).getByText("Add as new instead"));
+    fireEvent.click(within(card).getByText("Approve"));
+    await waitFor(() => expect(mockApprove).toHaveBeenCalledWith(4));
+    expect(mockUpdate).toHaveBeenCalledWith(4, {
+      kind: "lesson",
+      text: "Flyway needs baselineOnMigrate",
+      replaces_mem0_id: null,
+    });
+  });
+
+  it("approving a replacement says the record was updated", async () => {
+    const similar = [{ id: "m-1", text: "Old rule", kind: "karar", similarity: 0.7 }];
+    mockGet.mockResolvedValue([
+      proposal(5, "Org/repo", "New rule", { pr_number: null, source: "agent", similar }),
+    ]);
+    renderPage();
+    const card = await screen.findByTestId("proposal-5");
+    fireEvent.click(within(card).getByText("Replace this"));
+    fireEvent.click(within(card).getByText("Approve and replace"));
+    expect(await screen.findByText("Updated a project memory record")).toBeInTheDocument();
+    expect(mockUpdate).toHaveBeenCalledWith(5, {
+      kind: "lesson",
+      text: "New rule",
+      replaces_mem0_id: "m-1",
+    });
   });
 
   it("loads another status when its tab is clicked", async () => {

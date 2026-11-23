@@ -14,6 +14,7 @@ from fastmcp.exceptions import ToolError
 
 from backend.api.bimetri_memories import to_record
 from backend.database import async_session
+from backend.mcp._bimetri_memory_similar import find_similar, replaced_record
 from backend.models import MemoryProposal, TaskRun
 from backend.repositories.memory_proposal_repo import MemoryProposalRepository
 from backend.repositories.project_config_repo import ProjectConfigRepository
@@ -49,7 +50,7 @@ async def _readable(project: str) -> None:
 def _records(rows: list[dict], with_score: bool = False) -> list[dict]:
     out = []
     for raw in rows:
-        record = to_record(raw).model_dump(exclude_none=True, exclude={"id"})
+        record = to_record(raw).model_dump(exclude_none=True)
         if with_score and isinstance(raw.get("score"), int | float):
             record["score"] = round(raw["score"], 3)
         out.append(record)
@@ -114,23 +115,34 @@ async def propose_memory(
     text: str,
     run_id: int | None = None,
     pr_number: int | None = None,
+    replaces: str | None = None,
+    force: bool = False,
 ) -> dict:
     """Propose a record for the project memory; a human approves or rejects it.
 
     Only propose what a later task cannot learn from the code: a decision and its reason,
     a pitfall that cost time, a lesson. No task summaries, no secrets.
 
+    The memory is checked first. When records saying nearly the same exist, nothing is queued
+    and they come back with status "similar". Then: drop it if one already says it; propose
+    again with ``replaces`` = that record's id if your text corrects or updates it; propose
+    again with ``force`` = true only if yours is a different fact.
+
     Args:
         project: "<owner>/<repo>" of the repository you are working on.
         kind: "decision", "pitfall" or "lesson".
-        text: One or two self-contained sentences.
+        text: One or two self-contained sentences; with ``replaces``, the full new text.
         run_id: The AgenticKode run id given in your prompt.
         pr_number: Your PR number, if it already exists.
+        replaces: Id of an existing record this proposal updates (approval rewrites it).
+        force: Queue even though similar records exist.
     """
     text = " ".join(text.split())
     if not text or len(text) > MAX_TEXT:
         raise ToolError(f"text must be 1-{MAX_TEXT} characters")
     await _registered(project)
+    if replaces is not None and not mem0_enabled():
+        raise ToolError("project memory (mem0) is not configured")
     async with async_session() as session:
         repo = MemoryProposalRepository(session)
         if run_id is not None:
@@ -141,6 +153,20 @@ async def propose_memory(
                 raise ToolError(f"at most {MAX_PROPOSALS_PER_RUN} proposals per run")
         if text in await repo.pending_texts(project):
             return {"status": "duplicate", "message": "The same proposal is already pending."}
+        target = await replaced_record(project, replaces) if replaces is not None else None
+        similar = await find_similar(project, text) if mem0_enabled() else None
+        others = [r for r in similar or [] if r["id"] != replaces]
+        if others and not force:
+            return {
+                "status": "similar",
+                "records": others,
+                "message": "Nothing queued. Drop it if a record already says this; propose with "
+                "replaces=<id> to update one; propose with force=true if yours is a new fact.",
+            }
+        if target is not None:
+            # keep the similarity score when the search also found the replaced record
+            target = next((r for r in similar or [] if r["id"] == replaces), target)
+            similar = [target, *others]
         row = MemoryProposal(
             project=project,
             kind=kind,
@@ -148,6 +174,8 @@ async def propose_memory(
             source="agent",
             run_id=run_id,
             pr_number=pr_number,
+            similar=similar or None,
+            replaces_mem0_id=replaces,
         )
         await repo.add_all([row])
         await session.commit()

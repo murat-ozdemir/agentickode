@@ -6,10 +6,16 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Loader2, X } from "lucide-react";
 import type { MemoryProposal, MemoryProposalKind } from "../../api";
+import SimilarRecords from "./SimilarRecords";
 
 interface Props {
   proposal: MemoryProposal;
-  onApprove: (proposal: MemoryProposal, kind: MemoryProposalKind, text: string) => Promise<void>;
+  onApprove: (
+    proposal: MemoryProposal,
+    kind: MemoryProposalKind,
+    text: string,
+    replaces: string | null,
+  ) => Promise<void>;
   onReject: (proposal: MemoryProposal) => Promise<void>;
 }
 
@@ -23,6 +29,7 @@ const KIND_STYLE: Record<MemoryProposalKind, string> = {
 export default function ProposalCard({ proposal, onApprove, onReject }: Props) {
   const [kind, setKind] = useState<MemoryProposalKind>(proposal.kind);
   const [text, setText] = useState(proposal.text);
+  const [replaces, setReplaces] = useState<string | null>(proposal.replaces_mem0_id ?? null);
   const [busy, setBusy] = useState(false);
   const pending = proposal.status === "pending";
 
@@ -80,15 +87,20 @@ export default function ProposalCard({ proposal, onApprove, onReject }: Props) {
       ) : (
         <p className="text-sm text-gray-200 whitespace-pre-wrap">{proposal.text}</p>
       )}
+      <SimilarRecords
+        records={proposal.similar ?? []}
+        replaces={replaces}
+        onReplacesChange={pending ? setReplaces : undefined}
+      />
       {pending && (
         <div className="flex gap-2">
           <button
-            onClick={() => run(() => onApprove(proposal, kind, text.trim()))}
+            onClick={() => run(() => onApprove(proposal, kind, text.trim(), replaces))}
             disabled={busy || !text.trim()}
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-sm disabled:opacity-50"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Approve
+            {replaces ? "Approve and replace" : "Approve"}
           </button>
           <button
             onClick={() => run(() => onReject(proposal))}

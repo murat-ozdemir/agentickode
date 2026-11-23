@@ -49,6 +49,7 @@ class TestReadTools:
         search.assert_awaited_once_with(PROJECT, "uv?", tools.HISTORY_KINDS, tools.MAX_LIMIT)
         assert found == [
             {
+                "id": "Use uv",
                 "text": "Use uv",
                 "kind": "karar",
                 "source": "seed",
@@ -125,6 +126,55 @@ class TestProposeMemory:
             await tools.propose_memory("org/unknown", "lesson", "x")
         async with session_factory() as s:
             assert await MemoryProposalRepository(s).list_proposals() == []
+
+
+RID = "0b6f1b8e-2f53-4a4e-9c55-0f6f1a2b3c4d"
+HIT = {"id": RID, "text": "Flyway needs a baseline", "kind": "tuzak", "similarity": 0.81}
+
+
+class TestProposeChecksMemory:
+    """With mem0 on, a proposal is compared with the records already in memory."""
+
+    async def _saved(self, factory):
+        async with factory() as s:
+            return await MemoryProposalRepository(s).list_proposals(project=PROJECT)
+
+    async def test_similar_records_come_back_and_nothing_is_queued(self, session_factory, mem0_on):
+        with patch.object(tools, "find_similar", AsyncMock(return_value=[HIT])):
+            result = await tools.propose_memory(PROJECT, "pitfall", "Flyway wants a baseline.")
+        assert result["status"] == "similar" and result["records"] == [HIT]
+        assert await self._saved(session_factory) == []
+
+    async def test_force_queues_with_the_similar_records(self, session_factory, mem0_on):
+        with patch.object(tools, "find_similar", AsyncMock(return_value=[HIT])):
+            result = await tools.propose_memory(PROJECT, "lesson", "Other fact.", force=True)
+        [row] = await self._saved(session_factory)
+        assert result["status"] == "pending"
+        assert row.similar == [HIT] and row.replaces_mem0_id is None
+
+    async def test_replaces_queues_an_update_of_that_record(self, session_factory, mem0_on):
+        target = {"id": RID, "text": "Flyway needs a baseline", "kind": "tuzak"}
+        with (
+            patch.object(tools, "find_similar", AsyncMock(return_value=[HIT])),
+            patch.object(tools, "replaced_record", AsyncMock(return_value=target)) as check,
+        ):
+            result = await tools.propose_memory(
+                PROJECT, "pitfall", "Flyway needs baselineOnMigrate.", replaces=RID
+            )
+        check.assert_awaited_once_with(PROJECT, RID)
+        [row] = await self._saved(session_factory)
+        assert result["status"] == "pending"
+        assert row.replaces_mem0_id == RID and row.similar == [HIT]
+
+    async def test_unreachable_memory_does_not_block(self, session_factory, mem0_on):
+        with patch.object(tools, "find_similar", AsyncMock(return_value=None)):
+            result = await tools.propose_memory(PROJECT, "lesson", "A lesson.")
+        [row] = await self._saved(session_factory)
+        assert result["status"] == "pending" and row.similar is None
+
+    async def test_replaces_needs_mem0(self, session_factory):
+        with pytest.raises(ToolError, match="not configured"):
+            await tools.propose_memory(PROJECT, "lesson", "x", replaces=RID)
 
 
 class TestServer:

@@ -47,6 +47,7 @@ Quick reference for all project documentation. Claude reads this first to find r
 | [bimetri: request effort in Gitea's time tracker](implementations/2026-11-21-bimetri-time-tracking.md) | 2026-11-21 | `_bimetri_time_tracking` (idempotent `add_time`, agent + CI), `_bimetri_human_time` (estimate at merge), hooks in `execute_pipeline`, `/webhooks/gitea-ci`, `_bimetri_pr_merged` |
 | [bimetri: agent subscription limits](implementations/2026-11-22-bimetri-agent-subscription-limits.md) | 2026-11-22 | Worker probe over stdin (no tokens leave), Claude OAuth usage + Codex app-server adapters, account ↔ worker mapping, 10-min poll; migration 048 |
 | [bimetri: Code graph usage card](implementations/2026-11-22-bimetri-graph-usage-card.md) | 2026-11-22 | Graph MCP server logs calls per run (`BIMETRI_RUN_ID`, ancestor `/proc` for Codex), executor collects into `metadata_.graph`, `/api/bimetri/analytics/graph` |
+| [bimetri: similar-record check for memory proposals](implementations/2026-11-23-bimetri-memory-similar.md) | 2026-11-23 | `propose_memory` returns `similar` (semantic ≥ 0.60) unless `force`; `replaces` updates a record in place on approval; Memory page shows similar records; migration 051 |
 | [Flow prompts — live validation + fixes](implementations/2026-06-09-flow-prompts-validation.md) | 2026-06-09 | Live PR-review run validated the flow engine; fixed CI-endpoint flow binding + executor server resolution; local non-root agent-user caveat |
 
 ## Decisions
