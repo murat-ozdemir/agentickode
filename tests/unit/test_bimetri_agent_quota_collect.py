@@ -17,7 +17,8 @@ from backend.services.bimetri_agent_quota.probe import ProbeResult, probe_server
 
 
 def _codex(account_id, used=10, error=None):
-    limits = {"primary": {"usedPercent": used, "windowDurationMins": 300, "resetsAt": 1795300374}}
+    resets_at = int(datetime.now(UTC).timestamp()) + 3600  # always in the future
+    limits = {"primary": {"usedPercent": used, "windowDurationMins": 300, "resetsAt": resets_at}}
     section = {"account": {"type": "chatgpt", "email": f"{account_id}@example.com"}}
     section["account_id"] = account_id
     if error:
