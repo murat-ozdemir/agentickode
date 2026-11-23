@@ -93,3 +93,39 @@ class TestPrompt:
 
         assert "## Zincir defteri (PR #5" in text
         assert "- **Yanıt:** mozdemir: 409 dön" in text
+        assert "Zincir son koşuda durdu" not in text
+
+    async def test_last_run_stopped_asks_the_next_agent_to_weigh_the_reason(
+        self, db_session, make_task_run
+    ):
+        failed = _run(
+            make_task_run,
+            id=316,
+            task_source_meta={"review_mode": "fix", "pr_number": 5},
+            status="failed",
+            error_message="Duzeltme test dosyalarina dokundu (a/src/test/XTest.java)",
+        )
+        await record_run(db_session, failed)
+        await record_ci(db_session, "proj-1", 5, "abcdef1234", True)  # a CI record after it
+
+        text = await notebook_prompt(db_session, make_task_run(task_source_meta={"pr_number": 5}))
+
+        assert "## Zincir son koşuda durdu (#316)" in text
+        assert "Neden: Duzeltme test dosyalarina dokundu (a/src/test/XTest.java)" in text
+
+    async def test_no_stop_section_once_a_later_run_finished(self, db_session, make_task_run):
+        failed = _run(
+            make_task_run, id=316, pr_url="http://g/o/r/pulls/5", status="failed", error_message="x"
+        )
+        await record_run(db_session, failed)
+        done = _run(
+            make_task_run,
+            id=317,
+            pr_url="http://g/o/r/pulls/5",
+            review_result={"summary": "**Sonuç:** Birleştirilebilir"},
+        )
+        await record_run(db_session, done)
+
+        text = await notebook_prompt(db_session, make_task_run(task_source_meta={"pr_number": 5}))
+
+        assert "Zincir son koşuda durdu" not in text

@@ -29,6 +29,7 @@ logger = logging.getLogger("agentickode.phases.bimetri_notebook")
 
 QUESTION_CHARS = 800
 _RESULT_RX = re.compile(r"\*\*Sonuç:\*\*\s*(.+)")
+_STOPPED_RX = re.compile(r"^[^:\n]+: durdu: (.+)", re.S)  # record of a failed run (_outcome)
 
 
 def run_pr_number(run: TaskRun) -> int | None:
@@ -125,5 +126,28 @@ async def notebook_prompt(session: AsyncSession, run: TaskRun) -> str:
     if row is None or not row.entries:
         return NOTEBOOK_RULES
     return (
-        NOTEBOOK_RULES + f"\n## Zincir defteri (PR #{n}; eskiden yeniye)\n\n" + render(row.entries)
+        NOTEBOOK_RULES
+        + f"\n## Zincir defteri (PR #{n}; eskiden yeniye)\n\n"
+        + render(row.entries)
+        + stop_section(row.entries)
+    )
+
+
+def stop_section(entries: list[dict]) -> str:
+    """The chain stopped at its last run and a human restarted it: the next agent weighs why.
+
+    One rule for every stop reason (test files touched, scope, no change, ...), so a new
+    guard needs no new prompt text.
+    """
+    last = next((e for e in reversed(entries) if e.get("kind") == "run"), None)
+    m = _STOPPED_RX.match((last or {}).get("text") or "")
+    if not m:
+        return ""
+    return (
+        f"\n\n## Zincir son koşuda durdu (#{last.get('run_id')})\n"
+        f"Neden: {m.group(1).strip()}\n"
+        "- Zincir bu nedenle durdu ve insan yeniden başlattı. Bu nedeni kendi rolün içinde "
+        "değerlendir (gerekirse ilgili commit'i `git log`/`git show` ile incele); raporunda "
+        "tek satırla sonucunu yaz: sorun yoksa nedenini, varsa bulgusunu.\n"
+        "- Neden altyapıdansa (limit, kimlik doğrulama, ağ, zaman aşımı) bunu atla.\n"
     )
