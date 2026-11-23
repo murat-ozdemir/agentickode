@@ -54,6 +54,7 @@ class TestParseJsonl:
         assert usage["output_tokens"] == 4_000
         assert usage["cost_usd"] is None
         assert usage["billing"] == "chatgpt"
+        assert usage["turns"] == 2  # one command plus the final answer
 
     def test_plain_text_is_not_codex_jsonl(self):
         assert parse_jsonl("just the final message\n") is None

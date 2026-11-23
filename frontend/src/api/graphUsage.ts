@@ -20,6 +20,19 @@ export interface GraphWorker extends GraphSums {
   name: string;
 }
 
+/** Graph calls' tokens (in + out) against the median of the same task, else repo, before the
+ * graph; saved_pct is signed (negative: the graph calls cost more). */
+export interface RunTokens {
+  graph_calls: number;
+  compared: number;
+  same_task: number;
+  same_repo: number;
+  actual_tokens: number;
+  baseline_tokens: number;
+  saved_pct: number | null;
+  turns_per_call: number | null;
+}
+
 export interface GraphUsage {
   range: DistributionRange;
   total_runs: number;
@@ -28,6 +41,7 @@ export interface GraphUsage {
   agents: Record<string, number>;
   days: { date: string; saved_tokens: number }[];
   workers: GraphWorker[];
+  run_tokens: RunTokens;
 }
 
 /** The graph block of one agent call (agent_invocations.metadata_.graph). */

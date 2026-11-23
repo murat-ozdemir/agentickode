@@ -24,6 +24,7 @@ saving. Savings are estimates.
 | `backend/worker/flow/_bimetri_graph_calls.py` | `run_env`, `collect` (cat + rm over SSH), `summarize` |
 | `backend/worker/flow/executor.py` | Exports `BIMETRI_RUN_ID`, stores `metadata_.graph` on success and failure |
 | `backend/services/bimetri_graph_usage.py`, `backend/repositories/graph_usage_repo.py`, `backend/api/bimetri_graph_usage.py` | Totals, per-day, per-worker; `GET /api/bimetri/analytics/graph?range=` |
+| `backend/services/bimetri_run_tokens.py` | Graph calls' tokens against the pre-graph baseline (`run_tokens`) |
 | `frontend/src/components/graph/*`, `frontend/src/api/graphUsage.ts` | Card, chart, worker table, formats |
 | `frontend/src/components/shared/AgentQuotaStrip.tsx` | `aside` prop: side by side up to 2 accounts, stacked from 3 |
 | `frontend/src/components/runs/InvocationGraphNote.tsx` | Graph line on the invocation row and drawer |
@@ -36,11 +37,18 @@ saving. Savings are estimates.
 3. After the agent call → `collect` reads and removes the file (`/home/*/…` and `~/…`),
    `summarize` → `{calls, tools, errors, over_budget, files, returned_chars, full_chars, saved_tokens}`.
 4. API sums the blocks of the range's runs; saved share = 1 - returned / full characters.
+5. `run_tokens` (2026-11-23): every agent call's tokens (in + out). Each graph call in the range
+   is matched with the median of calls before the first graph call — same task (all
+   `pr-comment-<PR>-*` runs are one task), agent family and phase; else same repo, agent and phase
+   with at least 3 calls; else left out. The tile shows the signed change (− = fewer tokens),
+   actual vs baseline, calls compared and turns per call (Claude `num_turns`; Codex tool items + 1).
 
 ## Notes
 
 - Workers need `scripts/bimetri/agent-graph-mcp.sh install <hosts>` to get the recorder; until
   then runs carry no graph block and the card shows zeros.
 - A file pointed at by several calls counts once per agent call, at its largest size.
+- Saved share covers file reads only; the quota goes on turns × context, which `run_tokens` shows.
+  Calls before this change carry no turns, so turns per call fills in with new runs.
 - Dollar figure uses the input rate in `MODEL_COST_RATES` (Codex runs on a subscription, so it is
   what the tokens would cost at API prices).

@@ -4,13 +4,14 @@
 
 """bimetri patch (D2 measurement): reads the rows behind the Code graph card."""
 
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import AgentInvocation, TaskRun, WorkspaceServer
 from backend.services.bimetri_graph_usage import GraphRow
+from backend.services.bimetri_run_tokens import TokenRow
 
 
 class GraphUsageRepository:
@@ -39,3 +40,38 @@ class GraphUsageRepository:
             graph = (meta or {}).get("graph")
             rows[run_id].calls.append((agent, graph if isinstance(graph, dict) else None))
         return list(rows.values())
+
+    async def list_token_rows(self) -> list[TokenRow]:
+        """Every agent call with known tokens: the graph calls and their pre-graph baseline."""
+        result = await self._session.execute(
+            select(
+                AgentInvocation.started_at,
+                TaskRun.repo_name,
+                TaskRun.task_id,
+                AgentInvocation.agent_name,
+                AgentInvocation.phase_name,
+                AgentInvocation.estimated_tokens_in,
+                AgentInvocation.estimated_tokens_out,
+                AgentInvocation.metadata_,
+            )
+            .join(TaskRun, TaskRun.id == AgentInvocation.run_id)
+            .where(AgentInvocation.estimated_tokens_in.is_not(None))
+        )
+        out = []
+        for started, repo, task, agent, phase, tin, tout, meta in result.all():
+            meta = meta or {}
+            turns = meta.get("turns")
+            out.append(
+                TokenRow(
+                    # SQLite gives naive datetimes; they are UTC like PostgreSQL's
+                    started_at=started if started.tzinfo else started.replace(tzinfo=UTC),
+                    repo=repo or "",
+                    task_id=task or "",
+                    agent=agent,
+                    phase=phase or "",
+                    tokens=int(tin or 0) + int(tout or 0),
+                    turns=turns if isinstance(turns, int) else None,
+                    graph=isinstance(meta.get("graph"), dict),
+                )
+            )
+        return out

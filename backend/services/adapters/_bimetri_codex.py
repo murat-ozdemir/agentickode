@@ -24,6 +24,7 @@ DEFAULT_CREDIT_RATES = (
     "gpt-6.1-terra=25/1.25/125,gpt-6-luna=2.5/0.25/12.5"
 )
 _TOKEN_KEYS = ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens")
+_NOT_TOOL_ITEMS = ("agent_message", "reasoning", "todo_list", "error")
 _CODEX_EVENTS = {
     "thread.started",
     "turn.started",
@@ -71,15 +72,18 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     """(last agent message, usage) from ``codex exec --json``; None if stdout is not its JSONL.
 
     ``cached_input_tokens`` is part of ``input_tokens``. Usage is summed over
-    ``turn.completed`` events (``codex exec`` runs a single turn). When the turn failed, the
-    message is the failure text instead, so the run-stopped comment shows the real reason.
+    ``turn.completed`` events (``codex exec`` runs a single turn). ``turns`` counts the model's
+    steps as Claude's ``num_turns`` does: one per tool item (command, file change, MCP call, ...)
+    plus the final answer. When the turn failed, the message is the failure text instead, so
+    the run-stopped comment shows the real reason.
     """
     events = _events(stdout)
     if not any(e["type"] in _CODEX_EVENTS for e in events):
         return None
     message: str | None = None
-    totals = dict.fromkeys(_TOKEN_KEYS, 0)
+    totals: dict[str, int] = dict.fromkeys(_TOKEN_KEYS, 0)
     has_usage = False
+    tool_items = 0
     for event in events:
         item = event.get("item")
         if (
@@ -89,6 +93,8 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
             and isinstance(item.get("text"), str)
         ):
             message = item["text"]
+        elif event["type"] == "item.completed" and isinstance(item, dict):
+            tool_items += item.get("type") not in _NOT_TOOL_ITEMS
         usage = event.get("usage")
         if event["type"] == "turn.completed" and isinstance(usage, dict):
             has_usage = True
@@ -97,6 +103,7 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     result: dict[str, Any] = {"cost_usd": None, "billing": "chatgpt"}
     if has_usage:
         result.update(totals)
+        result["turns"] = tool_items + 1
     return _failure(events) or message, result
 
 

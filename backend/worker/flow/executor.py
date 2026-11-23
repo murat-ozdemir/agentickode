@@ -54,6 +54,9 @@ logger = logging.getLogger("agentickode.flow.executor")
 
 _USAGE_EXTRAS = (
     "cached_input_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "turns",
     "reasoning_output_tokens",
     "codex_credits",
     "billing",
@@ -96,7 +99,7 @@ def _bimetri_cagri_kaydi(run, session, agent, phase, t0, result, exc) -> None:
                     "bimetri": True,
                     # bimetri patch: code graph calls and estimated savings (_bimetri_graph_calls)
                     **({"graph": result["graph"]} if result.get("graph") else {}),
-                    # bimetri patch: Codex token breakdown and ChatGPT credits
+                    # bimetri patch: token breakdown (cache, turns), Codex ChatGPT credits
                     **{k: usage[k] for k in _USAGE_EXTRAS if usage.get(k) is not None},
                 },
             )

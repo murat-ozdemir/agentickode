@@ -27,6 +27,10 @@ const DATA: GraphUsage = {
     { name: "worker-1", ...sums(28, 214, 1_250_000, 93) },
     { name: "worker-2", ...sums(13, 98, 590_000, 90) },
   ],
+  run_tokens: {
+    graph_calls: 20, compared: 12, same_task: 9, same_repo: 3,
+    actual_tokens: 9_000_000, baseline_tokens: 15_000_000, saved_pct: 40, turns_per_call: 31.5,
+  },
 };
 
 describe("CodeGraphCard", () => {
@@ -44,6 +48,8 @@ describe("CodeGraphCard", () => {
     expect(tiles).toHaveTextContent("1.84M");
     expect(tiles).toHaveTextContent("≈ $5.10 at input price");
     expect(tiles).toHaveTextContent("sent 21k of 214k chars");
+    expect(tiles).toHaveTextContent("−40%");
+    expect(tiles).toHaveTextContent("9.00M vs 15.0M · 12/20 calls · 31.5 turns/call");
     const rows = within(screen.getByTestId("graph-workers")).getAllByRole("row");
     expect(rows.map((r) => r.textContent)).toEqual([
       "WorkerRunsCallsSaved%",
@@ -51,6 +57,13 @@ describe("CodeGraphCard", () => {
       "worker-21398590k90%",
       "Total413121.84M91%",
     ]);
+  });
+
+  it("shows a signed increase when graph calls cost more than before", async () => {
+    const run_tokens = { ...DATA.run_tokens, saved_pct: -25 };
+    vi.mocked(getGraphUsage).mockResolvedValue({ ...DATA, run_tokens });
+    render(<CodeGraphCard />);
+    expect(await screen.findByTestId("graph-tiles")).toHaveTextContent("+25%");
   });
 
   it("reloads for another range", async () => {

@@ -4,6 +4,20 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-23 — bimetri: call tokens against the pre-graph baseline (fork)
+
+**Tests**: graph/Codex unit + integration (32) and CodeGraphCard/Dashboard frontend (11) passing;
+ruff, pyright, eslint, tsc clean on the edited files. Full suites not run
+
+- `backend/services/adapters/cli_adapter.py`, `_bimetri_codex.py`, `backend/worker/flow/executor.py`
+  — invocation metadata keeps Claude's cache_creation/cache_read tokens and `num_turns`, and
+  Codex's turns (tool items + final answer)
+- `backend/services/bimetri_run_tokens.py` (+ `graph_usage_repo.list_token_rows`) — each graph
+  call against the median of calls before the first graph call: same task, agent family and phase,
+  else same repo (≥ 3 samples); signed `saved_pct`, turns per call
+- `backend/api/bimetri_graph_usage.py` — `run_tokens` in `GET /api/bimetri/analytics/graph`
+- `frontend/src/components/graph/CodeGraphCard.tsx` — "Call tokens vs before" tile
+
 ## 2026-11-22 — bimetri: Code graph usage and savings card (fork)
 
 **Tests**: new graph tests (unit + integration) and 333 frontend passing; ruff, pyright, eslint, tsc clean. Full backend suite not run here (no Docker; network-bound tests stall)

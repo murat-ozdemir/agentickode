@@ -4,6 +4,8 @@
 
 """bimetri patch (D2 measurement): Code graph card endpoint."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from backend.models import AgentInvocation, WorkspaceServer
@@ -51,3 +53,34 @@ class TestGraphUsageApi:
     async def test_rejects_unknown_range(self, client):
         resp = await client.get("/api/bimetri/analytics/graph", params={"range": "1y"})
         assert resp.status_code == 422
+
+    async def test_graph_calls_are_compared_with_the_same_task_before_the_graph(
+        self, client, db_session, make_task_run
+    ):
+        run = make_task_run(task_id="pr-test-9")
+        db_session.add(run)
+        await db_session.flush()
+        now = datetime.now(UTC)
+        common = {"run_id": run.id, "agent_name": "codex", "phase_name": "implement"}
+        db_session.add_all(
+            [
+                AgentInvocation(
+                    **common,
+                    started_at=now - timedelta(hours=2),
+                    estimated_tokens_in=3_900,
+                    estimated_tokens_out=100,
+                ),
+                AgentInvocation(
+                    **common,
+                    started_at=now - timedelta(hours=1),
+                    estimated_tokens_in=990,
+                    estimated_tokens_out=10,
+                    metadata_={"graph": GRAPH, "turns": 7},
+                ),
+            ]
+        )
+        await db_session.commit()
+        body = (await client.get("/api/bimetri/analytics/graph")).json()["run_tokens"]
+        assert body["compared"] == 1 and body["same_task"] == 1
+        assert body["baseline_tokens"] == 4_000 and body["actual_tokens"] == 1_000
+        assert body["saved_pct"] == 75 and body["turns_per_call"] == 7

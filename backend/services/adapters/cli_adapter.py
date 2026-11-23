@@ -139,6 +139,10 @@ class CLIAdapter:
             or None,
             "output_tokens": _u.get("output_tokens"),
             "cost_usd": data.get("total_cost_usd"),
+            # bimetri patch (D2 measurement): cache split and turns, for the run-token baseline
+            "cache_creation_input_tokens": _u.get("cache_creation_input_tokens"),
+            "cache_read_input_tokens": _u.get("cache_read_input_tokens"),
+            "turns": data.get("num_turns"),
         }
         # Extract token usage if present
         tokens_in = data.get("input_tokens", _u.get("input_tokens"))
