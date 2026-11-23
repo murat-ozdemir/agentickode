@@ -17,7 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE bimetri_memory_proposals ADD COLUMN IF NOT EXISTS similar JSON")
+    op.execute('ALTER TABLE bimetri_memory_proposals ADD COLUMN IF NOT EXISTS "similar" JSON')
     op.execute(
         "ALTER TABLE bimetri_memory_proposals ADD COLUMN IF NOT EXISTS replaces_mem0_id TEXT"
     )
@@ -25,4 +25,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("ALTER TABLE bimetri_memory_proposals DROP COLUMN IF EXISTS replaces_mem0_id")
-    op.execute("ALTER TABLE bimetri_memory_proposals DROP COLUMN IF EXISTS similar")
+    op.execute('ALTER TABLE bimetri_memory_proposals DROP COLUMN IF EXISTS "similar"')
