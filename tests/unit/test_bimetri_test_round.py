@@ -11,7 +11,7 @@ import pytest
 import backend.services.git as git_pkg
 from backend.worker.phases import _bimetri_test_round as tr
 from backend.worker.phases import _helpers, finalization
-from backend.worker.phases._bimetri_oto import oto_tur_sayisi
+from backend.worker.phases._bimetri_oto import OTO_YORUM, oto_tur_sayisi
 from tests.unit.bimetri_sahte import SahteGitea
 
 # The PR 118 review: both findings point at test files
@@ -116,3 +116,38 @@ async def test_the_test_round_puts_ai_test_and_clears_old_test_labels(monkeypatc
     monkeypatch.setattr(finalization, "get_project_token", token)
     await finalization._bimetri_test_turu_etiketi(_run(), 10, None)
     assert gp.etiket[10] == ["ai-test"]
+
+
+# PR 119: review #301 found a bug, fix #302 pushed, test #303 wrote no test for it
+REVIEW_FIX = OTO_YORUM.format(neden="İnceleme değişiklik istedi; aşağıdaki bulguları düzelt.") + (
+    "## AI Kod İncelemesi\n\nTaşma var.\n\n### Bulgular\n\n"
+    "- **Orta** — [Policy.java:53](/w/src/main/java/Policy.java:53): Çarpma taşıyor.\n\n"
+    "### Öneriler\n\n- Taşan parametreyi geçersiz say.\n\n**Sonuç:** Değişiklik gerekli"
+)
+PUSHED = "## Düzeltme push edildi (1 commit)\n\nTaşma giderildi."
+
+
+def test_after_a_pushed_fix_the_test_run_gets_the_findings_as_regression_tests():
+    kind, text = tr.pick_request(["## AI Test Raporu\neski", REVIEW_FIX, "▶️ Koşu", PUSHED])
+    assert kind == "regression"
+    assert "Çarpma taşıyor." in text and "Taşan parametreyi" not in text
+
+
+def test_a_fix_that_pushed_nothing_asks_for_no_regression_test():
+    assert tr.pick_request([REVIEW_FIX]) is None
+
+
+def test_a_fix_round_without_review_findings_asks_for_no_regression_test():
+    ci_fix = OTO_YORUM.format(neden="CI kaldı.") + "```\nBUILD FAILURE\n```"
+    assert tr.pick_request([ci_fix, PUSHED]) is None
+
+
+def test_the_test_report_after_the_fix_closes_the_regression_request():
+    assert tr.pick_request([REVIEW_FIX, PUSHED, "## AI Test Raporu\nyeni"]) is None
+
+
+async def test_the_regression_section_lifts_the_criteria_only_rule(gitea):
+    gitea.yorum[10] = [REVIEW_FIX, PUSHED]
+    section = await tr.test_request_section(_run(), None)
+    assert "regresyon testi" in section and "Çarpma taşıyor." in section
+    assert "kriterlerin dışında test yazma" in section
