@@ -50,6 +50,7 @@ from backend.worker.flow.data_sources import fetch_flow_data
 from backend.worker.phases._bimetri_hata import cli_hata_nedeni, hata_bildir
 from backend.worker.phases._bimetri_notebook_record import notebook_prompt, record_run
 from backend.worker.phases._bimetri_oto import bekletildi_mi
+from backend.worker.phases._bimetri_start_note import announce_start
 from backend.worker.phases._helpers import (
     close_run_session,
     ensure_agent_ready,
@@ -367,6 +368,10 @@ async def execute_flow_prompt(
             f"Ajan: {getattr(resolved.adapter, 'agent_name', agent_name)}, difficulty: {tier.lower()}, "
             f"model: {model or 'ajanin varsayilani'}, effort: {effort or 'modelin varsayilani'}",
             phase="agent",
+        )
+        # bimetri patch: which run started, why and on which agent, on the PR (or issue)
+        await announce_start(
+            run, session, getattr(resolved.adapter, "agent_name", agent_name), model, effort
         )
 
         async def _agent_log(msg: str, level: str = "info") -> None:

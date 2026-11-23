@@ -49,6 +49,8 @@ async def gitea_pr_comment_webhook(
     from backend.config import settings
     from backend.models import TaskRun
     from backend.worker.phases._bimetri_notebook_record import record_answer
+    from backend.worker.phases._bimetri_oto import OTO_ISARET
+    from backend.worker.phases._bimetri_start_note import auto_reason
 
     body = await read_verified_body(request, settings.gitea_webhook_secret, "X-Gitea-Signature")
     action = body.get("action", "")
@@ -175,6 +177,10 @@ async def gitea_pr_comment_webhook(
             "comment_id": comment.get("id"),
             "trigger": "pr_comment",
             "labels": labels,
+            # bimetri patch: the run's start note on the PR (_bimetri_start_note)
+            "auto_round": OTO_ISARET in comment_body,
+            "start_reason": auto_reason(comment_body)
+            or (f"{login}: `devam`" if komut == "devam" else f"{login} yorumu"),
         },
     )
     db.add(run)

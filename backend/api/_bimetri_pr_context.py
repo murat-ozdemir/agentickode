@@ -18,6 +18,7 @@ from typing import Any
 logger = logging.getLogger("agentickode.webhooks.pr_context")
 
 ENTRY_CHARS = 12000
+START_MARKER = "<!-- agentickode-start -->"  # _bimetri_start_note.START_MARKER
 AUTO_MARKER = "<!-- agentickode-oto -->"  # _bimetri_oto.OTO_ISARET: the report is in the trigger
 
 # The fix agent skipped "Oneriler" items and changed nothing because the review said
@@ -101,6 +102,8 @@ async def pr_discussion(provider: Any, repo_path: str, pr_number: int, trigger: 
         comments = await _get_json(provider, f"{api}/issues/{pr_number}/comments") or []
         for c in comments:
             body = (c.get("body") or "").strip()
+            if START_MARKER in body:  # a run's start note says nothing to the agent
+                continue
             if body and (not before_id or int(c.get("id") or 0) < before_id):
                 when = c.get("created_at") or ""
                 entries.append((when, is_report(body), f"### {_author(c)} — {when}\n\n{body}"))
