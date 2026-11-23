@@ -65,3 +65,16 @@ FIX_RULES = (
     f"birim testler için {TARGETED_TEST}; entegrasyon testi için {TARGETED_IT}.\n"
     "- Son mesajında çalıştırdığın komutu ve sonucunu yaz.\n"
 )
+
+# bimetri (loop efficiency item 5): heading parsed by backend/worker/phases/_bimetri_soru.py
+OPEN_QUESTION_RULES = (
+    "\n## Açık soru (otomatik döngüyü durdurur, insana sorar)\n"
+    "- Issue ve 'PR'da insanın istekleri' bölümü bir sözleşme ya da API kararını (alan adı, "
+    "dönüş değeri, hata kodu, iş kuralı) açık bırakıyorsa ve yanlış bir tahmin sonradan geri "
+    "alınmayı gerektirecekse tahmin etme: soruyu ve seçenekleri kısaca, son mesajında (Sonuç "
+    "satırı varsa ondan önce) '### Açık soru' başlığı altında yaz.\n"
+    "- Bu başlık döngüyü durdurur ve soruyu PR'da insana sorar; yalnızca bu durumda kullan. "
+    "Başka hiçbir durumda bu başlığı yazma ('yok' diye de yazma).\n"
+    "- İnsan bu PR'da yanıt verdiyse ('devam <yanıt>') yanıtı uygula, aynı soruyu yeniden "
+    "sorma.\n"
+)

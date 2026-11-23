@@ -32,6 +32,7 @@ from backend.worker.phases._bimetri_etiket import (
     pr_acilis_etiketleri,
 )
 from backend.worker.phases._bimetri_oto import OTO_YORUM, oto_tur_karari
+from backend.worker.phases._bimetri_soru import acik_soru, ajan_raporu, kosu_soru_karari
 from backend.worker.phases._helpers import (
     close_run_session,
     get_auth_url,
@@ -134,6 +135,8 @@ async def run(
                     + "\n\nTest dosyalarını değiştirmek insan onayı ister; zincir durdu (`status/on-hold`). "
                     "Uygunsa `status/on-hold`'u kaldırıp `ai-test` koy.",
                 )
+            elif await kosu_soru_karari(task_run, int(pr_number), session, ajan_raporu(task_run)):
+                pass  # bimetri yamasi: acik soru -> zincir durdu, insan yanitlar
             elif await ajan_testi_gerekli(_gp, _rp, int(pr_number), _mvnw):
                 await _gp.add_label(_rp, int(pr_number), "ai-test")
             # bimetri yamasi: test yoksa AI incelemesi yalnizca istendiyse (issue/PR'da ai-review)
@@ -171,18 +174,26 @@ async def run(
     # Post review comment on source PR for pr-review / fix-pr workflows
     if task_run.review_result and pr_number:
         # bimetri yamasi: "Değişiklik gerekli" incelemesi ajanin PR'inda otomatik duzeltme turu acar
-        _oto = review_mode == "comment" and await _bimetri_oto_duzeltme(
-            task_run, int(pr_number), session
+        # bimetri yamasi: acik soru varsa duzeltme turu yerine dur ve sor
+        _ozet = str(task_run.review_result.get("summary") or "")
+        _soru = review_mode == "comment" and bool(acik_soru(_ozet))
+        _oto = (
+            not _soru
+            and review_mode == "comment"
+            and await _bimetri_oto_duzeltme(task_run, int(pr_number), session)
         )
         await _post_review_comment(task_run, pr_number, session, _oto)
+        if _soru:
+            _soru = await kosu_soru_karari(task_run, int(pr_number), session, _ozet)
         # Flip the label to mark the PR as reviewed (visible marker; the DB head
         # SHA remains the source of truth the poller dedupes on).
         if review_mode == "comment":
             await _flip_review_label(task_run, pr_number, session)
             # bimetri yamasi: istenen inceleme "Birleştirilebilir" dedi -> zincirin sonu, CI kapisi
             if (
-                task_run.git_provider == "gitea"
-                and "Birleştirilebilir" in str(task_run.review_result.get("summary") or "")[-400:]
+                not _soru
+                and task_run.git_provider == "gitea"
+                and "Birleştirilebilir" in _ozet[-400:]
             ):
                 try:
                     _gp = get_git_provider(
@@ -566,10 +577,7 @@ async def _bimetri_test_finalize(
         await git.run_git(["rev-list", "--count", f"origin/{pr_branch}..HEAD"], cwd=cwd)
     ).stdout.strip()
 
-    rapor = (task_run.coding_results or {}).get("response") or ""
-    if isinstance(rapor, dict):  # CLI ajani: yalnizca son mesaj
-        rapor = rapor.get("output") or ""
-    rapor = (rapor if isinstance(rapor, str) else str(rapor)).strip()
+    rapor = ajan_raporu(task_run).strip()
     m = re.search(r"\*\*Sonuç:\*\*\s*(Testler geçti|Testler kaldı|Test edilemedi)", rapor[-400:])
     sonuc = m.group(1) if m else "Test edilemedi"
     if ihlal:
@@ -614,8 +622,12 @@ async def _bimetri_test_finalize(
         )
         + f" · Koşu: [#{task_run.id}]({_kosu}) · AgenticKode"
     ).replace("@", "@​")
-    oto = sonuc == "Testler kaldı" and await oto_tur_karari(
-        gp, rp, n, "test ajanı başarısız testler buldu", task_run.id
+    # bimetri yamasi: acik soru varsa otomatik tur yerine dur ve sor (rapordan sonra)
+    soru = sonuc != "Kural ihlali" and bool(acik_soru(rapor))
+    oto = (
+        not soru
+        and sonuc == "Testler kaldı"
+        and await oto_tur_karari(gp, rp, n, "test ajanı başarısız testler buldu", task_run.id)
     )
     if oto:
         govde = (
@@ -628,6 +640,10 @@ async def _bimetri_test_finalize(
             task_run.id, f"Test raporu yazilamadi: {exc}", level="warning", phase="finalization"
         )
     await broadcaster.log(task_run.id, f"Test sonucu: {sonuc}", phase="finalization")
+    if soru and await kosu_soru_karari(task_run, n, session, rapor):
+        if sonuc in ("Testler geçti", "Testler kaldı"):
+            await gp.add_label(rp, n, "test/passed" if sonuc == "Testler geçti" else "test/failed")
+        return
 
     if sonuc == "Testler geçti":
         await gp.add_label(rp, n, "test/passed")

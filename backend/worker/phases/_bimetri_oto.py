@@ -97,28 +97,41 @@ async def _sinir_doldu(gp, rp: str, n: int, issue_no: int | None, neden: str) ->
     )
 
 
+async def oto_pr(gp, rp: str, n: int) -> dict | None:
+    """Otomatik dongunun surdugu PR: acik, botun actigi, status/on-hold olmayan. Degilse None."""
+    r = await gp._client.get(
+        f"{gp._base_url}/api/v1/repos/{rp}/pulls/{n}", headers=gp._headers(), timeout=30.0
+    )
+    r.raise_for_status()
+    pr = r.json()
+    if pr.get("state") != "open" or pr.get("merged"):
+        return None
+    if any(la.get("name") == "status/on-hold" for la in pr.get("labels") or []):
+        return None
+    bot = await bot_login(gp)
+    if not bot or (pr.get("user") or {}).get("login") != bot:
+        return None
+    return pr
+
+
+def beklet(run_id: int | None) -> None:
+    """Kosu sonunda executor status/review koymasin; PR ve issue status/on-hold kalsin."""
+    if run_id is not None:
+        _BEKLETILEN.add(run_id)
+
+
 async def oto_tur_karari(gp, rp: str, n: int, neden: str, run_id: int | None = None) -> bool:
     """Otomatik duzeltme turu acilsin mi. Yalnizca acik, botun actigi, status/on-hold olmayan PR'da;
     sinir dolduysa PR ve issue status/on-hold olur ve insandan geri bildirim istenir."""
     try:
-        r = await gp._client.get(
-            f"{gp._base_url}/api/v1/repos/{rp}/pulls/{n}", headers=gp._headers(), timeout=30.0
-        )
-        r.raise_for_status()
-        pr = r.json()
-        if pr.get("state") != "open" or pr.get("merged"):
-            return False
-        if any(la.get("name") == "status/on-hold" for la in pr.get("labels") or []):
-            return False
-        bot = await bot_login(gp)
-        if not bot or (pr.get("user") or {}).get("login") != bot:
+        pr = await oto_pr(gp, rp, n)
+        if pr is None:
             return False
         issue_no = issue_no_bul(pr.get("body"))
         sayi = await oto_tur_sayisi(gp, rp, n)
         if sayi >= OTO_TUR_SINIRI:
             await _sinir_doldu(gp, rp, n, issue_no, neden)
-            if run_id is not None:
-                _BEKLETILEN.add(run_id)
+            beklet(run_id)
             return False
         if sayi == OTO_TUR_SINIRI - 1:
             with contextlib.suppress(Exception):

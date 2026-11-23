@@ -19,6 +19,7 @@ import re
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import TaskRun
+from backend.worker.flow._bimetri_agent_rules import OPEN_QUESTION_RULES
 
 _CLOSES_RX = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)")
 _GOVDE_SINIRI = 6000
@@ -70,8 +71,8 @@ _TEST_KURALLARI = (
     "- Kod issue ile çelişiyorsa testi issue'ya göre yaz, kalmasına izin ver ve raporla.\n"
     "- PR'daki mevcut bir testin beklediği değer issue ile çelişiyorsa testi issue'ya göre "
     "güncelle (yalnızca `src/test/**`); raporda hangi testi neden değiştirdiğini yaz.\n"
-    "- Issue ilgili kuralı açıkça tanımlamıyorsa hiçbir testi değiştirme; raporda "
-    "'Açık soru' olarak yaz.\n"
+    "- Issue ilgili kuralı açıkça tanımlamıyorsa hiçbir testi değiştirme; aşağıdaki açık "
+    "soru kuralını uygula.\n"
 )
 
 
@@ -161,6 +162,7 @@ async def kapsam_eki(run: TaskRun, session: AsyncSession, tur: str) -> str:
         kurallar = _TEST_KURALLARI
     else:
         kurallar = _DUZELTME_KURALLARI.replace("{base}", run.default_branch or "main")
+    kurallar += OPEN_QUESTION_RULES
     n = _issue_no(run)
     issue, hata = None, "Gitea'da okunamadi"
     if n and run.git_provider == "gitea":
