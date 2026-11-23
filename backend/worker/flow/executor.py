@@ -45,6 +45,7 @@ from backend.worker.flow._bimetri_review_clone import (
     REVIEW_CLONE_RULES,
     prepare_review_clone,
 )
+from backend.worker.flow._bimetri_test_level import effort_for_test, tier_for_test
 from backend.worker.flow.data_sources import fetch_flow_data
 from backend.worker.phases._bimetri_hata import cli_hata_nedeni, hata_bildir
 from backend.worker.phases._bimetri_oto import bekletildi_mi
@@ -277,6 +278,7 @@ async def execute_flow_prompt(
 
         # bimetri yamasi: etiketler kosu basinda Gitea'dan guncel okunur (once PR, sonra issue, en son webhook yuku)
         _canli: list = []
+        _issue_etiket: list = []  # test run: its tier is the issue's (_bimetri_test_level)
         _m = run.task_source_meta or {}
         if run.git_provider == "gitea":
             try:
@@ -285,7 +287,8 @@ async def execute_flow_prompt(
                 from backend.worker.phases._helpers import get_project_token as _gpt
 
                 _gp = _ggp("gitea", _ghc(), access_token=await _gpt(run, session))
-                for _n in (_m.get("pr_number"), _m.get("issue_number")):
+                for _k in ("pr_number", "issue_number"):
+                    _n = _m.get(_k)
                     if not _n:
                         continue
                     _r = await _gp._client.get(
@@ -294,7 +297,10 @@ async def execute_flow_prompt(
                         timeout=30.0,
                     )
                     if _r.status_code == 200:
-                        _canli += [la.get("name", "") for la in _r.json()]
+                        _adlar = [la.get("name", "") for la in _r.json()]
+                        _canli += _adlar
+                        if _k == "issue_number":
+                            _issue_etiket = _adlar
             except Exception as exc:
                 await broadcaster.log(
                     run.id,
@@ -332,6 +338,8 @@ async def execute_flow_prompt(
         tier = next(
             (lbl.split("/", 1)[1] for lbl in labels if lbl.startswith("difficulty/")), "easy"
         ).upper()
+        if _m.get("review_mode") == "test":
+            tier = tier_for_test(_issue_etiket, tier)
         resolved = await services.agent_resolver.resolve_agent(
             agent_name, session, run.workspace_server_id, project_id=run.project_id
         )
@@ -350,6 +358,8 @@ async def execute_flow_prompt(
                 run.id, f"Bilinmeyen efor: {effort}", level="warning", phase="agent"
             )
             effort = ""
+        if _m.get("review_mode") == "test":
+            effort = effort_for_test(effort)
         await broadcaster.log(
             run.id,
             f"Ajan: {getattr(resolved.adapter, 'agent_name', agent_name)}, difficulty: {tier.lower()}, "
