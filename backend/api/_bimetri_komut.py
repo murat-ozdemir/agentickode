@@ -98,13 +98,20 @@ async def inceleme_komutu(gp, full: str, n: int, issue_no: int | None, labels: l
     return "AI incelemesi başlatıldı."
 
 
-async def devam_isareti(gp, full: str, n: int, login: str) -> None:
-    """Otomatik tur sayacini sifirlar (yorumda ham @ yok: yeni kosu acmaz)."""
+async def devam_isareti(gp, full: str, n: int, login: str, issue_no: int | None = None) -> None:
+    """Sorulmus zorluk yukseltmesini uygular, otomatik tur sayacini sifirlar (yorumda ham @
+    yok: yeni kosu acmaz)."""
     from backend.worker.phases._bimetri_oto import DEVAM_ISARET, OTO_TUR_SINIRI
+    from backend.worker.phases._bimetri_yukselt import bekleyen_yukseltme
 
+    yeni = None
+    with contextlib.suppress(Exception):
+        yeni = await bekleyen_yukseltme(gp, full, n, issue_no)
     await gp.post_pr_comment(
         full,
         n,
         f"{login} devam dedi: otomatik tur sayacı sıfırlandı "
-        f"(en fazla {OTO_TUR_SINIRI} tur daha).\n{DEVAM_ISARET}",
+        f"(en fazla {OTO_TUR_SINIRI} tur daha)."
+        + (f" Zorluk `difficulty/{yeni}` olarak yükseltildi." if yeni else "")
+        + f"\n{DEVAM_ISARET}",
     )

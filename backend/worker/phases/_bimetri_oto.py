@@ -2,12 +2,14 @@
 # Licensed under AGPLv3. See LICENSE file.
 # Commercial licensing: info@mechemsi.com
 
-"""bimetri yamasi: otomatik duzeltme turlari - en fazla 3 tur, 3. turda zorluk bir kademe artar."""
+"""bimetri yamasi: otomatik duzeltme turlari - en fazla 3 tur; 2 turdan sonra zorluk artacaksa
+donguyu durdurup sorar (_bimetri_yukselt)."""
 
 import contextlib
 import logging
 
-from backend.worker.phases._bimetri_etiket import ZORLUKLAR, etiketler, grup_degeri, issue_no_bul
+from backend.worker.phases._bimetri_etiket import issue_no_bul
+from backend.worker.phases._bimetri_yukselt import sonraki_zorluk, yukseltme_sor
 
 logger = logging.getLogger("agentickode.phases.bimetri_oto")
 
@@ -54,35 +56,17 @@ async def oto_tur_sayisi(gp, rp: str, n: int) -> int:
     return sayi
 
 
-async def zorluk_artir(gp, rp: str, n: int, issue_no: int | None) -> str | None:
-    """PR'in zorlugunu bir kademe artirir. Insan PR'da zorlugu degistirdiyse (issue'dakinden
-    farkli) ya da zaten en ustteyse dokunmaz. Yeni zorlugu dondurur."""
-    pr_z = grup_degeri(await etiketler(gp, rp, n), "difficulty/")
-    issue_z = grup_degeri(await etiketler(gp, rp, issue_no), "difficulty/")
-    if pr_z and pr_z != issue_z:
-        return None
-    eski = pr_z or issue_z or "easy"
-    if eski not in ZORLUKLAR or eski == ZORLUKLAR[-1]:
-        return None
-    yeni = ZORLUKLAR[ZORLUKLAR.index(eski) + 1]
-    if pr_z:
-        await gp.remove_label(rp, n, f"difficulty/{pr_z}")
-    await gp.add_label(rp, n, f"difficulty/{yeni}")
-    await gp.post_pr_comment(
-        rp,
-        n,
-        f"{OTO_TUR_SINIRI - 1} otomatik tur sorunu çözmedi; son tur için zorluk "
-        f"`difficulty/{eski}` → `difficulty/{yeni}` yükseltildi (daha güçlü model).",
-    )
-    return yeni
-
-
-async def _sinir_doldu(gp, rp: str, n: int, issue_no: int | None, neden: str) -> None:
-    # zero-width bosluk: ornek komutlar botun kendi yorumu olarak yeniden komut sayilmasin
+async def beklemeye_al(gp, rp: str, n: int, issue_no: int | None) -> None:
+    """PR'a ve bagli issue'ya status/on-hold."""
     for hedef in (n, issue_no):
         if hedef:
             with contextlib.suppress(Exception):
                 await gp.set_status_label(rp, int(hedef), "status/on-hold")
+
+
+async def _sinir_doldu(gp, rp: str, n: int, issue_no: int | None, neden: str) -> None:
+    # zero-width bosluk: ornek komutlar botun kendi yorumu olarak yeniden komut sayilmasin
+    await beklemeye_al(gp, rp, n, issue_no)
     await gp.post_pr_comment(
         rp,
         n,
@@ -133,9 +117,13 @@ async def oto_tur_karari(gp, rp: str, n: int, neden: str, run_id: int | None = N
             await _sinir_doldu(gp, rp, n, issue_no, neden)
             beklet(run_id)
             return False
-        if sayi == OTO_TUR_SINIRI - 1:
-            with contextlib.suppress(Exception):
-                await zorluk_artir(gp, rp, n, issue_no)
+        # bimetri (dongu verimliligi 6. madde): daha guclu modele gecmeden once sor
+        sonraki = await sonraki_zorluk(gp, rp, n, issue_no) if sayi == OTO_TUR_SINIRI - 1 else None
+        if sonraki:
+            await beklemeye_al(gp, rp, n, issue_no)
+            await yukseltme_sor(gp, rp, n, sonraki[1], sonraki[2], neden)
+            beklet(run_id)
+            return False
         return True
     except Exception:
         logger.warning("Otomatik tur karari verilemedi (%s#%s)", rp, n, exc_info=True)

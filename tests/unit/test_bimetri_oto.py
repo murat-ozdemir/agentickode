@@ -10,7 +10,6 @@ from backend.worker.phases._bimetri_oto import (
     bekletildi_mi,
     oto_tur_karari,
     oto_tur_sayisi,
-    zorluk_artir,
 )
 from tests.unit.bimetri_sahte import SahteGitea
 
@@ -44,10 +43,20 @@ class TestTurKarari:
         assert await oto_tur_karari(gp, RP, 5, "testler kaldi", 11)
         assert gp.etiket[5] == ["difficulty/easy"]
 
-    async def test_third_round_bumps_difficulty(self):
+    async def test_third_round_stops_and_asks_before_raising_difficulty(self):
         gp = _gitea(oto=2)
-        assert await oto_tur_karari(gp, RP, 5, "testler kaldi", 11)
-        assert gp.etiket[5] == ["difficulty/medium"]
+        assert not await oto_tur_karari(gp, RP, 5, "testler kaldi", 11)
+        assert "difficulty/easy" in gp.etiket[5] and "difficulty/medium" not in gp.etiket[5]
+        assert gp.durum == {5: "status/on-hold", 1: "status/on-hold"}
+        assert "zorluk yükseltilsin mi" in gp.yorum[5][-1]
+        assert "<!-- agentickode-yukselt:easy:medium -->" in gp.yorum[5][-1]
+        assert "@agentickode" not in gp.yorum[5][-1]
+        assert bekletildi_mi(11)
+
+    async def test_third_round_runs_when_no_raise_is_possible(self):
+        gp = _gitea(oto=2, pr_zorluk="hard", issue_zorluk="hard")
+        assert await oto_tur_karari(gp, RP, 5, "testler kaldi", 13)
+        assert gp.durum == {}
 
     async def test_limit_puts_pr_and_issue_on_hold(self):
         gp = _gitea(oto=3)
@@ -64,17 +73,3 @@ class TestTurKarari:
         gp = _gitea()
         gp.pr[5]["user"] = {"login": "mozdemir"}
         assert not await oto_tur_karari(gp, RP, 5, "x")
-
-
-class TestZorlukArtir:
-    async def test_skips_when_human_changed_pr_difficulty(self):
-        gp = _gitea(pr_zorluk="hard", issue_zorluk="easy")
-        assert await zorluk_artir(gp, RP, 5, 1) is None
-
-    async def test_skips_at_top(self):
-        gp = _gitea(pr_zorluk="hard", issue_zorluk="hard")
-        assert await zorluk_artir(gp, RP, 5, 1) is None
-
-    async def test_defaults_to_easy_when_unlabelled(self):
-        gp = _gitea(pr_zorluk=None, issue_zorluk=None)
-        assert await zorluk_artir(gp, RP, 5, 1) == "medium"

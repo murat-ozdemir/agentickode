@@ -10,7 +10,6 @@ stops on the agent's PR (status/on-hold on the PR and its issue) and the questio
 `@agentickode devam <yanıt>` starts a fix round with the answer and the chain goes on.
 """
 
-import contextlib
 import logging
 import re
 
@@ -18,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import TaskRun
 from backend.worker.phases._bimetri_etiket import issue_no_bul
-from backend.worker.phases._bimetri_oto import beklet, oto_pr
+from backend.worker.phases._bimetri_oto import beklemeye_al, beklet, oto_pr
 
 logger = logging.getLogger("agentickode.phases.bimetri_soru")
 
@@ -41,10 +40,7 @@ def acik_soru(rapor: str) -> str | None:
 
 
 async def soru_sor(gp, rp: str, n: int, issue_no: int | None, soru: str) -> None:
-    for hedef in (n, issue_no):
-        if hedef:
-            with contextlib.suppress(Exception):
-                await gp.set_status_label(rp, int(hedef), "status/on-hold")
+    await beklemeye_al(gp, rp, n, issue_no)
     # zero-width bosluk: ornek komut ve rapordaki @ yeni kosu tetiklemesin
     await gp.post_pr_comment(
         rp,

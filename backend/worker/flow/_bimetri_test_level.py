@@ -5,7 +5,7 @@
 """bimetri patch (loop efficiency item 3): the test agent's difficulty tier and effort.
 
 The test agent checks acceptance criteria with targeted tests; it needs less than the coder.
-- Tier: the issue's `difficulty/` label. The auto-fix loop (_bimetri_oto.zorluk_artir) raises
+- Tier: the issue's `difficulty/` label. The auto-fix loop (_bimetri_yukselt, on `devam`) raises
   only the PR's label for the fix agent, so the test agent's model stays the issue's.
 - Effort: one level below the chosen effort (`effort/` label or EFFORT_FOR_DIFFICULTY_*),
   at most `high`, at least `low`. No effort chosen: the model's default.

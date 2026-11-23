@@ -132,7 +132,7 @@ async def gitea_pr_comment_webhook(
         await provider.post_pr_comment(full, pr_number, yanit)
         return {"status": "accepted", "reason": "review"}
     if komut == "devam":
-        await devam_isareti(provider, full, pr_number, login)
+        await devam_isareti(provider, full, pr_number, login, issue_no)
     if issue_no:  # ajan/zorluk etiketleri issue'dan gelsin
         r = await provider._client.get(
             f"{api}/issues/{issue_no}", headers=provider._headers(), timeout=30.0
