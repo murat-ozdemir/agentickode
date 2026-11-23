@@ -7,7 +7,8 @@ Writes, as the worker user:
     ~/.codex/config.toml      bimetri-graph server with its startup timeout
     ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md   the marked graph policy (graph_continue first, caps)
 ~/.claude/settings.json also gets the gate hooks (_agent_graph_gate.py): no other tool before
-graph_continue, searches within its grep budget. Codex has no hooks, only the policy.
+graph_continue, searches within its grep budget. Codex gets the policy here; its one hook (no
+whole reads of large source files) is a managed hook root writes (_codex_read_hook.py).
 Mode none removes all of it except the connector switch. Stdlib only.
 """
 

@@ -79,3 +79,13 @@ class TestShellScript:
         for args in (("mode", "both"), ("mode", "graperoot"), ("--gate", "mode", "graphify")):
             done = self.run("--dry-run", *args, "h1")
             assert done.returncode == 2, args
+
+    def test_mode_writes_codex_hook_as_root(self):
+        done = self.run("--dry-run", "mode", "graphify", "h1")
+        assert (
+            "root@h1 python3 -c <scripts/bimetri/_codex_read_hook.py> graphify coder" in done.stdout
+        )
+        direct = self.run("--dry-run", "--direct", "mode", "graphify", "h1")
+        assert (
+            "_codex_read_hook" not in direct.stdout and "codex\\ hook:\\ skipped" in direct.stdout
+        )

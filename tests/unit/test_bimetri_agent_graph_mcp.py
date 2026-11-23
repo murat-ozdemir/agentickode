@@ -192,3 +192,7 @@ class TestUpdateAndServe:
         assert graph.main(["update", "graphify"]) == 2
         assert graph.main(["serve", "all"]) == 2
         assert "usage" in capsys.readouterr().err
+
+    def test_main_runs_codex_read_hook(self, home, monkeypatch):
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"session_id": "c1", "tool_name": "Bash"}'))
+        assert graph.main(["gate", "read"]) == 0

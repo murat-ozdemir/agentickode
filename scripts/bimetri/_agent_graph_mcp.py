@@ -7,6 +7,7 @@ Runs as the worker user (agent-graph-mcp.sh sends it over SSH, after _agent_grap
     update TOOL ROOT   TOOL: graphify | all
     mode MODE          MODE: none | graphify (agent CLI settings and gate, see the config file)
     gate pre|mark      Claude hook (stdin: hook event JSON), written by mode graphify
+    gate read          Codex hook (stdin: hook event JSON), in /etc/codex/hooks.json
     pack TOOL ROOT     stdin: the task; prints the context pack for the agent's prompt (_graph_pack.py),
                        nothing when the graph mode is off or ROOT has no graph yet
     serve TOOL         the graph_flow.py stdio MCP server on the graph on disk, at once; when the
@@ -203,13 +204,13 @@ def main(argv: list) -> int:
         return max(update(tool, Path(args[1]).resolve()) for tool in tools)
     if command == "mode" and len(args) == 1 and args[0] in (*TOOLS, "none"):
         return set_mode(args[0])
-    if command == "gate" and args in (["pre"], ["mark"]):
+    if command == "gate" and args in (["pre"], ["mark"], ["read"]):
         return gate(args[0], sys.stdin.read(), base_dir() / "gate")
     if command == "pack" and len(args) == 2 and args[0] in TOOLS:
         return pack(args[0], Path(args[1]).resolve())
     if command == "serve" and len(args) == 1 and args[0] in TOOLS:
         return serve(args[0])
-    usage = "install | update TOOL|all ROOT | mode none|TOOL | pack TOOL ROOT | serve TOOL | gate pre|mark"
+    usage = "install | update TOOL|all ROOT | mode none|TOOL | pack TOOL ROOT | serve TOOL | gate pre|mark|read"
     print(f"usage: {usage}", file=sys.stderr)
     return 2
 

@@ -1,4 +1,4 @@
-"""bimetri patch (D2 phase 2): Claude hook that keeps an agent on the graph flow (`gate pre|mark`).
+"""bimetri patch (D2 phase 2): hooks that keep an agent on the graph flow (`gate pre|mark|read`).
 
 agent-graph-mcp.sh ships this file first in the worker program; `mode graphify` writes the hooks.
     pre    deny every tool until graph_continue ran in the session. After that, each search
@@ -10,6 +10,8 @@ agent-graph-mcp.sh ships this file first in the worker program; `mode graphify` 
            shell) is denied once per file with a pointer to graph_read's outline; the same read
            again goes through (graf tasarruf planı Faz 1).
     mark   after graph_continue: write its max_supplementary_greps to the session's marker.
+    read   Codex's shell hook (/etc/codex/hooks.json, _codex_read_hook.py): only the whole-read
+           rule of pre, once per file; Codex gets no graph_continue gate and no grep budget.
 A context pack in the prompt (_graph_pack.py, gate/run-<BIMETRI_RUN_ID>) counts as graph_continue:
 the session's marker starts from the pack's grep budget (graf tasarruf planı Faz 2).
 Stdlib only.
@@ -21,6 +23,7 @@ import fcntl
 import json
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -134,11 +137,39 @@ def _first_read(marker_dir: Path, session: str, paths: list) -> list:
     return new
 
 
+def shell_line(command) -> str:
+    """Codex's shell command as one line: an argv list joined, `bash -lc SCRIPT` unwrapped."""
+    words = [str(w) for w in command] if isinstance(command, list) else None
+    if words is None:
+        try:
+            words = shlex.split(str(command))
+        except ValueError:
+            return str(command)
+    shells = ("bash", "sh", "zsh")
+    if len(words) >= 3 and words[0].rsplit("/", 1)[-1] in shells and words[1] in ("-c", "-lc"):
+        return words[2]
+    return shlex.join(words) if isinstance(command, list) else str(command)
+
+
+def _refuse_reads(marker_dir: Path, session: str, tool: str, tool_input: dict, cwd: str) -> int:
+    whole = reads(tool, tool_input, cwd)
+    refused = _first_read(marker_dir, session or "unknown", whole) if whole else []
+    if refused:
+        print(GATE_READ.format(path=refused[0], lines=READ_LINES), file=sys.stderr)
+        return 2
+    return 0
+
+
 def gate(step: str, payload: str, marker_dir: Path) -> int:
-    """Claude hook: exit 2 (reason on stderr) denies the tool call."""
+    """Claude and Codex hook: exit 2 (reason on stderr) denies the tool call."""
     event = json.loads(payload or "{}")
     session = re.sub(r"[^A-Za-z0-9_-]", "", str(event.get("session_id", "")))
     marker = marker_dir / f"{session or 'unknown'}.ok"
+    cwd = str(event.get("cwd", ""))
+    if step == "read":
+        command = shell_line((event.get("tool_input") or {}).get("command", ""))
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        return _refuse_reads(marker_dir, session, "Bash", {"command": command}, cwd)
     if step == "mark":
         reply = json.dumps(event.get("tool_response"))
         found = re.search(r"max_supplementary_greps\W+(\d+)", reply)
@@ -160,9 +191,4 @@ def gate(step: str, payload: str, marker_dir: Path) -> int:
     if (tool in SEARCH_TOOLS or searches(str(command))) and not _spend(marker):
         print(GATE_SPENT, file=sys.stderr)
         return 2
-    whole = reads(tool, tool_input, str(event.get("cwd", "")))
-    refused = _first_read(marker_dir, session or "unknown", whole) if whole else []
-    if refused:
-        print(GATE_READ.format(path=refused[0], lines=READ_LINES), file=sys.stderr)
-        return 2
-    return 0
+    return _refuse_reads(marker_dir, session, tool, tool_input, cwd)

@@ -16,7 +16,10 @@
 #          (graph_continue first, capped fallbacks) in ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md,
 #          Claude hooks that deny every other tool until graph_continue and keep searches within
 #          its grep budget (_agent_graph_gate.py), and turns claude.ai
-#          connectors off for Claude on the worker (_agent_graph_config.py). Then runs
+#          connectors off for Claude on the worker (_agent_graph_config.py). As root it writes
+#          (or drops) Codex's managed hook in /etc/codex/hooks.json: no whole reads of large
+#          source files, once per file (_codex_read_hook.py; needs codex 0.124.0+, the installed
+#          version is printed). Then runs
 #          `claude mcp list` inside --repo, where serve can find the clone; that also brings the
 #          graph up to date.
 # update:  incremental update of the graph for --repo, with timings.
@@ -89,18 +92,22 @@ bundle() {
   grep -v '# bundle: drop$' scripts/bimetri/_graph_flow_server.py
 }
 as_worker="runuser -u $worker_user -- python3 -c $(printf %q "$program")"
+hook_file=scripts/bimetri/_codex_read_hook.py
+hook_program=$(cat "$hook_file")
+codex_hook="python3 -c $(printf %q "$hook_program") $arg $worker_user"
 mcp_list="cd $(printf %q "$repo") && claude mcp list"
 mcp_list="runuser -l $worker_user -c $(printf %q "$mcp_list")"
 target=(-i "$key")
 if [ $direct = 1 ]; then
   as_worker="python3 -c $(printf %q "$program")"
   mcp_list="bash -lc $(printf %q "cd $(printf %q "$repo") && claude mcp list")"
+  codex_hook="echo $(printf %q "codex hook: skipped (/etc/codex needs root; run without --direct)")"
   target=()
 fi
 case "$action" in
   install) commands=("$as_worker install" "$as_worker update all $(printf %q "$repo")") ;;
   update) commands=("$as_worker update all $(printf %q "$repo")") ;;
-  mode) commands=("$as_worker mode $arg"
+  mode) commands=("$as_worker mode $arg" "$codex_hook"
                   "$mcp_list 2>&1 | grep -E '^(bimetri-graph|claude\.ai)' || true") ;;
   stats) commands=("$as_worker stats $arg") ;;
 esac
@@ -111,8 +118,9 @@ for host in "${hosts[@]}"; do
   if [ $direct = 0 ]; then destination=root@$host; fi
   for i in "${!commands[@]}"; do
     if [ $dry_run = 1 ]; then
-      # The program text is long; show its file name instead.
-      echo "ssh ${target[*]:+${target[*]} }$destination ${commands[$i]//"$(printf %q "$program")"/<$program_file>}"
+      # The program texts are long; show their file names instead.
+      shown=${commands[$i]//"$(printf %q "$program")"/<$program_file>}
+      echo "ssh ${target[*]:+${target[*]} }$destination ${shown//"$(printf %q "$hook_program")"/<$hook_file>}"
     elif [ "$action" = install ] && [ "$i" = 0 ]; then
       bundle | ssh "${target[@]}" "$destination" "${commands[$i]}"
     else

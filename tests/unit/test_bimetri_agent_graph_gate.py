@@ -161,3 +161,38 @@ class TestWholeReads:
         # Another session is told again.
         mark(clone, 2, session="s2")
         assert call(clone, "pre", "Read", "s2", tool_input=read, cwd=str(clone)) == 2
+
+
+class TestCodexRead:
+    @pytest.fixture
+    def clone(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src/Big.java").write_text("x\n" * 4_000)
+        return tmp_path
+
+    @pytest.mark.parametrize(
+        ("command", "line"),
+        [
+            (["bash", "-lc", "cat src/Big.java"], "cat src/Big.java"),
+            (["/bin/sh", "-c", "sed -n 1,400p src/Big.java"], "sed -n 1,400p src/Big.java"),
+            (["cat", "src/Big.java"], "cat src/Big.java"),
+            ("bash -lc 'cat src/Big.java | head -n 5'", "cat src/Big.java | head -n 5"),
+            ("cat src/Big.java", "cat src/Big.java"),
+            ("echo 'unclosed", "echo 'unclosed"),
+        ],
+    )
+    def test_shell_line_unwraps_codex_commands(self, command, line):
+        assert gate_module.shell_line(command) == line
+
+    def test_whole_read_is_denied_once_without_graph_continue(self, clone, capsys):
+        def read(command, session="c1"):
+            event = {"session_id": session, "tool_name": "Bash", "cwd": str(clone)}
+            event["tool_input"] = {"command": command}
+            return gate_module.gate("read", json.dumps(event), clone / "gate")
+
+        assert read(["bash", "-lc", "cat src/Big.java"]) == 2
+        assert "graph_read src/Big.java" in capsys.readouterr().err
+        assert read("bash -lc 'cat src/Big.java'") == 0
+        assert read(["bash", "-lc", "sed -n 120,170p src/Big.java"]) == 0
+        assert read(["bash", "-lc", "rg -n update src"]) == 0  # no grep budget for Codex
+        assert read(["bash", "-lc", "cat src/Big.java"], session="c2") == 2
