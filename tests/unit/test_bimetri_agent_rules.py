@@ -5,7 +5,12 @@
 """bimetri patch (loop efficiency items 1-2): test and fix agent prompt rules."""
 
 from backend.worker.flow import executor
-from backend.worker.flow._bimetri_agent_rules import TARGETED_IT, TARGETED_TEST, TEST_RULES
+from backend.worker.flow._bimetri_agent_rules import (
+    FIX_RULES,
+    TARGETED_IT,
+    TARGETED_TEST,
+    TEST_RULES,
+)
 
 
 class TestTestRules:
@@ -34,3 +39,16 @@ class TestTestRules:
 
     def test_executor_uses_the_module_rules(self):
         assert executor.TEST_RULES is TEST_RULES
+
+
+class TestFixRules:
+    def test_runs_failing_and_changed_class_tests_only(self):
+        assert "Tüm test takımını çalıştırma" in FIX_RULES
+        assert "başarısız testleri ve değiştirdiğin sınıfların testlerini" in FIX_RULES
+        assert TARGETED_TEST in FIX_RULES and TARGETED_IT in FIX_RULES
+
+    def test_overrides_the_agents_md_test_command(self):
+        assert "AGENTS.md'den önceliklidir" in FIX_RULES
+
+    def test_executor_uses_the_module_rules(self):
+        assert executor.FIX_RULES is FIX_RULES

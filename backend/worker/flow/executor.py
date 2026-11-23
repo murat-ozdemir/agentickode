@@ -28,7 +28,7 @@ from backend.repositories.flow_prompt_repo import FlowPromptRepository
 from backend.services.adapters._bimetri_codex import add_credits
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
-from backend.worker.flow._bimetri_agent_rules import TEST_RULES
+from backend.worker.flow._bimetri_agent_rules import FIX_RULES, TEST_RULES
 from backend.worker.flow._bimetri_graph_calls import collect as graph_calls
 from backend.worker.flow._bimetri_graph_calls import run_env
 from backend.worker.flow._bimetri_graph_pack import context_pack, task_text
@@ -258,6 +258,7 @@ async def execute_flow_prompt(
                 "- Son mesajını Türkçe yaz (ç, ğ, ı, ö, ş, ü); bu mesaj PR açıklamasına konur.\n"
             )
             if (run.task_source_meta or {}).get("review_mode") == "fix":
+                prompt += FIX_RULES
                 prompt += await kapsam_eki(run, session, "duzeltme")
         # bimetri yamasi: mem0 proje hafizasi (kapali ya da erisilemezse bos)
         prompt += await hafiza_eki(run)

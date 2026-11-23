@@ -56,3 +56,12 @@ TEST_RULES = (
     "'**Sonuç:** Testler kaldı', '**Sonuç:** Test edilemedi'. Ortam yüzünden (Docker, JDK, "
     "bağımlılık indirme, test veritabanı) çalıştıramadıysan 'Test edilemedi'.\n"
 )
+
+FIX_RULES = (
+    "\n\n## Düzeltme turu test kuralları (yukarıdakilerden ve AGENTS.md'den önceliklidir)\n"
+    "- Tüm test takımını çalıştırma (`verify` ya da `test` tek başına); onu zincirin sonunda CI "
+    "kapısı koşar.\n"
+    "- Yalnızca rapordaki başarısız testleri ve değiştirdiğin sınıfların testlerini çalıştır: "
+    f"birim testler için {TARGETED_TEST}; entegrasyon testi için {TARGETED_IT}.\n"
+    "- Son mesajında çalıştırdığın komutu ve sonucunu yaz.\n"
+)
