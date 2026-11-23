@@ -20,17 +20,12 @@ export interface GraphWorker extends GraphSums {
   name: string;
 }
 
-/** Graph calls' tokens (in + out) against the median of the same task, else repo, before the
- * graph; saved_pct is signed (negative: the graph calls cost more). */
+/** Per-call figures of the graph calls in range: average tokens (in + out) and turns. */
 export interface RunTokens {
-  graph_calls: number;
-  compared: number;
-  same_task: number;
-  same_repo: number;
-  actual_tokens: number;
-  baseline_tokens: number;
-  saved_pct: number | null;
+  calls: number;
+  tokens_per_call: number | null;
   turns_per_call: number | null;
+  turn_calls?: number;
   /** Codex calls only: source files printed in the shell (cat, sed -n, ...) instead of graph_read. */
   shell_reads?: number;
   shell_read_calls?: number;

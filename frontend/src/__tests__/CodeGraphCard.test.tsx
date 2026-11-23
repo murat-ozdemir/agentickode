@@ -27,10 +27,7 @@ const DATA: GraphUsage = {
     { name: "worker-1", ...sums(28, 214, 1_250_000, 93) },
     { name: "worker-2", ...sums(13, 98, 590_000, 90) },
   ],
-  run_tokens: {
-    graph_calls: 20, compared: 12, same_task: 9, same_repo: 3,
-    actual_tokens: 9_000_000, baseline_tokens: 15_000_000, saved_pct: 40, turns_per_call: 31.5,
-  },
+  run_tokens: { calls: 20, tokens_per_call: 1_250_000, turns_per_call: 31.5, turn_calls: 12 },
 };
 
 describe("CodeGraphCard", () => {
@@ -40,16 +37,17 @@ describe("CodeGraphCard", () => {
 
   it("shows the tiles and the worker table with a total", async () => {
     render(<CodeGraphCard />);
-    expect(await screen.findByTestId("graph-summary")).toHaveTextContent("41 of 58 runs");
-    const tiles = screen.getByTestId("graph-tiles");
+    const tiles = await screen.findByTestId("graph-tiles");
+    expect(screen.queryByTestId("graph-summary")).toBeNull();
     expect(tiles).toHaveTextContent("41 / 58");
     expect(tiles).toHaveTextContent("71% · claude 30, codex 11");
     expect(tiles).toHaveTextContent("7.6 per run");
     expect(tiles).toHaveTextContent("1.84M");
     expect(tiles).toHaveTextContent("≈ $5.10 at input price");
     expect(tiles).toHaveTextContent("sent 21k of 214k chars");
-    expect(tiles).toHaveTextContent("−40%");
-    expect(tiles).toHaveTextContent("9.00M vs 15.0M · 12/20 calls · 31.5 turns/call");
+    expect(tiles).toHaveTextContent("Read savings91%");
+    expect(tiles).toHaveTextContent("Tokens per call1.25M31.5 turns · 20 calls");
+    expect(tiles).not.toHaveTextContent("vs before");
     const rows = within(screen.getByTestId("graph-workers")).getAllByRole("row");
     expect(rows.map((r) => r.textContent)).toEqual([
       "WorkerRunsCallsSaved%",
@@ -59,11 +57,17 @@ describe("CodeGraphCard", () => {
     ]);
   });
 
-  it("shows a signed increase when graph calls cost more than before", async () => {
-    const run_tokens = { ...DATA.run_tokens, saved_pct: -25 };
-    vi.mocked(getGraphUsage).mockResolvedValue({ ...DATA, run_tokens });
+  it("shows over-reading as negative savings in red", async () => {
+    const over = { ...sums(1, 9, -12_790, -24), returned_chars: 260_455, full_chars: 209_292 };
+    const workers = [{ name: "worker-1", ...over }];
+    vi.mocked(getGraphUsage).mockResolvedValue({ ...DATA, totals: over, workers });
     render(<CodeGraphCard />);
-    expect(await screen.findByTestId("graph-tiles")).toHaveTextContent("+25%");
+    const tiles = await screen.findByTestId("graph-tiles");
+    expect(tiles).toHaveTextContent("Tokens saved-13k");
+    expect(within(tiles).getByText("-24%")).toHaveClass("text-red-400");
+    const cells = within(screen.getByTestId("graph-workers")).getAllByRole("cell");
+    expect(cells.map((c) => c.textContent)).toEqual(["worker-1", "1", "9", "-13k", "-24%"]);
+    expect(cells[4]).toHaveClass("text-red-400");
   });
 
   it("shows Codex shell reads of source files under the saved share", async () => {
@@ -92,5 +96,7 @@ describe("CodeGraphCard", () => {
     expect(compact(812_000)).toBe("812k");
     expect(compact(1_840_000)).toBe("1.84M");
     expect(compact(12_300_000)).toBe("12.3M");
+    expect(compact(-12_790)).toBe("-13k");
+    expect(compact(-950)).toBe("-950");
   });
 });

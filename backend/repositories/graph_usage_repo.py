@@ -4,7 +4,7 @@
 
 """bimetri patch (D2 measurement): reads the rows behind the Code graph card."""
 
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,38 +41,26 @@ class GraphUsageRepository:
             rows[run_id].calls.append((agent, graph if isinstance(graph, dict) else None))
         return list(rows.values())
 
-    async def list_token_rows(self) -> list[TokenRow]:
-        """Every agent call with known tokens: the graph calls and their pre-graph baseline."""
-        result = await self._session.execute(
-            select(
-                AgentInvocation.started_at,
-                TaskRun.repo_name,
-                TaskRun.task_id,
-                AgentInvocation.agent_name,
-                AgentInvocation.phase_name,
-                AgentInvocation.estimated_tokens_in,
-                AgentInvocation.estimated_tokens_out,
-                AgentInvocation.metadata_,
-            )
-            .join(TaskRun, TaskRun.id == AgentInvocation.run_id)
-            .where(AgentInvocation.estimated_tokens_in.is_not(None))
-        )
+    async def list_token_rows(self, since: date | None) -> list[TokenRow]:
+        """Agent calls in range that used the graph and have known tokens."""
+        q = select(
+            AgentInvocation.estimated_tokens_in,
+            AgentInvocation.estimated_tokens_out,
+            AgentInvocation.metadata_,
+        ).where(AgentInvocation.estimated_tokens_in.is_not(None))
+        if since is not None:
+            q = q.where(AgentInvocation.started_at >= datetime.combine(since, time.min))
         out = []
-        for started, repo, task, agent, phase, tin, tout, meta in result.all():
+        for tin, tout, meta in (await self._session.execute(q)).all():
             meta = meta or {}
+            if not isinstance(meta.get("graph"), dict):
+                continue
             turns, reads = meta.get("turns"), meta.get("shell_reads")
             out.append(
                 TokenRow(
-                    # SQLite gives naive datetimes; they are UTC like PostgreSQL's
-                    started_at=started if started.tzinfo else started.replace(tzinfo=UTC),
-                    repo=repo or "",
-                    task_id=task or "",
-                    agent=agent,
-                    phase=phase or "",
                     tokens=int(tin or 0) + int(tout or 0),
                     turns=turns if isinstance(turns, int) else None,
                     shell_reads=reads if isinstance(reads, int) else None,
-                    graph=isinstance(meta.get("graph"), dict),
                 )
             )
         return out

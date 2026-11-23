@@ -12,7 +12,8 @@ After the call ``collect`` reads and removes that file, and ``summarize`` turns 
 
 Saved tokens are an estimate: without the graph the agent would have read each file the graph
 answers pointed at once, whole. So saved = (sum of those file sizes - characters the graph tools
-returned, fallback_rg included) / 4, never below zero.
+returned, fallback_rg included) / 4. It is negative when the graph sent more than those files
+hold, e.g. the same answers again and again: that over-read is shown, not hidden.
 """
 
 from __future__ import annotations
@@ -32,6 +33,11 @@ _CALLS_DIR = ".local/share/bimetri-graph/calls"
 def run_env(run_id: int) -> dict[str, str]:
     """Environment the agent CLI gets, so the graph server can tell the run."""
     return {RUN_ENV: str(int(run_id))}
+
+
+def saved_tokens(full_chars: int, returned_chars: int) -> int:
+    """Estimated tokens the graph kept out of context; negative when it sent more."""
+    return int((full_chars - returned_chars) / CHARS_PER_TOKEN)
 
 
 def summarize(text: str) -> dict[str, Any] | None:
@@ -64,7 +70,7 @@ def summarize(text: str) -> dict[str, Any] | None:
         "files": len(files),
         "returned_chars": returned,
         "full_chars": full,
-        "saved_tokens": max(0, full - returned) // CHARS_PER_TOKEN,
+        "saved_tokens": saved_tokens(full, returned),
     }
 
 

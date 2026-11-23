@@ -4,7 +4,7 @@
 
 // bimetri patch (D2 measurement): graph use and savings per worker, with a total row.
 import type { GraphSums, GraphWorker } from "../../api";
-import { compact, pct } from "./graphFormat";
+import { compact, pct, savedTone } from "./graphFormat";
 
 interface Props {
   workers: GraphWorker[];
@@ -17,8 +17,8 @@ function Row({ name, s, total }: { name: string; s: GraphSums; total?: boolean }
       <td className="py-1.5">{name}</td>
       <td className="text-right">{s.runs}</td>
       <td className="text-right">{s.calls}</td>
-      <td className="text-right">{compact(s.saved_tokens)}</td>
-      <td className="text-right text-emerald-400">{pct(s.saved_pct)}</td>
+      <td className={`text-right ${s.saved_tokens < 0 ? "text-red-400" : ""}`}>{compact(s.saved_tokens)}</td>
+      <td className={`text-right ${savedTone(s.saved_pct)}`}>{pct(s.saved_pct)}</td>
     </tr>
   );
 }

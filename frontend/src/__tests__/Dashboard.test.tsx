@@ -35,10 +35,7 @@ vi.mock("../api", () => ({
   getAgentQuotas: vi.fn().mockResolvedValue({ accounts: [], last_sync_at: null, errors: [] }),
   getGraphUsage: vi.fn().mockResolvedValue({
     range: "7d", total_runs: 0, since: "2026-11-16", agents: {}, days: [], workers: [],
-    run_tokens: {
-      graph_calls: 0, compared: 0, same_task: 0, same_repo: 0,
-      actual_tokens: 0, baseline_tokens: 0, saved_pct: null, turns_per_call: null,
-    },
+    run_tokens: { calls: 0, tokens_per_call: null, turns_per_call: null },
     totals: { runs: 0, calls: 0, saved_tokens: 0, saved_usd: 0, returned_chars: 0, full_chars: 0, saved_pct: null },
   }),
   getRunDistribution: vi.fn().mockResolvedValue({

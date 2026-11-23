@@ -54,7 +54,7 @@ class TestGraphUsageApi:
         resp = await client.get("/api/bimetri/analytics/graph", params={"range": "1y"})
         assert resp.status_code == 422
 
-    async def test_graph_calls_are_compared_with_the_same_task_before_the_graph(
+    async def test_per_call_tokens_cover_only_graph_calls_in_range(
         self, client, db_session, make_task_run
     ):
         run = make_task_run(task_id="pr-test-9")
@@ -62,25 +62,28 @@ class TestGraphUsageApi:
         await db_session.flush()
         now = datetime.now(UTC)
         common = {"run_id": run.id, "agent_name": "codex", "phase_name": "implement"}
+        graph = {"graph": GRAPH, "turns": 7}
         db_session.add_all(
             [
                 AgentInvocation(
+                    **common, started_at=now - timedelta(hours=2), estimated_tokens_in=3_900
+                ),
+                AgentInvocation(
                     **common,
-                    started_at=now - timedelta(hours=2),
-                    estimated_tokens_in=3_900,
-                    estimated_tokens_out=100,
+                    started_at=now - timedelta(days=30),
+                    estimated_tokens_in=9_000,
+                    metadata_=graph,
                 ),
                 AgentInvocation(
                     **common,
                     started_at=now - timedelta(hours=1),
                     estimated_tokens_in=990,
                     estimated_tokens_out=10,
-                    metadata_={"graph": GRAPH, "turns": 7},
+                    metadata_=graph,
                 ),
             ]
         )
         await db_session.commit()
         body = (await client.get("/api/bimetri/analytics/graph")).json()["run_tokens"]
-        assert body["compared"] == 1 and body["same_task"] == 1
-        assert body["baseline_tokens"] == 4_000 and body["actual_tokens"] == 1_000
-        assert body["saved_pct"] == 75 and body["turns_per_call"] == 7
+        assert body["calls"] == 1 and body["tokens_per_call"] == 1_000
+        assert body["turns_per_call"] == 7 and body["turn_calls"] == 1

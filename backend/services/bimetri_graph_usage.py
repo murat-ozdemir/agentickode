@@ -6,7 +6,9 @@
 
 Pure functions over plain rows. Each agent call's ``metadata_["graph"]`` block comes from
 backend/worker/flow/_bimetri_graph_calls.py. Saved share is 1 - returned / full characters,
-the part of the pointed-at files the graph kept out of the agent's context.
+the part of the pointed-at files the graph kept out of the agent's context. Both are computed
+from the characters, so they go negative when the graph sent more than the files hold (older
+rows stored a saved_tokens clamped at zero).
 """
 
 from dataclasses import dataclass, field
@@ -14,6 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from backend.config import DEFAULT_COST_RATE, MODEL_COST_RATES
+from backend.worker.flow._bimetri_graph_calls import saved_tokens
 
 NO_SERVER = "no server"
 
@@ -37,7 +40,7 @@ class _Sum:
     saved_usd: float = 0.0
 
     def add(self, graph: dict[str, Any], agent: str) -> None:
-        saved = int(graph.get("saved_tokens") or 0)
+        saved = saved_of(graph)
         self.calls += int(graph.get("calls") or 0)
         self.saved_tokens += saved
         self.returned_chars += int(graph.get("returned_chars") or 0)
@@ -61,10 +64,16 @@ def input_price(agent: str) -> float:
     return MODEL_COST_RATES.get(agent.split("/", 1)[0], DEFAULT_COST_RATE)[0]
 
 
+def saved_of(graph: dict[str, Any]) -> int:
+    """Signed saved tokens of one graph block, from its characters."""
+    return saved_tokens(int(graph.get("full_chars") or 0), int(graph.get("returned_chars") or 0))
+
+
 def saved_pct(returned: int, full: int) -> int | None:
+    """Signed: below zero when the graph sent more characters than the files hold."""
     if full <= 0:
         return None
-    return max(0, round(100 * (full - returned) / full))
+    return round(100 * (full - returned) / full)
 
 
 def build(rows: list[GraphRow], since: date | None, today: date) -> dict[str, Any]:
@@ -85,7 +94,7 @@ def build(rows: list[GraphRow], since: date | None, today: date) -> dict[str, An
         for agent, graph in graphs:
             total.add(graph, agent)
             server.add(graph, agent)
-            per_day[day] = per_day.get(day, 0) + int(graph.get("saved_tokens") or 0)
+            per_day[day] = per_day.get(day, 0) + saved_of(graph)
     first = since or min(
         (r.created_at.date() for r in rows if any(g for _, g in r.calls)), default=today
     )

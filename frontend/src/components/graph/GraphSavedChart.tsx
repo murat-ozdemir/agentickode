@@ -2,8 +2,8 @@
 // Licensed under AGPLv3. See LICENSE file.
 // Commercial licensing: info@mechemsi.com
 
-// bimetri patch (D2 measurement): estimated tokens saved per UTC day.
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+// bimetri patch (D2 measurement): estimated tokens saved per UTC day; over-read days go red below 0.
+import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { GraphUsage } from "../../api";
 import { compact } from "./graphFormat";
 
@@ -25,7 +25,10 @@ export default function GraphSavedChart({ days }: { days: GraphUsage["days"] }) 
             <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={{ stroke: "#374151" }} tickLine={false} minTickGap={16} />
             <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={compact} width={44} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#ffffff0d" }} formatter={(v) => [compact(Number(v ?? 0)), "saved"]} />
-            <Bar dataKey="saved" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+            <ReferenceLine y={0} stroke="#374151" />
+            <Bar dataKey="saved" fill="#3b82f6" radius={[3, 3, 0, 0]}>
+              {points.map((p) => <Cell key={p.date} fill={p.saved < 0 ? "#f87171" : "#3b82f6"} />)}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>

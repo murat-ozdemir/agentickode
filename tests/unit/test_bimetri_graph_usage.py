@@ -46,6 +46,18 @@ class TestBuild:
         assert [w["name"] for w in out["workers"]] == ["worker-2", "worker-1"]
         assert out["workers"][1]["saved_pct"] == 91
 
+    def test_over_reading_shows_negative_even_on_rows_stored_clamped(self):
+        # Codex run 292: the graph sent 260k chars for files holding 209k
+        rows = [
+            gu.GraphRow(
+                9, datetime(2026, 11, 22, 9), "worker-1", [("codex", _g(9, 0, 260_455, 209_292))]
+            )
+        ]
+        out = gu.build(rows, date(2026, 11, 22), TODAY)
+        assert out["totals"]["saved_tokens"] == -12_790 and out["totals"]["saved_pct"] == -24
+        assert out["totals"]["saved_usd"] < 0
+        assert out["days"] == [{"date": "2026-11-22", "saved_tokens": -12_790}]
+
     def test_all_range_starts_at_the_first_graph_run(self):
         out = gu.build(ROWS, None, TODAY)
         assert out["since"] == "2026-11-20" and len(out["days"]) == 3

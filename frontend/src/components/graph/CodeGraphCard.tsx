@@ -10,27 +10,24 @@ import { getGraphUsage } from "../../api";
 import type { DistributionRange, GraphUsage } from "../../api";
 import GraphSavedChart from "./GraphSavedChart";
 import GraphWorkerTable from "./GraphWorkerTable";
-import { compact, pct } from "./graphFormat";
+import { compact, pct, savedTone } from "./graphFormat";
 
 const RANGES: [DistributionRange, string][] = [["7d", "7d"], ["30d", "30d"], ["all", "All"]];
 
-function Tile({ label, value, note, good }: { label: string; value: string; note: string; good?: boolean }) {
+function Tile({ label, value, note, tone = "" }: { label: string; value: string; note: string; tone?: string }) {
   return (
     <div className="rounded-xl border border-gray-800/60 bg-gray-900/40 p-3">
       <div className="text-[11px] uppercase tracking-wider text-gray-400">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${good ? "text-emerald-400" : ""}`}>{value}</div>
+      <div className={`mt-1 text-lg font-semibold ${tone}`}>{value}</div>
       <div className="text-[11px] text-gray-500">{note}</div>
     </div>
   );
 }
 
-function RunTokensTile({ rt }: { rt: GraphUsage["run_tokens"] }) {
-  const turns = rt.turns_per_call == null ? "" : ` · ${rt.turns_per_call} turns/call`;
-  const note = rt.compared
-    ? `${compact(rt.actual_tokens)} vs ${compact(rt.baseline_tokens)} · ${rt.compared}/${rt.graph_calls} calls${turns}`
-    : `no pre-graph match for ${rt.graph_calls} calls${turns}`;
-  const value = rt.saved_pct == null ? "–" : `${rt.saved_pct > 0 ? "−" : "+"}${Math.abs(rt.saved_pct)}%`;
-  return <Tile label="Call tokens vs before" value={value} note={note} good={(rt.saved_pct ?? 0) > 0} />;
+function PerCallTile({ rt }: { rt: GraphUsage["run_tokens"] }) {
+  const value = rt.tokens_per_call == null ? "–" : compact(rt.tokens_per_call);
+  const note = rt.turns_per_call == null ? `${rt.calls} calls` : `${rt.turns_per_call} turns · ${rt.calls} calls`;
+  return <Tile label="Tokens per call" value={value} note={note} />;
 }
 
 function Tiles({ data }: { data: GraphUsage }) {
@@ -44,9 +41,9 @@ function Tiles({ data }: { data: GraphUsage }) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5" data-testid="graph-tiles">
       <Tile label="Runs using graph" value={`${t.runs} / ${data.total_runs}`} note={agents ? `${share}% · ${agents}` : `${share}%`} />
       <Tile label="Graph calls" value={String(t.calls)} note={t.runs ? `${(t.calls / t.runs).toFixed(1)} per run` : "no runs yet"} />
-      <Tile label="Tokens saved" value={compact(t.saved_tokens)} note={`≈ $${t.saved_usd.toFixed(2)} at input price`} good />
-      <Tile label="Saved share" value={pct(t.saved_pct)} note={shareNote} good />
-      {data.run_tokens && <RunTokensTile rt={data.run_tokens} />}
+      <Tile label="Tokens saved" value={compact(t.saved_tokens)} note={`≈ $${t.saved_usd.toFixed(2)} at input price`} tone={savedTone(t.saved_tokens)} />
+      <Tile label="Read savings" value={pct(t.saved_pct)} note={shareNote} tone={savedTone(t.saved_pct)} />
+      {data.run_tokens && <PerCallTile rt={data.run_tokens} />}
     </div>
   );
 }
@@ -70,11 +67,6 @@ export default function CodeGraphCard() {
         <div className="flex items-center gap-2.5">
           <Share2 className="h-5 w-5 text-blue-400" aria-hidden="true" />
           <h2 id="graph-title" className="m-0 text-base font-semibold">Code graph</h2>
-          {data && (
-            <span className="text-xs text-gray-500" data-testid="graph-summary">
-              {data.totals.runs} of {data.total_runs} runs · tokens are estimates
-            </span>
-          )}
         </div>
         <div role="group" aria-label="Time range" className="flex rounded-lg border border-gray-800 p-0.5 text-xs">
           {RANGES.map(([key, text]) => (

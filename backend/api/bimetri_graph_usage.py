@@ -4,7 +4,7 @@
 
 """bimetri patch (D2 measurement): Code graph card (Dashboard) — graph use and savings."""
 
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -40,16 +40,12 @@ class GraphDay(BaseModel):
 
 
 class RunTokens(BaseModel):
-    """Graph calls' tokens against their pre-graph baseline (bimetri_run_tokens)."""
+    """Per-call figures of the graph calls in range (bimetri_run_tokens)."""
 
-    graph_calls: int
-    compared: int
-    same_task: int
-    same_repo: int
-    actual_tokens: int
-    baseline_tokens: int
-    saved_pct: int | None = None
+    calls: int
+    tokens_per_call: int | None = None
     turns_per_call: float | None = None
+    turn_calls: int = 0
     shell_reads: int = 0
     shell_read_calls: int = 0
 
@@ -74,8 +70,7 @@ async def get_graph_usage(
     since = since_for(range_key, today)
     repo = GraphUsageRepository(db)
     rows = await repo.list_rows(since)
-    start = datetime.combine(since, time.min, tzinfo=UTC) if since else None
-    tokens = run_tokens.build(await repo.list_token_rows(), start)
+    tokens = run_tokens.build(await repo.list_token_rows(since))
     return GraphUsage(
         range=range_key, run_tokens=RunTokens(**tokens), **usage.build(rows, since, today)
     )

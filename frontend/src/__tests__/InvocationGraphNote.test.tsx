@@ -30,6 +30,12 @@ describe("InvocationGraphNote", () => {
     expect(note).toHaveTextContent("sent 2k of 22k chars in 5 files");
   });
 
+  it("shows over-reading as a negative saving, even on rows stored clamped at zero", () => {
+    const over = { ...graph, returned_chars: 260_455, full_chars: 209_292, saved_tokens: 0 };
+    render(<InvocationGraphNote metadata={{ graph: over }} />);
+    expect(screen.getByText("saved ≈ -13k tokens (-24%)")).toHaveClass("text-red-400");
+  });
+
   it("renders nothing for a call without graph use", () => {
     const { container } = render(<InvocationGraphNote metadata={{ model: "x" }} />);
     expect(container).toBeEmptyDOMElement();

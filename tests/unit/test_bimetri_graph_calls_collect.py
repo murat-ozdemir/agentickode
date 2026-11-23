@@ -43,8 +43,8 @@ class TestSummarize:
             "saved_tokens": (14000 - 1530) // 4,
         }
 
-    def test_never_negative_and_none_without_calls(self):
-        assert gc.summarize(_line("fallback_rg", 900))["saved_tokens"] == 0  # type: ignore[index]
+    def test_over_reading_is_negative_and_none_without_calls(self):
+        assert gc.summarize(_line("fallback_rg", 900))["saved_tokens"] == -225  # type: ignore[index]
         assert gc.summarize("") is None
         assert gc.summarize("garbage\n[]") is None
 
