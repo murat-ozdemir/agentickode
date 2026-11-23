@@ -55,8 +55,12 @@ async def ci_baslat(gp, rp: str, n: int) -> str:
             f"{gp._base_url}/api/v1/repos/{rp}/pulls/{n}", headers=gp._headers(), timeout=30.0
         )
         r.raise_for_status()
-        head = r.json().get("head") or {}
+        pr = r.json()
+        head = pr.get("head") or {}
         sha, dal = head.get("sha", ""), head.get("ref", "")
+        # dev.yml scans origin/<base>..HEAD; without it the workflow falls back to the default
+        # branch, which on a PR into a project branch also scans that branch's merged commits
+        taban = (pr.get("base") or {}).get("ref", "")
         # No workflow on the PR branch: the repo has no CI kit yet, nothing to start or warn about
         r = await gp._client.get(
             f"{gp._base_url}/api/v1/repos/{rp}/contents/.gitea/workflows/{CI_WORKFLOW}",
@@ -78,7 +82,7 @@ async def ci_baslat(gp, rp: str, n: int) -> str:
         r = await gp._client.post(
             f"{gp._base_url}/api/v1/repos/{rp}/actions/workflows/{CI_WORKFLOW}/dispatches",
             headers=gp._headers(),
-            json={"ref": dal, "inputs": {"sha": sha}},
+            json={"ref": dal, "inputs": {"sha": sha, **({"base": taban} if taban else {})}},
             timeout=30.0,
         )
         if r.status_code != 204:

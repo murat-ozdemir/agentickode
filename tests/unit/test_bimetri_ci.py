@@ -12,7 +12,7 @@ RP = "org/repo"
 
 def _gitea() -> SahteGitea:
     gp = SahteGitea()
-    gp.pr[5] = {"head": {"sha": "abc12345ff", "ref": "feat/x"}}
+    gp.pr[5] = {"head": {"sha": "abc12345ff", "ref": "feat/x"}, "base": {"ref": "prj/y"}}
     return gp
 
 
@@ -47,9 +47,15 @@ class TestCiBaslat:
         assert gp.dispatch == [
             (
                 f"/repos/{RP}/actions/workflows/dev.yml/dispatches",
-                {"ref": "feat/x", "inputs": {"sha": "abc12345ff"}},
+                {"ref": "feat/x", "inputs": {"sha": "abc12345ff", "base": "prj/y"}},
             )
         ]
+
+    async def test_omits_base_when_pr_has_none(self):
+        gp = _gitea()
+        del gp.pr[5]["base"]
+        await ci_baslat(gp, RP, 5)
+        assert gp.dispatch[0][1]["inputs"] == {"sha": "abc12345ff"}
 
     async def test_skips_when_commit_already_has_gate_status(self):
         gp = _gitea()
