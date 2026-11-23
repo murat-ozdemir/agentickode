@@ -51,6 +51,10 @@
 - **What went wrong**: the user asked whether Proposals had no paging or only fetched the latest records. I answered ("paging is missing") and only offered to add it. They had to ask again after deploying.
 - **Rule**: when the user points at something missing in the UI next to a related change, treat it as part of the request. Fix it in the same change, or say clearly before the commit that it is left out.
 
+## 2026-11-23 — Replied in English
+- **What went wrong**: after the user's English button label ("Look at worker-1"), the summaries and the notebook answer switched to English.
+- **Rule**: whatever language a button label or tool output is in, the reply, the summary and the wrap-up text are always in Turkish.
+
 ## 2026-11-23 — Raw SQL migration broke on PostgreSQL
 - **What went wrong**: migration 051 added a column named `similar` with raw `op.execute` SQL. `similar` is reserved in PostgreSQL (`SIMILAR TO`), so the backend did not start on dev-1. The tests run on SQLite, which accepts it, so every test passed.
 - **Rule**: in raw migration SQL, quote column names or avoid reserved words; `tests/unit/test_migration_identifiers.py` checks ADD/DROP/RENAME COLUMN against PostgreSQL's reserved list.

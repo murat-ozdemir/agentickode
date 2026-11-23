@@ -92,3 +92,14 @@ async def collect(adapter: Any, run_id: int) -> dict[str, Any] | None:
     except Exception:
         logger.warning("graph call log of run %s not collected", run_id, exc_info=True)
         return None
+
+
+async def discard_stale(adapter: Any, run_id: int) -> int:
+    """Remove what an earlier, cut attempt of the run left in its log; the calls removed.
+
+    A backend restart stops a run before ``collect``; the run starts again from the top and its
+    next call would read both attempts' lines as one (run #312: two context packs, 205k sent
+    against 171k of files). Called before the context pack, so the attempt starts clean.
+    """
+    stale = await collect(adapter, run_id)
+    return int(stale["calls"]) if stale else 0

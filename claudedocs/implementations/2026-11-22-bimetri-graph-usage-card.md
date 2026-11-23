@@ -69,3 +69,7 @@ saving. Savings are estimates.
 - A Claude run that reaches `--max-turns` ends without a result; the run outcome is a short
   "tur tavanına ulaştı" note and the work may be half done. Raise `MAX_TURNS_IMPLEMENT` if it
   shows up.
+- A backend restart cuts a running run before `collect`; the run starts again and, before
+  2026-11-23, its next call read both attempts' log as one (run #312: 205k sent against 171k of
+  files). `discard_stale` now drops the leftover before the context pack and logs how many calls.
+  `scripts/bimetri/pull-restart.sh` waits for running runs before restarting.

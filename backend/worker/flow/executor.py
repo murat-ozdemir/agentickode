@@ -30,7 +30,7 @@ from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
 from backend.worker.flow._bimetri_agent_rules import FIX_RULES, TEST_RULES
 from backend.worker.flow._bimetri_graph_calls import collect as graph_calls
-from backend.worker.flow._bimetri_graph_calls import run_env
+from backend.worker.flow._bimetri_graph_calls import discard_stale, run_env
 from backend.worker.flow._bimetri_graph_pack import context_pack, task_text
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
 from backend.worker.flow._bimetri_iptal import was_cancelled
@@ -384,6 +384,11 @@ async def execute_flow_prompt(
         await ensure_agent_ready(
             resolved.adapter, log_fn=_agent_log, agent_settings=resolved.agent_settings
         )
+
+        # bimetri patch: graph calls of an attempt a restart cut are not this attempt's
+        _stale = await discard_stale(resolved.adapter, run.id)
+        if _stale:
+            await _agent_log(f"Yarıda kalan önceki denemenin {_stale} graf çağrısı ölçümden atıldı")
 
         # bimetri patch (graf tasarruf planı Faz 2): graph_continue and its code, in the prompt
         _root = review_cwd or (run.workspace_path if flow.agent_mode == "task" else None)

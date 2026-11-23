@@ -98,3 +98,15 @@ class TestInvocationRecord:
             None,
         )
         assert "graph" not in session.add.call_args.args[0].metadata_
+
+
+class TestDiscardStale:
+    async def test_a_cut_attempts_lines_are_removed_and_counted(self):
+        ssh = SimpleNamespace(run_command=AsyncMock(return_value=(LOG, "", 0)))
+        assert await gc.discard_stale(SimpleNamespace(_ssh=ssh), 312) == 5
+        assert 'rm -f "$f"' in ssh.run_command.await_args.args[0]
+
+    async def test_nothing_left_or_no_ssh_is_zero(self):
+        ssh = SimpleNamespace(run_command=AsyncMock(return_value=("", "", 0)))
+        assert await gc.discard_stale(SimpleNamespace(_ssh=ssh), 312) == 0
+        assert await gc.discard_stale(SimpleNamespace(), 312) == 0
