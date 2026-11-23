@@ -11,7 +11,7 @@ import pytest
 from backend.models import ProjectConfig
 from backend.services.adapters.cli_adapter import CLIAdapter
 from backend.services.workspace.usernames import UsernameError
-from backend.worker.steps.agent_step import run_agent_step
+from backend.worker.steps.agent_step import MAX_TURNS, max_turns_for, run_agent_step
 
 
 def _make_resolved(adapter):
@@ -286,6 +286,37 @@ class TestAgentStep:
 
         assert "claude --effort max --print" in str(adapter._commands["generate"])
         assert "--model" not in str(adapter._commands["generate"])
+
+    @pytest.mark.parametrize(("agent", "flag"), [("claude", True), ("codex", False)])
+    async def test_turn_cap_is_a_claude_flag(
+        self, db_session, mock_services, make_task_run, agent, flag
+    ):
+        project = ProjectConfig(
+            project_id=f"proj-mt-{agent}", project_slug=f"mt{agent}", repo_owner="o", repo_name="r"
+        )
+        db_session.add(project)
+        run = make_task_run(project_id=f"proj-mt-{agent}")
+        db_session.add(run)
+        await db_session.commit()
+
+        ssh = MagicMock()
+        ssh.username = "root"
+        adapter = CLIAdapter(ssh_service=ssh, agent_name=agent, worker_user="coder")
+        adapter.generate = AsyncMock(return_value="ok")  # type: ignore[method-assign]
+        mock_services.agent_resolver.resolve_agent = AsyncMock(return_value=_make_resolved(adapter))
+
+        await run_agent_step(
+            run, db_session, mock_services, {"max_turns": 40, "params": {"prompt": "x"}}
+        )
+
+        assert ("--max-turns 40" in str(adapter._commands["generate"])) is flag
+
+    def test_turn_cap_per_flow_type_and_its_override(self):
+        assert max_turns_for("implement", {}) == MAX_TURNS["implement"]
+        assert max_turns_for("pr_review", {"MAX_TURNS_PR_REVIEW": "25"}) == 25
+        assert max_turns_for("implement", {"MAX_TURNS_IMPLEMENT": "0"}) is None
+        assert max_turns_for("implement", {"MAX_TURNS_IMPLEMENT": "x"}) == MAX_TURNS["implement"]
+        assert max_turns_for("other", {}) is None
 
     async def test_run_as_restored_even_when_call_raises(
         self, db_session, mock_services, make_task_run

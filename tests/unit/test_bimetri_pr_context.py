@@ -81,6 +81,26 @@ class TestPrDiscussion:
         assert "AI Test Raporu" not in text
         assert "null kontrolu eksik" in text
 
+    async def test_keeps_only_the_newest_report_of_each_kind(self):
+        gp = SahteGitea()
+        gp.yanitlar[f"/repos/{RP}/issues/10/comments"] = (
+            200,
+            [
+                _comment(1, "2026-11-19T10:00:00+03:00", "## AI Test Raporu\neski rapor"),
+                _comment(2, "2026-11-19T11:00:00+03:00", "## Koşu durdu: [#5](u)\neski"),
+                _comment(3, "2026-11-19T12:00:00+03:00", "## AI Test Raporu\nyeni rapor"),
+                _comment(4, "2026-11-19T12:30:00+03:00", "## Notlar\nbir", user="mozdemir"),
+                _comment(5, "2026-11-19T13:00:00+03:00", "## Notlar\niki", user="mozdemir"),
+            ],
+        )
+        gp.yanitlar[f"/repos/{RP}/pulls/10/reviews"] = (200, [])
+
+        text = await pr_discussion(gp, RP, 10, TRIGGER)
+
+        assert "eski rapor" not in text and "yeni rapor" in text
+        assert "## Koşu durdu" in text  # the only one of its kind stays
+        assert "bir" in text and "iki" in text  # human comments all stay
+
     async def test_returns_empty_when_api_fails(self):
         gp = SahteGitea()
         gp.yanitlar[f"/repos/{RP}/issues/10/comments"] = (500, {})

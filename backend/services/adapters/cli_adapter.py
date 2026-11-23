@@ -27,6 +27,9 @@ from backend.services.adapters.cli_wrappers import (
 if TYPE_CHECKING:
     from backend.services.workspace.command_executor import CommandExecutor
 
+MAX_TURNS_REACHED = (
+    "Ajan tur tavanına ulaştı ({turns} tur) ve sonucunu yazmadan durdu; iş yarım kalmış olabilir."
+)
 logger = logging.getLogger("agentickode.adapters.cli")
 
 # Type alias for the optional log callback
@@ -155,6 +158,9 @@ class CLIAdapter:
         result = data.get("result")
         if isinstance(result, str):
             return result
+        # bimetri patch (graf tasarruf planı, Faz 2): --max-turns ends the call without a result
+        if data.get("subtype") == "error_max_turns":
+            return MAX_TURNS_REACHED.format(turns=data.get("num_turns"))
         return raw_stdout
 
     def apply_command_overrides(self, overrides: dict[str, str]) -> None:

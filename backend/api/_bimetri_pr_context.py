@@ -9,6 +9,7 @@ Without this the fix agent only sees the triggering comment, so a request like
 """
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger("agentickode.webhooks.pr_context")
@@ -25,6 +26,27 @@ FINDINGS_RULE = (
     "kullanici istedi. Bir maddeyi yapamiyorsan (repoda olmayan bilgi ya da urun karari "
     "gerekiyorsa) son mesajinda o madde icin nedenini yaz."
 )
+
+
+# bimetri patch (graf tasarruf planı, Faz 2): platform reports repeat on every run (test report,
+# review, fix outcome, stop notice); only the latest of each kind goes to the agent. Run #289 sent
+# the whole PR history (26k chars) on each of its turns.
+_REPORT = re.compile(
+    r"## (AI Test Raporu|AI Kod İncelemesi|AI Kod Incelemesi|Düzeltme|Koşu durdu|CI )"
+)
+
+
+def report_kind(body: str) -> str | None:
+    """The kind of a platform report comment, None for anything else (human comments)."""
+    match = _REPORT.match(body)
+    return match[1] if match else None
+
+
+def _latest_reports_only(entries: list[tuple[str, str, str]]) -> list[str]:
+    """Texts in time order; of each report kind only the newest stays."""
+    entries = sorted(entries, key=lambda e: e[0])
+    newest = {kind: i for i, (_, kind, _) in enumerate(entries) if kind}
+    return [text for i, (_, kind, text) in enumerate(entries) if not kind or newest[kind] == i]
 
 
 async def _get_json(provider: Any, url: str) -> Any:
@@ -64,7 +86,8 @@ async def _review_entries(
 
 
 async def pr_discussion(provider: Any, repo_path: str, pr_number: int, trigger: dict) -> str:
-    """Comments and reviews written before the triggering comment, oldest first.
+    """Comments and reviews written before the triggering comment, oldest first; of the
+    platform's own reports only the newest of each kind.
 
     ``trigger`` is the webhook's comment object. Oldest entries are dropped first
     when the text exceeds ``MAX_CONTEXT_CHARS``. Returns "" when nothing was fetched.
@@ -72,22 +95,24 @@ async def pr_discussion(provider: Any, repo_path: str, pr_number: int, trigger: 
     api = f"{provider._base_url}/api/v1/repos/{repo_path}"
     before_id = int(trigger.get("id") or 0)
     before_time = trigger.get("created_at") or ""
-    entries: list[tuple[str, str]] = []
+    entries: list[tuple[str, str, str]] = []
     try:
         comments = await _get_json(provider, f"{api}/issues/{pr_number}/comments") or []
         for c in comments:
             body = (c.get("body") or "").strip()
             if body and (not before_id or int(c.get("id") or 0) < before_id):
                 when = c.get("created_at") or ""
-                entries.append((when, f"### {_author(c)} — {when}\n\n{body}"))
+                text = f"### {_author(c)} — {when}\n\n{body}"
+                entries.append((when, report_kind(body) or "", text))
     except Exception:
         logger.warning("PR comments unavailable (%s#%s)", repo_path, pr_number, exc_info=True)
     try:
-        entries += await _review_entries(provider, api, pr_number, before_time)
+        reviews = await _review_entries(provider, api, pr_number, before_time)
+        entries += [(when, "", text) for when, text in reviews]
     except Exception:
         logger.warning("PR reviews unavailable (%s#%s)", repo_path, pr_number, exc_info=True)
 
-    texts = [text for _, text in sorted(entries, key=lambda e: e[0])]
+    texts = _latest_reports_only(entries)
     while texts and sum(len(t) for t in texts) > MAX_CONTEXT_CHARS:
         texts.pop(0)
     return "\n\n".join(texts)

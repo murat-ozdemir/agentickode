@@ -85,6 +85,7 @@ bundle() {
   cat scripts/bimetri/_graph_budget.py
   cat scripts/bimetri/_graph_calls.py
   grep -v '# bundle: drop$' scripts/bimetri/_graph_flow.py
+  grep -v '# bundle: drop$' scripts/bimetri/_graph_pack.py
   grep -v '# bundle: drop$' scripts/bimetri/_graph_flow_server.py
 }
 as_worker="runuser -u $worker_user -- python3 -c $(printf %q "$program")"

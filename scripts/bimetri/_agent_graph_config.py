@@ -42,35 +42,27 @@ CLAUDE_ENV = {
 }
 POLICY_START, POLICY_END = f"<!-- {NAME}: start -->", f"<!-- {NAME}: end -->"
 # Modelled on the Dual-Graph context policy (graph_continue first, then capped fallbacks).
-POLICY = f"""## Kod grafiği akışı (`{NAME}`)
+POLICY = f"""## Kod grafiği (`{NAME}`)
 
-Bu makinede `{NAME}` MCP sunucusu deponun kod grafiğini sunar. Kodu keşfederken bu sırayı izle:
+Kodu keşfederken:
+1. Prompt'ta "Kod grafiği bağlam paketi" varsa `graph_continue` çalıştırılmıştır, oradan başla.
+   Yoksa önce `graph_continue` çağır (görev, sınıf ve metot adlarıyla); ondan önce başka araç yok.
+2. Önerileri `graph_read` ile tek tek oku; `why`'daki `[read: ~N chars]` maliyettir, gerekmeyeni
+   atla. Büyük dosya ana hat olarak gelir; kodu `yol::Sembol` ya da `yol:BAŞ-SON` ile iste.
+   Dosyayı Read ya da `cat`/`sed` ile baştan sona okuma; düzenleyeceğin yer için Read'i offset
+   ve kısa limitle kullan.
+3. `graph_read` ve `graph_callers` yanıt başına 6.000, çağrı başına 60.000 karakter gönderir.
+   Gönderilmiş kod yeniden gelmez; bağlamında yoksa aynı çağrıyı tekrarla. `budget_exhausted`
+   gelirse elindekiyle yaz.
+4. Kullanım yerlerini grep ile değil `graph_callers` ile bul.
+5. Öneriler yetmezse en çok `max_supplementary_greps` arama (`fallback_rg`, Grep, Glob,
+   `rg`/`grep`/`find`) ve `max_supplementary_files` ek dosya; sonra yazmaya geç. Hak bitince ilk
+   arama reddedilir; gerçekten gerekiyorsa tekrarla.
+6. Sınırlar yalnızca keşif içindir; düzenleme, derleme, test ve git serbest.
+7. Her tur tüm bağlamı yeniden gönderir; derleme ve test çıktısını kısa tut: `mvn -q`,
+   `./mvnw -q`, uzun çıktıda `2>&1 | tail -n 60`. Hatada yalnızca ilgili kısmı oku.
 
-1. Her görevin ya da yeni bir alt görevin başında önce `graph_continue` çağır; görevi kendi
-   sözlerinle, ilgili sınıf ve metot adlarıyla yaz. Ondan önce başka araç kullanma.
-2. `recommended_files` içindeki girdileri `graph_read` ile oku, her dosya için ayrı çağrı;
-   `why` her girdinin okuma maliyetini (`[read: ~N chars]`) yazar, gerekmeyeni atla.
-   `yol::Sembol` yalnızca o sembolün satırlarını getirir. `yol:SATIR` bir kullanım yeridir: `why`
-   o satırın kodunu zaten gösterir; yetmezse `graph_read yol:SATIR` çevresindeki satırları verir.
-   Büyük bir dosya ana hatlarıyla gelir (tip ve metotlar, satır aralıklarıyla); kodu
-   `yol::Sembol` ya da `yol:BAŞ-SON` ile oku. Çağıran metodun tamamını okuma. Dosyaları Read
-   ya da `cat`/`sed` ile baştan sona okuma; düzenleyeceğin yer için Read'i offset ve kısa
-   limit ile kullan.
-3. Okuma bütçesi: bir ajan çağrısında `graph_read` ve `graph_callers` bir yanıtta en çok 6.000,
-   toplamda 60.000 karakter gönderir; her yanıt kalanı yazar. Daha önce gönderilen kod yeniden
-   gönderilmez, hangi çağrıda gittiği söylenir; bağlamında yoksa aynı çağrıyı tekrarla.
-   `budget_exhausted` gelirse elindekiyle değişikliği yaz.
-4. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil:
-   her kullanımı dosya, satır ve o satırdaki kodla verir.
-5. `confidence` ne olursa olsun önerilenler yetmezse en çok `max_supplementary_greps` kez
-   `fallback_rg` çağır ve en çok `max_supplementary_files` ek dosya oku; sonra dur, yazmaya geç.
-   `high` ise önerilen dosyalarla yetinmeye çalış. Arama sınırı Grep, Glob ve kabukta
-   `rg`/`grep`/`find` ile yapılan aramaları da kapsar: hak bitince ilk arama reddedilir;
-   gerçekten gerekiyorsa (ör. listenin tam olduğunu doğrulamak) tekrarla, geçer.
-6. Sınırlar yalnızca keşif içindir: değiştireceğin dosyayı okumak, düzenleme, derleme, test ve
-   git komutları serbest.
-
-Grafik son temiz commit'e göredir; senin yaptığın değişiklikler grafikte yoktur."""
+Grafik son temiz commit'e göredir; senin değişikliklerin grafikte yoktur."""
 _CODEX_TABLE = re.compile(r"^\[mcp_servers\.(?:\"bimetri-graph\"|bimetri-graph)[.\]]")
 
 

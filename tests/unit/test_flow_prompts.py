@@ -90,8 +90,19 @@ class TestFetchFlowData:
         data = await fetch_flow_data(run, db_session, mock_services, flow)
         assert "repo_context" in data
         assert data["repo_context"]["repo"] == "o/r"
-        assert "issue_body" in data
+        assert data["repo_context"]["description"] == "D"
+        # The description is sent once, in repo_context; no issue_body copy of it.
+        assert "issue_body" not in data
         assert "bogus_source" not in data  # unknown skipped, not fatal
+
+    async def test_issue_body_from_meta_is_sent(
+        self, db_session, mock_services, make_task_run, seed_proj1
+    ):
+        run = make_task_run(description="D", task_source_meta={"issue_body": "B"})
+        db_session.add(run)
+        await db_session.commit()
+        flow = SimpleNamespace(flow_type="implement", extra_data_sources=[])
+        assert (await fetch_flow_data(run, db_session, mock_services, flow))["issue_body"] == "B"
 
 
 class TestComposePrompt:
@@ -103,3 +114,6 @@ class TestComposePrompt:
         assert out.startswith("hello")
         assert "Context (fetched by AgenticKode)" in out
         assert "o/r" in out
+
+    def test_keeps_turkish_characters_unescaped(self):
+        assert "Düzeltme" in _compose_prompt("p", {"x": "Düzeltme"})

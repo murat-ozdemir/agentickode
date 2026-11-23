@@ -90,6 +90,11 @@ class TestClaudeUsage:
         assert got["cache_read_input_tokens"] == 20_000
         assert got["cache_creation_input_tokens"] == 1_000
 
+    def test_reaching_the_turn_cap_gives_a_readable_message(self):
+        adapter = CLIAdapter(AsyncMock(), "claude")
+        out = {"type": "result", "subtype": "error_max_turns", "num_turns": 81, "usage": {}}
+        assert "81 tur" in adapter._parse_json_output(json.dumps(out))
+
 
 class TestCodexShellReads:
     def test_counts_commands_that_print_a_source_file(self):

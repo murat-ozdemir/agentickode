@@ -7,7 +7,7 @@ long as one agent call, so its Ledger is that call's:
   SMALL_CHARS go through (a use site, a short range, a small method); larger ones get
   `budget_exhausted`. Every answer ends with what is left.
 - dedupe: code already sent (same file, unchanged on disk) is not sent again; a short note names
-  the call that sent it. The same request right after that note is served (the agent's context
+  the call that sent it, call 0 being the prompt's context pack (_graph_pack.py). The same request right after that note is served (the agent's context
   may have been compacted), as the search gate does after its first refusal.
 """
 
@@ -19,7 +19,7 @@ BUDGET_EXHAUSTED = (
     "path:START-END (about 30 lines) or a small path::Symbol. Write the change with what you have."
 )
 ALREADY_SENT = (
-    "{target}: already sent by graph call #{call} and unchanged since; use that text. If it is "
+    "{target}: already sent {where} and unchanged since; use that text. If it is "
     "no longer in your context, call again with the same argument."
 )
 
@@ -50,7 +50,8 @@ class Ledger:
         if call is None or target in self.noted:
             return None
         self.noted.add(target)
-        return ALREADY_SENT.format(target=target, call=call)
+        where = "in the prompt's context pack" if call == 0 else f"by graph call #{call}"
+        return ALREADY_SENT.format(target=target, where=where)
 
     def send(self, text: str, key, ranges: "list | None" = None) -> str:
         """text with the budget line, or BUDGET_EXHAUSTED; records what went out."""

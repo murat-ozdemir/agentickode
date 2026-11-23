@@ -174,6 +174,7 @@ class TestInvocationRecord:
         assert inv.metadata_ == {
             "model": "m",
             "bimetri": True,
+            "last_message": "final",
             "cached_input_tokens": 100_000,
             "codex_credits": 1.125,
             "billing": "chatgpt",

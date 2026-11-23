@@ -4,6 +4,31 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-23 — bimetri: context pack, previous attempt, turn cap (fork, graf tasarruf planı Faz 2)
+
+**Tests**: graph pack/flow/budget/gate/mcp/config/calls, agent step, flow prompts, PR context,
+previous run, run tokens and Codex unit tests passing (198); ruff, pyright clean on the edited
+files. Full suites not run
+
+- `scripts/bimetri/_graph_pack.py` (new), `_graph_flow_server.py`, `_agent_graph_mcp.py`,
+  `agent-graph-mcp.sh` — `agent_graph.py pack graphify ROOT` prints graph_continue's answer and
+  the code of up to 5 entries plus callers (≤ 15k chars); writes `pack/<run>.json` and
+  `gate/run-<run>`
+- `scripts/bimetri/_graph_budget.py`, `_graph_calls.py`, `_agent_graph_gate.py` — the pack counts
+  as call 0 for dedupe and as graph_continue for the grep budget and the Claude gate
+- `backend/worker/flow/_bimetri_graph_pack.py` (new), `executor.py` — the pack is appended to the
+  prompt before the agent call ("" on any failure)
+- `backend/worker/flow/_bimetri_previous_run.py` (new), `executor.py` — implement runs get the
+  last agent call of the same task_id (files, error, end of its last message, ≤ 1.5k);
+  invocation metadata keeps `last_message`
+- `backend/worker/steps/agent_step.py`, `cli_adapter.py` — Claude `--max-turns` (implement 80,
+  pr_review 40, `MAX_TURNS_<TYPE>` override); the cap's result becomes a readable note
+- `scripts/bimetri/_agent_graph_config.py`, `_graph_flow_server.py` — policy ~2.5k → ~1.4k
+  characters with the pack and quiet build rules; shorter tool descriptions
+- `backend/worker/flow/data_sources.py` — issue body sent only when it differs from the
+  description; prompt data JSON keeps Turkish letters (`ensure_ascii=False`)
+- `backend/api/_bimetri_pr_context.py` — PR discussion keeps only the newest bot report of each kind
+
 ## 2026-11-23 — bimetri: graph reading budget, outline and dedupe (fork, graf tasarruf planı Faz 1)
 
 **Tests**: graph read/budget/flow/gate/shell/config/mcp unit tests, run tokens + Codex unit and

@@ -42,6 +42,16 @@ class TestFirstCall:
         assert call(tmp_path, "pre", "Edit") == 0
         assert call(tmp_path, "pre", "Edit", session="other") == 2
 
+    def test_the_runs_context_pack_counts_as_graph_continue(self, tmp_path, monkeypatch):
+        (tmp_path / "gate").mkdir()
+        (tmp_path / "gate" / "run-77").write_text("0")
+        monkeypatch.setenv("BIMETRI_RUN_ID", "78")
+        assert call(tmp_path, "pre", "Edit") == 2  # another run's pack
+        monkeypatch.setenv("BIMETRI_RUN_ID", "77")
+        assert call(tmp_path, "pre", "Edit") == 0
+        # The pack's grep budget (0) carries over: the first search is refused.
+        assert call(tmp_path, "pre", "Grep") == 2
+
     def test_session_id_cannot_leave_the_gate_dir(self, tmp_path):
         assert call(tmp_path, "mark", FIRST, session="../../x") == 0
         assert [p.name for p in (tmp_path / "gate").iterdir()] == ["x.ok"]

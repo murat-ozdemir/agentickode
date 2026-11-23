@@ -45,9 +45,14 @@ async def _repo_context(run: TaskRun, session: AsyncSession, services: ServiceCo
 
 
 async def _issue_body(run: TaskRun, session: AsyncSession, services: ServiceContainer) -> Any:
-    """The originating issue/task body, if captured in task_source_meta."""
+    """The originating issue/task body, if captured in task_source_meta.
+
+    bimetri patch (graf tasarruf planı, Faz 2): no fallback to ``run.description``; repo_context
+    already carries it, and the copy doubled the prompt (fix run #289: 2 x 26k chars).
+    """
     meta = run.task_source_meta or {}
-    return meta.get("issue_body") or meta.get("body") or run.description
+    body = meta.get("issue_body") or meta.get("body")
+    return None if body == run.description else body
 
 
 async def _pr_diff(run: TaskRun, session: AsyncSession, services: ServiceContainer) -> Any:
@@ -86,7 +91,10 @@ async def fetch_flow_data(
             logger.warning("Unknown flow data source %r — skipping", name)
             continue
         try:
-            data[name] = await fetcher(run, session, services)
+            value = await fetcher(run, session, services)
         except Exception:
             logger.warning("Flow data source %r failed — skipping", name, exc_info=True)
+            continue
+        if value is not None:  # bimetri patch: an empty source is not sent to the agent
+            data[name] = value
     return data

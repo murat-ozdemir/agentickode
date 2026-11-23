@@ -10,6 +10,8 @@ agent-graph-mcp.sh ships this file first in the worker program; `mode graphify` 
            shell) is denied once per file with a pointer to graph_read's outline; the same read
            again goes through (graf tasarruf planı Faz 1).
     mark   after graph_continue: write its max_supplementary_greps to the session's marker.
+A context pack in the prompt (_graph_pack.py, gate/run-<BIMETRI_RUN_ID>) counts as graph_continue:
+the session's marker starts from the pack's grep budget (graf tasarruf planı Faz 2).
 Stdlib only.
 """
 
@@ -17,6 +19,7 @@ Stdlib only.
 
 import fcntl
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -145,6 +148,10 @@ def gate(step: str, payload: str, marker_dir: Path) -> int:
     tool = str(event.get("tool_name", ""))
     if tool in (GATE_FIRST, *GATE_OPEN):
         return 0
+    run = re.sub(r"\D", "", os.environ.get("BIMETRI_RUN_ID", ""))
+    packed = marker_dir / f"run-{run}"
+    if not marker.exists() and run and packed.exists():
+        marker.write_text(packed.read_text())  # the context pack ran graph_continue
     if not marker.exists():
         print(GATE_DENY.format(tool=tool), file=sys.stderr)
         return 2

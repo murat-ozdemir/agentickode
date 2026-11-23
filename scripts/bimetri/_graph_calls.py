@@ -59,6 +59,8 @@ def pointed_at(name: str, args: dict, text: str) -> list:
         return [_path(str(args.get("file", "")))]
     if name == "graph_callers":
         return _SITE.findall(text)
+    if name == "context_pack":  # the entries whose code the pack sent
+        return [_path(str(e)) for e in args.get("files", [])]
     if name == "graph_continue":
         try:
             return [_path(str(e)) for e in json.loads(text).get("recommended_files", [])]

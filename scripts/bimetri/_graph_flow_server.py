@@ -3,6 +3,7 @@
 agent-graph-mcp.sh appends this file to _graph_flow.py (dropping the `# bundle: drop` lines) and
 installs the result as graph_flow.py; serve runs it with the Graphify venv's python (-I):
     python -I graph_flow.py GRAPH_JSON ROOT
+    python -I graph_flow.py GRAPH_JSON ROOT --pack     (task on stdin; prints the context pack)
 Uses Graphify's private loader and scorer (graphify.serve), pinned by the Graphify lock file.
 The graph is reloaded whenever graph.json changes on disk. Before the first build there is no
 graph.json: the server still answers, and graph_continue says so with the low-confidence caps.
@@ -17,30 +18,27 @@ from typing import Any
 from _graph_budget import Ledger  # bundle: drop
 from _graph_calls import Recorder, run_id  # bundle: drop
 from _graph_flow import CAPS, OUTPUT_LINES, callers, continue_flow  # bundle: drop
+from _graph_pack import adopt, build, save  # bundle: drop
 from _graph_reply import read_part  # bundle: drop
 
 TOOLS = {
     "graph_continue": (
-        "Call first, once per task or subtask. Returns recommended_files (path or path::Symbol) "
-        "with why each matters, confidence, and how many fallback_rg calls / extra files the "
-        "task allows.",
-        {"task": "the task in your own words, with the class/method names it involves"},
+        "Call first per task (skip if the prompt has the context pack). Returns recommended "
+        "entries with why, confidence and the fallback_rg / extra file caps.",
+        {"task": "the task with the class/method names it involves"},
     ),
     "graph_read": (
-        "Read one recommended entry: a file (a large one comes as an outline of its types and "
-        "methods with line ranges), one symbol's lines (path::Symbol), or the lines around a use "
-        "site (path:LINE, or path:START-END). At most 6,000 characters per answer and 60,000 per "
-        "agent call; code already sent is not sent again.",
+        "Read an entry: path (large files as an outline), path::Symbol, path:LINE or "
+        "path:START-END. 6k chars per answer, 60k per agent call; no resends.",
         {"file": "repo-relative path, optionally ::Symbol or :LINE"},
     ),
     "graph_callers": (
-        "Every call, reference, implementation and import of a symbol, with file, line and the "
-        "statement at that line; usually enough to edit without reading the caller.",
-        {"symbol": "Symbol, Class.Symbol, Class::Symbol or path::Symbol"},
+        "Every use of a symbol with file, line and statement.",
+        {"symbol": "Symbol, Class.Symbol or path::Symbol"},
     ),
     "fallback_rg": (
-        "ripgrep in the clone, after graph_continue; keep to its max_supplementary_greps.",
-        {"pattern": "a ripgrep regex", "glob": "optional file glob, e.g. *.java"},
+        "ripgrep in the clone; keep to max_supplementary_greps.",
+        {"pattern": "ripgrep regex", "glob": "optional glob, e.g. *.java"},
     ),
 }
 BUILDING = (
@@ -169,7 +167,20 @@ def build_server(flow: Flow, record=None):
     )
 
 
-def main(graph_path: Path, root: Path) -> int:
+def pack(flow: Flow, task: str, record, base: Path, run: "str | None") -> int:
+    """Print the context pack for task (_graph_pack.py); prints nothing without a graph."""
+    if not flow.graph_path.exists() or not task.strip():
+        return 0
+    graph = flow.graph()
+    text, sent = build(graph, task, flow.root, lambda t: flow.score(graph, t))
+    if text:
+        save(base, run, sent)
+        record("context_pack", {"files": sent["files"]}, text, False)
+        print(text)
+    return 0
+
+
+def main(graph_path: Path, root: Path, mode: str = "") -> int:
     import anyio
     from graphify.serve import (  # pyright: ignore[reportMissingImports]
         _load_graph,
@@ -179,9 +190,14 @@ def main(graph_path: Path, root: Path) -> int:
     from mcp.server.stdio import stdio_server  # pyright: ignore[reportMissingImports]
 
     flow = Flow(graph_path, root, _load_graph, scorer(_score_nodes, _query_terms))
+    base, run = Path(__file__).resolve().parent, run_id()
+    record = Recorder(root, run, base / "calls")
+    if mode == "--pack":
+        return pack(flow, sys.stdin.read(), record, base, run)
     if graph_path.exists():
         flow.graph()
-    record = Recorder(root, run_id(), Path(__file__).resolve().parent / "calls")
+    if run:  # what the run's context pack already sent, and its grep budget
+        flow.greps = adopt(flow.ledger, base / "pack" / f"{run}.json")
     server = build_server(flow, record)
 
     async def run() -> None:
@@ -193,4 +209,4 @@ def main(graph_path: Path, root: Path) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(Path(sys.argv[1]), Path(sys.argv[2]).resolve()))
+    sys.exit(main(Path(sys.argv[1]), Path(sys.argv[2]).resolve(), *sys.argv[3:4]))

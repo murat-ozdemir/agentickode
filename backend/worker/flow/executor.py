@@ -30,10 +30,15 @@ from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
 from backend.worker.flow._bimetri_graph_calls import collect as graph_calls
 from backend.worker.flow._bimetri_graph_calls import run_env
+from backend.worker.flow._bimetri_graph_pack import context_pack, task_text
 from backend.worker.flow._bimetri_hafiza import hafiza_eki
 from backend.worker.flow._bimetri_iptal import was_cancelled
 from backend.worker.flow._bimetri_kapsam import kapsam_eki
 from backend.worker.flow._bimetri_olay import run_event_payload
+from backend.worker.flow._bimetri_previous_run import (
+    LAST_MESSAGE_CHARS,
+    previous_run_section,
+)
 from backend.worker.flow._bimetri_review_clone import (
     REVIEW_ALLOWED_TOOLS,
     REVIEW_CLONE_RULES,
@@ -47,7 +52,7 @@ from backend.worker.phases._helpers import (
     ensure_agent_ready,
     get_workspace_server_id,
 )
-from backend.worker.steps.agent_step import run_agent_step
+from backend.worker.steps.agent_step import max_turns_for, run_agent_step
 
 logger = logging.getLogger("agentickode.flow.executor")
 
@@ -98,6 +103,8 @@ def _bimetri_cagri_kaydi(run, session, agent, phase, t0, result, exc) -> None:
                 metadata_={
                     "model": result.get("model"),
                     "bimetri": True,
+                    # bimetri patch: the next attempt's "previous run" section (_bimetri_previous_run)
+                    **({"last_message": out[-LAST_MESSAGE_CHARS:]} if isinstance(out, str) else {}),
                     # bimetri patch: code graph calls and estimated savings (_bimetri_graph_calls)
                     **({"graph": result["graph"]} if result.get("graph") else {}),
                     # bimetri patch: token breakdown (cache, turns), Codex ChatGPT credits
@@ -113,7 +120,8 @@ def _compose_prompt(prompt: str, data: dict[str, Any]) -> str:
     """Append the fetched data as a context block the agent can read."""
     if not data:
         return prompt
-    block = json.dumps(data, indent=2, default=str)
+    # bimetri patch (Faz 2): Turkish text as is, not \uXXXX (each escape is ~6 chars)
+    block = json.dumps(data, indent=2, default=str, ensure_ascii=False)
     return f"{prompt}\n\n## Context (fetched by AgenticKode)\n```json\n{block}\n```"
 
 
@@ -282,6 +290,8 @@ async def execute_flow_prompt(
                 prompt += await kapsam_eki(run, session, "duzeltme")
         # bimetri yamasi: mem0 proje hafizasi (kapali ya da erisilemezse bos)
         prompt += await hafiza_eki(run)
+        if flow.flow_type != "pr_review":
+            prompt += await previous_run_section(session, run)
 
         run.current_phase = "agent"
         await broadcaster.event(run.id, "phase_changed", {"phase": "agent"})
@@ -382,6 +392,15 @@ async def execute_flow_prompt(
             resolved.adapter, log_fn=_agent_log, agent_settings=resolved.agent_settings
         )
 
+        # bimetri patch (graf tasarruf planı Faz 2): graph_continue and its code, in the prompt
+        _root = review_cwd or (run.workspace_path if flow.agent_mode == "task" else None)
+        _pack = await context_pack(
+            resolved.adapter, run.id, _root, task_text(run.title, run.description)
+        )
+        if _pack:
+            prompt += _pack
+            await _agent_log(f"Kod grafiği bağlam paketi eklendi ({len(_pack):,} karakter)")
+
         # bimetri yamasi: cagri suresi ve sonucu agent_invocations'a
         _ajan = getattr(resolved.adapter, "agent_name", agent_name)
         _t0 = datetime.now(UTC)
@@ -395,6 +414,7 @@ async def execute_flow_prompt(
                     "agent": agent_name,
                     "model": model,
                     "effort": effort or None,
+                    "max_turns": max_turns_for(flow.flow_type, env),
                     # bimetri patch: the graph MCP server logs its calls under this run id
                     "environment_vars": run_env(run.id),
                     "params": {

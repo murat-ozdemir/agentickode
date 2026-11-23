@@ -28,6 +28,19 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 1800
 DEFAULT_MODE = "generate"
+# bimetri patch (graf tasarruf planı, Faz 2): Claude's turn cap per flow type. Every turn re-sends
+# the whole context, so a run that loops costs the most; the agent settings' MAX_TURNS_<TYPE>
+# overrides it, 0 turns it off. Codex has no such flag.
+MAX_TURNS = {"implement": 80, "pr_review": 40}
+
+
+def max_turns_for(flow_type: str, env: dict[str, str]) -> int | None:
+    raw = env.get(f"MAX_TURNS_{flow_type.upper()}")
+    try:
+        turns = int(raw) if raw not in (None, "") else MAX_TURNS.get(flow_type, 0)
+    except ValueError:
+        turns = MAX_TURNS.get(flow_type, 0)
+    return turns if turns > 0 else None
 
 
 def _adapter_kwargs(phase_config: dict[str, Any]) -> dict[str, Any]:
@@ -79,9 +92,9 @@ async def run_agent_step(
     )
     adapter = resolved.adapter
     # bimetri yamasi: etiketten gelen model ve eforu komut sablonuna ekle (runuser sarmalayicisinin icine)
-    if (phase_config.get("model") or phase_config.get("effort")) and isinstance(
-        adapter, CLIAdapter
-    ):
+    if (
+        phase_config.get("model") or phase_config.get("effort") or phase_config.get("max_turns")
+    ) and isinstance(adapter, CLIAdapter):
         import re
         import shlex
 
@@ -94,6 +107,8 @@ async def run_agent_step(
                 "claude": f" --effort {efor}",
                 "codex": f" -c model_reasoning_effort={efor}",
             }.get(adapter.agent_name, "")
+        if phase_config.get("max_turns") and adapter.agent_name == "claude":
+            flag += f" --max-turns {int(phase_config['max_turns'])}"
         pattern = rf"(?<![\w/.-]){re.escape(adapter.agent_name)}( exec)?(?=\s|$)"
         adapter.apply_command_overrides(
             {
