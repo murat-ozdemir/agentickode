@@ -23,6 +23,7 @@ vi.mock("../api", () => ({
     flow_prompt_id: null, parent_run_id: null, execution_mode: "structured", kind: "task",
   }),
   getRunInvocations: vi.fn().mockResolvedValue([]),
+  getRunNotebook: vi.fn().mockResolvedValue({ pr_number: null, entries: [] }),
   getRunLogs: vi.fn().mockResolvedValue([]),
   retryRun: vi.fn(),
   restartRun: vi.fn(),

@@ -42,6 +42,7 @@ from backend.api import (
     projects,
     runs,
     runs_actions,
+    runs_notebook,
     runs_phases,
     scheduled_tasks,
     sse,
@@ -447,6 +448,7 @@ app.include_router(sse.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(runs_actions.router, prefix="/api")
 app.include_router(runs_phases.router, prefix="/api")
+app.include_router(runs_notebook.router, prefix="/api")  # bimetri: chain notebook
 app.include_router(project_instructions.router, prefix="/api")
 app.include_router(project_issues.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")

@@ -2,10 +2,13 @@
 # Licensed under AGPLv3. See LICENSE file.
 # Commercial licensing: info@mechemsi.com
 
-"""bimetri yamasi: give the PR-comment fix run the PR's earlier discussion.
+"""bimetri yamasi: give the PR-comment fix run what was written since the last run.
 
 Without this the fix agent only sees the triggering comment, so a request like
-"fix the findings" refers to review text the agent never receives.
+"fix the findings" refers to review text the agent never receives. Loop efficiency item 7:
+the chain's history (decisions, answers, outcomes) now comes from the chain notebook
+(backend/worker/phases/_bimetri_notebook.py); this section carries only the last run's report
+and the comments and reviews written after it.
 """
 
 import logging
@@ -14,7 +17,8 @@ from typing import Any
 
 logger = logging.getLogger("agentickode.webhooks.pr_context")
 
-MAX_CONTEXT_CHARS = 30000
+ENTRY_CHARS = 12000
+AUTO_MARKER = "<!-- agentickode-oto -->"  # _bimetri_oto.OTO_ISARET: the report is in the trigger
 
 # The fix agent skipped "Oneriler" items and changed nothing because the review said
 # "Birlestirilebilir"; the user asking for a fix is the decision.
@@ -27,26 +31,21 @@ FINDINGS_RULE = (
     "gerekiyorsa) son mesajinda o madde icin nedenini yaz."
 )
 
-
-# bimetri patch (graf tasarruf planı, Faz 2): platform reports repeat on every run (test report,
-# review, fix outcome, stop notice); only the latest of each kind goes to the agent. Run #289 sent
-# the whole PR history (26k chars) on each of its turns.
+# A platform run report (test report, review, fix outcome, stop notice, CI) starts a new round.
 _REPORT = re.compile(
-    r"## (AI Test Raporu|AI Kod İncelemesi|AI Kod Incelemesi|Düzeltme|Koşu durdu|CI )"
+    r"^## (AI Test Raporu|AI Kod İncelemesi|AI Kod Incelemesi|Düzeltme|Koşu durdu|CI )"
 )
 
 
-def report_kind(body: str) -> str | None:
-    """The kind of a platform report comment, None for anything else (human comments)."""
-    match = _REPORT.match(body)
-    return match[1] if match else None
+def is_report(body: str) -> bool:
+    return bool(_REPORT.match(body))
 
 
-def _latest_reports_only(entries: list[tuple[str, str, str]]) -> list[str]:
-    """Texts in time order; of each report kind only the newest stays."""
+def since_last_report(entries: list[tuple[str, bool, str]]) -> list[str]:
+    """Texts in time order from the newest run report on; all of them when there is none."""
     entries = sorted(entries, key=lambda e: e[0])
-    newest = {kind: i for i, (_, kind, _) in enumerate(entries) if kind}
-    return [text for i, (_, kind, text) in enumerate(entries) if not kind or newest[kind] == i]
+    last = max((i for i, (_, report, _) in enumerate(entries) if report), default=0)
+    return [text[:ENTRY_CHARS] for _, _, text in entries[last:]]
 
 
 async def _get_json(provider: Any, url: str) -> Any:
@@ -86,36 +85,33 @@ async def _review_entries(
 
 
 async def pr_discussion(provider: Any, repo_path: str, pr_number: int, trigger: dict) -> str:
-    """Comments and reviews written before the triggering comment, oldest first; of the
-    platform's own reports only the newest of each kind.
+    """The last run's report and the comments and reviews written after it, up to the
+    triggering comment (``trigger``, the webhook's comment object), oldest first.
 
-    ``trigger`` is the webhook's comment object. Oldest entries are dropped first
-    when the text exceeds ``MAX_CONTEXT_CHARS``. Returns "" when nothing was fetched.
+    Returns "" for an automatic round (its trigger carries the report) or when nothing was
+    fetched.
     """
+    if AUTO_MARKER in (trigger.get("body") or ""):
+        return ""
     api = f"{provider._base_url}/api/v1/repos/{repo_path}"
     before_id = int(trigger.get("id") or 0)
     before_time = trigger.get("created_at") or ""
-    entries: list[tuple[str, str, str]] = []
+    entries: list[tuple[str, bool, str]] = []
     try:
         comments = await _get_json(provider, f"{api}/issues/{pr_number}/comments") or []
         for c in comments:
             body = (c.get("body") or "").strip()
             if body and (not before_id or int(c.get("id") or 0) < before_id):
                 when = c.get("created_at") or ""
-                text = f"### {_author(c)} — {when}\n\n{body}"
-                entries.append((when, report_kind(body) or "", text))
+                entries.append((when, is_report(body), f"### {_author(c)} — {when}\n\n{body}"))
     except Exception:
         logger.warning("PR comments unavailable (%s#%s)", repo_path, pr_number, exc_info=True)
     try:
         reviews = await _review_entries(provider, api, pr_number, before_time)
-        entries += [(when, "", text) for when, text in reviews]
+        entries += [(when, False, text) for when, text in reviews]
     except Exception:
         logger.warning("PR reviews unavailable (%s#%s)", repo_path, pr_number, exc_info=True)
-
-    texts = _latest_reports_only(entries)
-    while texts and sum(len(t) for t in texts) > MAX_CONTEXT_CHARS:
-        texts.pop(0)
-    return "\n\n".join(texts)
+    return "\n\n".join(since_last_report(entries))
 
 
 def discussion_section(discussion: str) -> str:
@@ -123,7 +119,8 @@ def discussion_section(discussion: str) -> str:
     if not discussion:
         return ""
     return (
-        "\n\nPR'daki onceki yorumlar ve incelemeler asagida (eskiden yeniye). Yorumdaki "
+        "\n\nSon kosunun raporu ve ondan sonra yazilan yorumlar asagida (eskiden yeniye); "
+        "zincirin onceki kararlari defterdedir. Yorumdaki "
         '"bulgular", "inceleme", "test raporu" gibi atiflar bunlari kasteder. '
         + FINDINGS_RULE
         + "\n\n"

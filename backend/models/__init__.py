@@ -12,6 +12,7 @@ from backend.models.agents import (
 from backend.models.base import Base
 from backend.models.bimetri_agent_quota import AgentQuotaAccount
 from backend.models.bimetri_memory import MemoryProposal
+from backend.models.bimetri_notebook import ChainNotebook
 from backend.models.bimetri_openai import OpenAICredit, OpenAIDailyCost
 from backend.models.chat import ChatSession
 from backend.models.episodes import Episode
@@ -38,6 +39,7 @@ __all__ = [
     "AgentSettings",
     "AppSetting",
     "Base",
+    "ChainNotebook",
     "ChatSession",
     "CliSession",
     "DiscoveredAgent",

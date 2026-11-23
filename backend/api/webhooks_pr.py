@@ -138,7 +138,8 @@ async def gitea_ci_status_webhook(
     from backend.api._bimetri_push import proje_saglayici
     from backend.api._pr_webhook_helpers import read_verified_body
     from backend.worker.phases._bimetri_ci import CI_BAGLAM
-    from backend.worker.phases._bimetri_ci_kirmizi import ci_kirmizi
+    from backend.worker.phases._bimetri_ci_kirmizi import ci_kirmizi, sha_pr
+    from backend.worker.phases._bimetri_notebook_record import record_ci
     from backend.worker.phases._bimetri_time_tracking import parse_time, record_ci_time
 
     body = await read_verified_body(request, settings.gitea_webhook_secret, "X-Gitea-Signature")
@@ -161,6 +162,12 @@ async def gitea_ci_status_webhook(
         )
     except Exception:
         logger.warning("CI time not written %s %s", full, sha[:8], exc_info=True)
+    try:  # bimetri patch: the gate's result goes to the PR's chain notebook (item 7)
+        pr = await sha_pr(gp, full, sha)
+        if pr:
+            await record_ci(db, project.project_id, pr["number"], sha, state == "success")
+    except Exception:
+        logger.warning("CI result not in notebook %s %s", full, sha[:8], exc_info=True)
     if state == "success":
         return {"status": "accepted", "reason": "ci_time"}
     sonuc = await ci_kirmizi(gp, full, sha, body.get("target_url") or "")

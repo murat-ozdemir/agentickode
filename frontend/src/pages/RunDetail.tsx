@@ -12,6 +12,7 @@ import {
   retryRun,
 } from "../api";
 import AgentActivityPanel from "../components/runs/AgentActivityPanel";
+import ChainNotebookPanel from "../components/runs/ChainNotebookPanel";
 import RunCostSummary from "../components/runs/RunCostSummary";
 import ApprovalButtons from "../components/runs/ApprovalButtons";
 import CodingResultsPanel from "../components/runs/CodingResultsPanel";
@@ -202,6 +203,9 @@ export default function RunDetail() {
 
       {/* Agent Activity */}
       <AgentActivityPanel runId={runId} />
+
+      {/* bimetri patch: chain notebook of the run's PR */}
+      <ChainNotebookPanel runId={runId} />
 
       {/* Run results */}
       {run.coding_results && (

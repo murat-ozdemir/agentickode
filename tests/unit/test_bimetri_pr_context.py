@@ -58,10 +58,10 @@ def _gitea_with_discussion() -> SahteGitea:
 
 
 class TestPrDiscussion:
-    async def test_includes_earlier_comments_and_reviews_in_time_order(self):
+    async def test_starts_from_the_last_report_and_keeps_reviews_after_it(self):
         text = await pr_discussion(_gitea_with_discussion(), RP, 10, TRIGGER)
 
-        assert text.index("AI Test Raporu") < text.index("AI Kod Incelemesi")
+        assert "AI Test Raporu" not in text  # older round: the notebook carries it
         assert text.index("AI Kod Incelemesi") < text.index("null kontrolu eksik")
         assert "`A.java:12` null kontrolu eksik" in text
         assert "inceleme (REQUEST_CHANGES)" in text
@@ -73,33 +73,52 @@ class TestPrDiscussion:
         assert "Duzeltme push edildi" not in text
         assert "sonra yazildi" not in text
 
-    async def test_drops_oldest_entries_when_too_long(self, monkeypatch):
-        monkeypatch.setattr(ctx, "MAX_CONTEXT_CHARS", 80)
-
-        text = await pr_discussion(_gitea_with_discussion(), RP, 10, TRIGGER)
-
-        assert "AI Test Raporu" not in text
-        assert "null kontrolu eksik" in text
-
-    async def test_keeps_only_the_newest_report_of_each_kind(self):
+    async def test_keeps_human_comments_after_the_last_report_only(self):
         gp = SahteGitea()
         gp.yanitlar[f"/repos/{RP}/issues/10/comments"] = (
             200,
             [
                 _comment(1, "2026-11-19T10:00:00+03:00", "## AI Test Raporu\neski rapor"),
-                _comment(2, "2026-11-19T11:00:00+03:00", "## Koşu durdu: [#5](u)\neski"),
-                _comment(3, "2026-11-19T12:00:00+03:00", "## AI Test Raporu\nyeni rapor"),
+                _comment(2, "2026-11-19T11:00:00+03:00", "eski not", user="mozdemir"),
+                _comment(3, "2026-11-19T12:00:00+03:00", "## Koşu durdu: [#5](u)\nyeni"),
                 _comment(4, "2026-11-19T12:30:00+03:00", "## Notlar\nbir", user="mozdemir"),
-                _comment(5, "2026-11-19T13:00:00+03:00", "## Notlar\niki", user="mozdemir"),
+                _comment(5, "2026-11-19T13:00:00+03:00", "iki", user="mozdemir"),
             ],
         )
         gp.yanitlar[f"/repos/{RP}/pulls/10/reviews"] = (200, [])
 
         text = await pr_discussion(gp, RP, 10, TRIGGER)
 
-        assert "eski rapor" not in text and "yeni rapor" in text
-        assert "## Koşu durdu" in text  # the only one of its kind stays
-        assert "bir" in text and "iki" in text  # human comments all stay
+        assert "eski rapor" not in text and "eski not" not in text
+        assert text.startswith("### agentickode") and "## Koşu durdu" in text
+        assert "bir" in text and "iki" in text
+
+    async def test_keeps_all_comments_when_no_report_yet(self):
+        gp = SahteGitea()
+        gp.yanitlar[f"/repos/{RP}/issues/10/comments"] = (
+            200,
+            [
+                _comment(1, "2026-11-19T10:00:00+03:00", "ilk", user="mozdemir"),
+                _comment(2, "2026-11-19T11:00:00+03:00", "ikinci", user="mozdemir"),
+            ],
+        )
+        gp.yanitlar[f"/repos/{RP}/pulls/10/reviews"] = (200, [])
+
+        text = await pr_discussion(gp, RP, 10, TRIGGER)
+
+        assert "ilk" in text and "ikinci" in text
+
+    async def test_auto_round_gets_nothing_because_its_trigger_carries_the_report(self):
+        trigger = TRIGGER | {"body": "@agentickode duzelt\n<!-- agentickode-oto -->\n\nrapor"}
+
+        assert await pr_discussion(_gitea_with_discussion(), RP, 10, trigger) == ""
+
+    async def test_caps_each_entry(self, monkeypatch):
+        monkeypatch.setattr(ctx, "ENTRY_CHARS", 40)
+
+        text = await pr_discussion(_gitea_with_discussion(), RP, 10, TRIGGER)
+
+        assert all(len(part) <= 40 for part in text.split("\n\n### "))
 
     async def test_returns_empty_when_api_fails(self):
         gp = SahteGitea()

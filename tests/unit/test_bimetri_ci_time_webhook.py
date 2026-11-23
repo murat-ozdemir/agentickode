@@ -39,7 +39,13 @@ def _mocks():
             "backend.worker.phases._bimetri_ci_kirmizi.ci_kirmizi",
             AsyncMock(return_value="ok"),
         ) as red,
+        patch(
+            "backend.worker.phases._bimetri_ci_kirmizi.sha_pr",
+            AsyncMock(return_value={"number": 5}),
+        ),
+        patch("backend.worker.phases._bimetri_notebook_record.record_ci", AsyncMock()) as notebook,
     ):
+        red.notebook = notebook
         yield ci_time, red
 
 
@@ -72,3 +78,12 @@ class TestCiTimeWebhook:
                 "status"
             ] == "ignored"
         ci_time.assert_not_awaited()
+
+
+class TestCiNotebook:
+    async def test_gate_result_goes_to_the_prs_notebook(self, client):
+        with _mocks() as (_ci_time, red):
+            await client.post(URL, json=_body("success"))
+            await client.post(URL, json=_body("failure"))
+        calls = [c.args[1:] for c in red.notebook.await_args_list]
+        assert calls == [("p", 5, "abc12345ff", True), ("p", 5, "abc12345ff", False)]

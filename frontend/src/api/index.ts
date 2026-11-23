@@ -20,3 +20,4 @@ export * from "./agentQuotas";
 export * from "./openaiUsage";
 export * from "./runDistribution";
 export * from "./graphUsage"; // bimetri patch
+export * from "./notebook"; // bimetri patch

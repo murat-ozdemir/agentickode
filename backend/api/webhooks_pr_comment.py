@@ -48,6 +48,7 @@ async def gitea_pr_comment_webhook(
     from backend.api._pr_webhook_helpers import read_verified_body
     from backend.config import settings
     from backend.models import TaskRun
+    from backend.worker.phases._bimetri_notebook_record import record_answer
 
     body = await read_verified_body(request, settings.gitea_webhook_secret, "X-Gitea-Signature")
     action = body.get("action", "")
@@ -133,6 +134,8 @@ async def gitea_pr_comment_webhook(
         return {"status": "accepted", "reason": "review"}
     if komut == "devam":
         await devam_isareti(provider, full, pr_number, login, issue_no)
+        if kalan:  # bimetri: the answer goes to the chain notebook (item 7)
+            await record_answer(db, project.project_id, pr_number, login, kalan)
     if issue_no:  # ajan/zorluk etiketleri issue'dan gelsin
         r = await provider._client.get(
             f"{api}/issues/{issue_no}", headers=provider._headers(), timeout=30.0

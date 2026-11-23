@@ -78,3 +78,17 @@ OPEN_QUESTION_RULES = (
     "- İnsan bu PR'da yanıt verdiyse ('devam <yanıt>') yanıtı uygula, aynı soruyu yeniden "
     "sorma.\n"
 )
+
+# bimetri (loop efficiency item 7): block parsed by backend/worker/phases/_bimetri_notebook.py
+NOTEBOOK_RULES = (
+    "\n\n## Zincir defteri (yukarıdakilerden önceliklidir)\n"
+    "- Bu PR zincirinin defteri varsa aşağıda 'Zincir defteri' başlığıyla verilir. Oradaki "
+    "kararlara ve insanın yanıtlarına uy; aynı soruyu yeniden sorma, alınmış kararı bozma.\n"
+    "- Son mesajını kısa bir '### Defter' bloğuyla bitir ('### Açık soru' varsa ondan sonra, "
+    "Sonuç satırı varsa ondan önce). En çok 10 satır, yalnızca şu satırlar:\n"
+    "  - `- Karar: <tek cümle>`: bu koşuda verdiğin ve sonraki ajanların uyması gereken her "
+    "karar (alan adı, davranış, yaklaşım). Defterde zaten olan kararı yineleme.\n"
+    "  - `- Açık: <tek cümle>`: döngüyü durdurmayan açık nokta. Sözleşme sorusu buraya değil, "
+    "'### Açık soru' başlığına yazılır.\n"
+    "  - `- Dosyalar: <yol, yol>`: değiştirdiğin dosyalar.\n"
+)

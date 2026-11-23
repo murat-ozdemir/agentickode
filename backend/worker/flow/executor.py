@@ -48,6 +48,7 @@ from backend.worker.flow._bimetri_review_clone import (
 from backend.worker.flow._bimetri_test_level import effort_for_test, tier_for_test
 from backend.worker.flow.data_sources import fetch_flow_data
 from backend.worker.phases._bimetri_hata import cli_hata_nedeni, hata_bildir
+from backend.worker.phases._bimetri_notebook_record import notebook_prompt, record_run
 from backend.worker.phases._bimetri_oto import bekletildi_mi
 from backend.worker.phases._helpers import (
     close_run_session,
@@ -261,6 +262,7 @@ async def execute_flow_prompt(
             if (run.task_source_meta or {}).get("review_mode") == "fix":
                 prompt += FIX_RULES
                 prompt += await kapsam_eki(run, session, "duzeltme")
+        prompt += await notebook_prompt(session, run)  # bimetri: chain notebook (item 7)
         # bimetri yamasi: mem0 proje hafizasi (kapali ya da erisilemezse bos)
         prompt += await hafiza_eki(run)
         if flow.flow_type != "pr_review":
@@ -469,6 +471,7 @@ async def execute_flow_prompt(
         run.status = "completed"
         run.completed_at = datetime.now(UTC)
         await session.commit()
+        await record_run(session, run)  # bimetri: chain notebook (item 7)
         await broadcaster.log(run.id, "Flow complete", phase="finalization")
         await broadcaster.event(
             run.id,
@@ -484,6 +487,7 @@ async def execute_flow_prompt(
         run.error_message = str(e)
         run.completed_at = datetime.now(UTC)
         await session.commit()
+        await record_run(session, run)  # bimetri: chain notebook (item 7)
         await broadcaster.event(
             run.id, "run_failed", {**await run_event_payload(run, session), "error": str(e)}
         )
