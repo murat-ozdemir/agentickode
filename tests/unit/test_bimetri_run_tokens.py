@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
+from backend.services.adapters._bimetri_codex import parse_jsonl
 from backend.services.adapters.cli_adapter import CLIAdapter
 from backend.services.bimetri_run_tokens import TokenRow, build, task_key
 
@@ -67,6 +68,11 @@ class TestBuild:
         assert later["graph_calls"] == 0 and later["saved_pct"] is None
         assert build([], None)["turns_per_call"] is None
 
+    def test_shell_reads_are_summed_over_the_calls_that_report_them(self):
+        rows = [_row(1, 9, True, shell_reads=3), _row(2, 9, True, shell_reads=0), _row(3, 9, True)]
+        out = build(rows, None)
+        assert out["shell_reads"] == 3 and out["shell_read_calls"] == 2
+
 
 class TestClaudeUsage:
     def test_cache_split_and_turns_are_kept(self):
@@ -83,3 +89,19 @@ class TestClaudeUsage:
         assert got["input_tokens"] == 21_030 and got["turns"] == 12
         assert got["cache_read_input_tokens"] == 20_000
         assert got["cache_creation_input_tokens"] == 1_000
+
+
+class TestCodexShellReads:
+    def test_counts_commands_that_print_a_source_file(self):
+        commands = [
+            "bash -lc \"sed -n '1,200p' core/src/A.java\"",
+            "cat api/b.py",
+            "rg -n update core",  # a search, not a read
+            "cat README.md",
+            "mvn -q test",
+        ]
+        items = [{"type": "command_execution", "command": c} for c in commands]
+        events = [{"type": "item.completed", "item": i} for i in items]
+        events.append({"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 1}})
+        _message, usage = parse_jsonl("\n".join(json.dumps(e) for e in events))
+        assert usage["shell_reads"] == 2 and usage["turns"] == 6

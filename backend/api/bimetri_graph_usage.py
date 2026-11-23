@@ -50,6 +50,8 @@ class RunTokens(BaseModel):
     baseline_tokens: int
     saved_pct: int | None = None
     turns_per_call: float | None = None
+    shell_reads: int = 0
+    shell_read_calls: int = 0
 
 
 class GraphUsage(BaseModel):

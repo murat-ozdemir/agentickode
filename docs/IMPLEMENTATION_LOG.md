@@ -4,6 +4,32 @@ Persistent record of what was built, when, and by whom.
 
 ---
 
+## 2026-11-23 — bimetri: graph reading budget, outline and dedupe (fork, graf tasarruf planı Faz 1)
+
+**Tests**: graph read/budget/flow/gate/shell/config/mcp unit tests, run tokens + Codex unit and
+graph usage integration tests, CodeGraphCard/Dashboard frontend tests passing; ruff, pyright,
+eslint, tsc clean on the edited files. Full suites not run
+
+- `scripts/bimetri/_graph_reply.py` (new) — graph_read reply: a file over 6,000 characters comes
+  as an outline (types and methods with line ranges, Python by indentation); every reply is cut at
+  6,000 characters with the next range to read
+- `scripts/bimetri/_graph_budget.py` (new) — per agent call `Ledger`: graph_read + graph_callers
+  send at most 60,000 characters (`budget_exhausted` past it, answers up to 1,500 still pass),
+  every reply ends with what is left; lines already sent (same file, unchanged) get a note naming
+  the call that sent them once, then are served
+- `scripts/bimetri/_graph_flow.py` — recommendations capped at 8 (was 15), each `why` ends with
+  `[read: ~N chars]` (or `outline ~N`)
+- `scripts/bimetri/_graph_flow_server.py`, `agent-graph-mcp.sh` — server uses the reply and the
+  ledger; bundle joins six files
+- `scripts/bimetri/_agent_graph_gate.py` — Claude hook denies a whole read of a large source file
+  (Read without a limit ≤ 80, cat/bat/nl/less/more, sed -n or head/tail over 80 lines) once per
+  file and session, pointing at graph_read; the retry passes
+- `scripts/bimetri/_agent_graph_config.py` — worker policy: outline, read cost, budget, dedupe
+- `backend/services/adapters/_bimetri_codex.py`, `executor.py`, `bimetri_run_tokens.py`,
+  `graph_usage_repo.py`, `bimetri_graph_usage.py` — Codex `shell_reads` (commands that print a
+  source file) in invocation metadata and `run_tokens`
+- `frontend/src/components/graph/CodeGraphCard.tsx` — Saved share note shows Codex shell reads
+
 ## 2026-11-23 — bimetri: call tokens against the pre-graph baseline (fork)
 
 **Tests**: graph/Codex unit + integration (32) and CodeGraphCard/Dashboard frontend (11) passing;

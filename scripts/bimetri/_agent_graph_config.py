@@ -48,18 +48,26 @@ Bu makinede `{NAME}` MCP sunucusu deponun kod grafiğini sunar. Kodu keşfederke
 
 1. Her görevin ya da yeni bir alt görevin başında önce `graph_continue` çağır; görevi kendi
    sözlerinle, ilgili sınıf ve metot adlarıyla yaz. Ondan önce başka araç kullanma.
-2. `recommended_files` içindeki girdileri `graph_read` ile oku, her dosya için ayrı çağrı.
+2. `recommended_files` içindeki girdileri `graph_read` ile oku, her dosya için ayrı çağrı;
+   `why` her girdinin okuma maliyetini (`[read: ~N chars]`) yazar, gerekmeyeni atla.
    `yol::Sembol` yalnızca o sembolün satırlarını getirir. `yol:SATIR` bir kullanım yeridir: `why`
    o satırın kodunu zaten gösterir; yetmezse `graph_read yol:SATIR` çevresindeki satırları verir.
-   Çağıran metodun tamamını okuma.
-3. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil:
+   Büyük bir dosya ana hatlarıyla gelir (tip ve metotlar, satır aralıklarıyla); kodu
+   `yol::Sembol` ya da `yol:BAŞ-SON` ile oku. Çağıran metodun tamamını okuma. Dosyaları Read
+   ya da `cat`/`sed` ile baştan sona okuma; düzenleyeceğin yer için Read'i offset ve kısa
+   limit ile kullan.
+3. Okuma bütçesi: bir ajan çağrısında `graph_read` ve `graph_callers` bir yanıtta en çok 6.000,
+   toplamda 60.000 karakter gönderir; her yanıt kalanı yazar. Daha önce gönderilen kod yeniden
+   gönderilmez, hangi çağrıda gittiği söylenir; bağlamında yoksa aynı çağrıyı tekrarla.
+   `budget_exhausted` gelirse elindekiyle değişikliği yaz.
+4. Bir sembolü kimin çağırdığını, nerede kullanıldığını `graph_callers` ile bul, grep ile değil:
    her kullanımı dosya, satır ve o satırdaki kodla verir.
-4. `confidence` ne olursa olsun önerilenler yetmezse en çok `max_supplementary_greps` kez
+5. `confidence` ne olursa olsun önerilenler yetmezse en çok `max_supplementary_greps` kez
    `fallback_rg` çağır ve en çok `max_supplementary_files` ek dosya oku; sonra dur, yazmaya geç.
    `high` ise önerilen dosyalarla yetinmeye çalış. Arama sınırı Grep, Glob ve kabukta
    `rg`/`grep`/`find` ile yapılan aramaları da kapsar: hak bitince ilk arama reddedilir;
    gerçekten gerekiyorsa (ör. listenin tam olduğunu doğrulamak) tekrarla, geçer.
-5. Sınırlar yalnızca keşif içindir: değiştireceğin dosyayı okumak, düzenleme, derleme, test ve
+6. Sınırlar yalnızca keşif içindir: değiştireceğin dosyayı okumak, düzenleme, derleme, test ve
    git komutları serbest.
 
 Grafik son temiz commit'e göredir; senin yaptığın değişiklikler grafikte yoktur."""

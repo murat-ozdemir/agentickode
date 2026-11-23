@@ -14,9 +14,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _graph_budget import Ledger  # bundle: drop
 from _graph_calls import Recorder, run_id  # bundle: drop
 from _graph_flow import CAPS, OUTPUT_LINES, callers, continue_flow  # bundle: drop
-from _graph_read import read  # bundle: drop
+from _graph_reply import read_part  # bundle: drop
 
 TOOLS = {
     "graph_continue": (
@@ -26,8 +27,10 @@ TOOLS = {
         {"task": "the task in your own words, with the class/method names it involves"},
     ),
     "graph_read": (
-        "Read one recommended entry: a file, one symbol's lines (path::Symbol), or the lines "
-        "around a use site (path:LINE, or path:START-END).",
+        "Read one recommended entry: a file (a large one comes as an outline of its types and "
+        "methods with line ranges), one symbol's lines (path::Symbol), or the lines around a use "
+        "site (path:LINE, or path:START-END). At most 6,000 characters per answer and 60,000 per "
+        "agent call; code already sent is not sent again.",
         {"file": "repo-relative path, optionally ::Symbol or :LINE"},
     ),
     "graph_callers": (
@@ -52,12 +55,14 @@ REQUIRED = {
 
 
 class Flow:
-    """The tools' state: the loaded graph and the grep budget of the last graph_continue."""
+    """The tools' state: the loaded graph, the grep budget of the last graph_continue and the
+    reading budget of this agent call."""
 
     def __init__(self, graph_path: Path, root: Path, load, score) -> None:
         self.graph_path, self.root, self.load, self.score = graph_path, root, load, score
         self.loaded: Any = None
         self.stamp, self.greps = None, None
+        self.ledger = Ledger()
 
     def graph(self):
         if not self.graph_path.exists():
@@ -84,9 +89,12 @@ class Flow:
             self.greps = result["max_supplementary_greps"]
             return json.dumps(result, ensure_ascii=False, indent=1), False
         if name == "graph_read":
-            return read(self.root, args["file"]), False
+            return self.read(str(args["file"])), False
         if name == "graph_callers":
-            return callers(self.graph(), args["symbol"], self.root), False
+            symbol = str(args["symbol"])
+            key = ("callers", symbol)
+            note = self.ledger.repeat(symbol, key)
+            return note or self.ledger.send(callers(self.graph(), symbol, self.root), key), False
         if name == "fallback_rg":
             if self.greps is None:
                 return "call graph_continue first", True
@@ -95,19 +103,22 @@ class Flow:
             return rg(self.root, args["pattern"], str(args.get("glob", ""))) + note, False
         return f"unknown tool {name}", True
 
+    def read(self, target: str) -> str:
+        part = read_part(self.root, target)
+        if isinstance(part, str):
+            return part
+        if part.ranges:
+            key, ranges = (part.rel, part.stamp), part.ranges
+        else:  # an outline
+            key, ranges = (part.rel, part.stamp, "outline"), None
+        note = self.ledger.repeat(target, key, ranges)
+        return note or self.ledger.send(part.text, key, ranges)
+
 
 def rg(root: Path, pattern: str, glob: str = "") -> str:
     """fallback_rg: ripgrep in the clone, at most 5 matches per file and OUTPUT_LINES in all."""
-    command = [
-        "rg",
-        "-n",
-        "--no-heading",
-        "-m",
-        "5",
-        "-e",
-        pattern,
-        *(["-g", glob] if glob else []),
-    ]
+    command = ["rg", "-n", "--no-heading", "-m", "5", "-e", pattern]
+    command += ["-g", glob] if glob else []
     try:
         done = subprocess.run([*command, "."], cwd=root, capture_output=True, text=True, timeout=30)
     except subprocess.TimeoutExpired:

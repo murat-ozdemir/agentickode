@@ -103,7 +103,10 @@ class TestContinue:
         lines[56] = "        service.update(id);"
         (tmp_path / "api/StatusController.java").write_text("\n".join(lines))
         why = flow.continue_flow(fake, "update()", tmp_path)["why"]
-        assert why["api/StatusController.java:57"] == "calls .update() at L57: service.update(id);"
+        site = why["api/StatusController.java:57"]
+        assert site.startswith("calls .update() at L57: service.update(id); [read: ~")
+        # Every entry says what graph_read of it sends.
+        assert site.endswith(" chars]") and "outline" not in site
 
     def test_paths_named_in_the_task_are_recommended_if_present(self, fake, tmp_path):
         (tmp_path / "a").mkdir()
@@ -180,7 +183,8 @@ class TestServerFlow:
         made, _ = self.make(fake, tmp_path)
         (tmp_path / "jobs").mkdir()
         (tmp_path / "jobs/StatusJob.java").write_text("x\n" * 11 + "update(1);\n")
-        assert made.call("graph_callers", {"symbol": "update"})[0].endswith(": update(1);")
+        lines = made.call("graph_callers", {"symbol": "update"})[0].splitlines()
+        assert lines[-2].endswith(": update(1);") and lines[-1].startswith("[graph budget: ")
 
     def test_missing_argument_is_an_error(self, fake, tmp_path):
         made, _ = self.make(fake, tmp_path)

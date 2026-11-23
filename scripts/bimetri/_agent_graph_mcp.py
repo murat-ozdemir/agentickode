@@ -3,7 +3,7 @@
 Runs as the worker user (agent-graph-mcp.sh sends it over SSH, after _agent_graph_config.py):
     install            stdin: own source, then "### lock: graphify" + agent-graph-locks/graphify.txt
                        and "### file: graph_flow.py" + the flow server (_graph_read.py,
-                       _graph_calls.py, _graph_flow*.py), which logs calls to calls/<run>.jsonl
+                       _graph_reply.py, _graph_budget.py, _graph_calls.py, _graph_flow*.py), which logs calls to calls/<run>.jsonl
     update TOOL ROOT   TOOL: graphify | all
     mode MODE          MODE: none | graphify (agent CLI settings and gate, see the config file)
     gate pre|mark      Claude hook (stdin: hook event JSON), written by mode graphify

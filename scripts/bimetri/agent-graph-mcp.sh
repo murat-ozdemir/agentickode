@@ -74,13 +74,15 @@ else
     grep -v '# bundle: drop$' "$program_file")
 fi
 # install reads its own source, the frozen lock and the flow server from stdin (see
-# _agent_graph_mcp.py); the flow server is likewise one file from four.
+# _agent_graph_mcp.py); the flow server is likewise one file from six.
 bundle() {
   printf '%s\n' "$program"
   echo "### lock: graphify"
   cat scripts/bimetri/agent-graph-locks/graphify.txt
   echo "### file: graph_flow.py"
   cat scripts/bimetri/_graph_read.py
+  grep -v '# bundle: drop$' scripts/bimetri/_graph_reply.py
+  cat scripts/bimetri/_graph_budget.py
   cat scripts/bimetri/_graph_calls.py
   grep -v '# bundle: drop$' scripts/bimetri/_graph_flow.py
   grep -v '# bundle: drop$' scripts/bimetri/_graph_flow_server.py

@@ -37,12 +37,15 @@ function Tiles({ data }: { data: GraphUsage }) {
   const t = data.totals;
   const share = data.total_runs ? Math.round((100 * t.runs) / data.total_runs) : 0;
   const agents = Object.entries(data.agents).map(([a, n]) => `${a} ${n}`).join(", ");
+  const shellReads = data.run_tokens?.shell_reads ?? 0;
+  const sent = `sent ${compact(t.returned_chars)} of ${compact(t.full_chars)} chars`;
+  const shareNote = shellReads ? `${sent} · ${shellReads} shell reads (Codex)` : sent;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5" data-testid="graph-tiles">
       <Tile label="Runs using graph" value={`${t.runs} / ${data.total_runs}`} note={agents ? `${share}% · ${agents}` : `${share}%`} />
       <Tile label="Graph calls" value={String(t.calls)} note={t.runs ? `${(t.calls / t.runs).toFixed(1)} per run` : "no runs yet"} />
       <Tile label="Tokens saved" value={compact(t.saved_tokens)} note={`≈ $${t.saved_usd.toFixed(2)} at input price`} good />
-      <Tile label="Saved share" value={pct(t.saved_pct)} note={`sent ${compact(t.returned_chars)} of ${compact(t.full_chars)} chars`} good />
+      <Tile label="Saved share" value={pct(t.saved_pct)} note={shareNote} good />
       {data.run_tokens && <RunTokensTile rt={data.run_tokens} />}
     </div>
   );

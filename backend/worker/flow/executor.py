@@ -57,6 +57,7 @@ _USAGE_EXTRAS = (
     "cache_creation_input_tokens",
     "cache_read_input_tokens",
     "turns",
+    "shell_reads",
     "reasoning_output_tokens",
     "codex_credits",
     "billing",

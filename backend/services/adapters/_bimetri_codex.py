@@ -14,6 +14,7 @@ cost totals next to Claude.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 RATES_ENV = "CODEX_CREDIT_RATES"
@@ -25,6 +26,12 @@ DEFAULT_CREDIT_RATES = (
 )
 _TOKEN_KEYS = ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens")
 _NOT_TOOL_ITEMS = ("agent_message", "reasoning", "todo_list", "error")
+# A shell command that prints a source file (graf tasarruf planı Faz 1: Codex has no hook to send
+# it to graph_read, so these are counted and shown on the Code graph card).
+_SOURCE_READ = re.compile(
+    r"\b(?:cat|bat|nl|less|more|head|tail|sed\s+-n)\b[^|;&]*?"
+    r"\.(?:java|kts?|py|tsx?|jsx?|go|cs|scala|groovy)\b"
+)
 _CODEX_EVENTS = {
     "thread.started",
     "turn.started",
@@ -74,7 +81,7 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     ``cached_input_tokens`` is part of ``input_tokens``. Usage is summed over
     ``turn.completed`` events (``codex exec`` runs a single turn). ``turns`` counts the model's
     steps as Claude's ``num_turns`` does: one per tool item (command, file change, MCP call, ...)
-    plus the final answer. When the turn failed, the message is the failure text instead, so
+    plus the final answer. ``shell_reads`` counts commands that print a source file. When the turn failed, the message is the failure text instead, so
     the run-stopped comment shows the real reason.
     """
     events = _events(stdout)
@@ -83,7 +90,7 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     message: str | None = None
     totals: dict[str, int] = dict.fromkeys(_TOKEN_KEYS, 0)
     has_usage = False
-    tool_items = 0
+    tool_items = shell_reads = 0
     for event in events:
         item = event.get("item")
         if (
@@ -95,6 +102,8 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
             message = item["text"]
         elif event["type"] == "item.completed" and isinstance(item, dict):
             tool_items += item.get("type") not in _NOT_TOOL_ITEMS
+            command = item.get("command") if item.get("type") == "command_execution" else None
+            shell_reads += isinstance(command, str) and bool(_SOURCE_READ.search(command))
         usage = event.get("usage")
         if event["type"] == "turn.completed" and isinstance(usage, dict):
             has_usage = True
@@ -104,6 +113,7 @@ def parse_jsonl(stdout: str) -> tuple[str | None, dict[str, Any]] | None:
     if has_usage:
         result.update(totals)
         result["turns"] = tool_items + 1
+        result["shell_reads"] = shell_reads
     return _failure(events) or message, result
 
 

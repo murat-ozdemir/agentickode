@@ -60,7 +60,7 @@ class GraphUsageRepository:
         out = []
         for started, repo, task, agent, phase, tin, tout, meta in result.all():
             meta = meta or {}
-            turns = meta.get("turns")
+            turns, reads = meta.get("turns"), meta.get("shell_reads")
             out.append(
                 TokenRow(
                     # SQLite gives naive datetimes; they are UTC like PostgreSQL's
@@ -71,6 +71,7 @@ class GraphUsageRepository:
                     phase=phase or "",
                     tokens=int(tin or 0) + int(tout or 0),
                     turns=turns if isinstance(turns, int) else None,
+                    shell_reads=reads if isinstance(reads, int) else None,
                     graph=isinstance(meta.get("graph"), dict),
                 )
             )

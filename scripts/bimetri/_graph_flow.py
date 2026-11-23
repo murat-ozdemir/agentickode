@@ -2,7 +2,8 @@
 
 Modelled on GrapeRoot's Dual-Graph flow (graph_continue first, then capped fallbacks), over
 Graphify's graph, whose Java edges reach the calling files (Phase 1c). Use sites come with their
-statement (run #95: reading whole methods for one-line call sites cost 2x). Served by
+statement (run #95: reading whole methods for one-line call sites cost 2x), and every entry says
+what graph_read of it costs, so the agent can skip what it does not need. Served by
 _graph_flow_server.py; no networkx import here.
 """
 
@@ -10,11 +11,12 @@ import re
 from pathlib import Path
 
 from _graph_read import Sources  # bundle: drop
+from _graph_reply import read_part  # bundle: drop
 
 USE_RELATIONS = ("calls", "references", "implements", "inherits", "imports")
 MAX_NAMES = 30
 MAX_SEEDS_PER_NAME = 2
-MAX_RECOMMENDED = 15
+MAX_RECOMMENDED = 8  # graf tasarruf planı Faz 1: was 15; graph_callers lists the rest
 OUTPUT_LINES = 80  # graph_callers and fallback_rg
 # confidence -> (fallback_rg calls, extra files to read) allowed before writing code.
 CAPS = {"high": (1, 2), "medium": (2, 3), "low": (4, 5)}
@@ -102,6 +104,8 @@ def continue_flow(graph, task: str, root: Path, fallback=None) -> dict:
             why[item] = f"{relation} {graph.nodes[nid]['label']} at L{line}"
             code = sources.at(rel, line) if site else ""
             why[item] += f": {code}" if code else ""
+    for item in why:
+        why[item] += cost(root, item)
     greps, files = CAPS[confidence]
     result = {
         "confidence": confidence,
@@ -115,6 +119,14 @@ def continue_flow(graph, task: str, root: Path, fallback=None) -> dict:
     if more:
         result["more_users"] = f"{more} more; graph_callers lists them all"
     return result
+
+
+def cost(root: Path, item: str) -> str:
+    """What graph_read of item sends: ` [read: ~2,400 chars]`, or an outline's size."""
+    part = read_part(root, item)
+    if isinstance(part, str):
+        return ""
+    return f" [read: {'outline ' if not part.ranges else ''}~{len(part.text):,} chars]"
 
 
 def _owned_by(source_file: str, owner: str) -> bool:

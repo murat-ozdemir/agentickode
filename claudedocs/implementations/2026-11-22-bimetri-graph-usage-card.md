@@ -20,7 +20,8 @@ saving. Savings are estimates.
 | File | Purpose |
 |------|---------|
 | `scripts/bimetri/_graph_calls.py` | Run id lookup (own env, then ancestors' `/proc`), one JSON line per tool call |
-| `scripts/bimetri/_graph_flow_server.py`, `agent-graph-mcp.sh` | Server calls the recorder after every tool call; bundle now joins four files |
+| `scripts/bimetri/_graph_flow_server.py`, `agent-graph-mcp.sh` | Server calls the recorder after every tool call; bundle joins six files |
+| `scripts/bimetri/_graph_reply.py`, `_graph_budget.py` | graph_read outline and 6k cap; per-call 60k budget and dedupe (Faz 1) |
 | `backend/worker/flow/_bimetri_graph_calls.py` | `run_env`, `collect` (cat + rm over SSH), `summarize` |
 | `backend/worker/flow/executor.py` | Exports `BIMETRI_RUN_ID`, stores `metadata_.graph` on success and failure |
 | `backend/services/bimetri_graph_usage.py`, `backend/repositories/graph_usage_repo.py`, `backend/api/bimetri_graph_usage.py` | Totals, per-day, per-worker; `GET /api/bimetri/analytics/graph?range=` |
@@ -42,6 +43,9 @@ saving. Savings are estimates.
    `pr-comment-<PR>-*` runs are one task), agent family and phase; else same repo, agent and phase
    with at least 3 calls; else left out. The tile shows the signed change (− = fewer tokens),
    actual vs baseline, calls compared and turns per call (Claude `num_turns`; Codex tool items + 1).
+6. Codex `shell_reads` (2026-11-23, Faz 1): commands that printed a source file (cat, sed -n,
+   head, ...) per call, summed into `run_tokens`; the Saved share note shows them. Claude has a
+   hook for these (`_agent_graph_gate.py`), Codex does not.
 
 ## Notes
 

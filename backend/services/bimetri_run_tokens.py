@@ -11,7 +11,8 @@ median tokens (in + out) of calls made before the first graph call:
 1. same task (``pr-comment-114-4734`` and ``pr-comment-114-4791`` are one task), agent and phase;
 2. else same repo, agent and phase, when at least ``MIN_REPO_SAMPLES`` calls exist.
 
-Calls with neither are left out and counted apart. ``saved_pct`` is signed: a negative value
+Calls with neither are left out and counted apart. ``shell_reads`` sums the source files Codex
+printed in the shell (cat, sed -n, ...) over the ``shell_read_calls`` that report it. ``saved_pct`` is signed: a negative value
 means the graph calls cost more than their baseline.
 """
 
@@ -35,6 +36,7 @@ class TokenRow:
     tokens: int
     turns: int | None
     graph: bool
+    shell_reads: int | None = None  # Codex: commands that printed a source file
 
 
 def task_key(task_id: str) -> str:
@@ -62,6 +64,7 @@ def build(rows: list[TokenRow], since: datetime | None) -> dict[str, Any]:
     actual = baseline = same_task = same_repo = 0
     shown = [r for r in graph_rows if since is None or r.started_at >= since]
     turns = [r.turns for r in shown if r.turns is not None]
+    reads = [r.shell_reads for r in shown if r.shell_reads is not None]
     for r in shown:
         kind = (_family(r.agent), r.phase)
         task_pool = by_task.get((task_key(r.task_id), *kind))
@@ -85,4 +88,6 @@ def build(rows: list[TokenRow], since: datetime | None) -> dict[str, Any]:
         "baseline_tokens": baseline,
         "saved_pct": round(100 * (baseline - actual) / baseline) if baseline else None,
         "turns_per_call": round(sum(turns) / len(turns), 1) if turns else None,
+        "shell_reads": sum(reads),
+        "shell_read_calls": len(reads),
     }

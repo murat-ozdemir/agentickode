@@ -6,6 +6,9 @@ agent-graph-mcp.sh ships this file first in the worker program; `mode graphify` 
            on the grep budget graph_continue returned. The first search past it is denied with a
            pointer to graph_callers; after that searches go through (run #95: a hard stop made
            the agent give up on listing every caller).
+           Reading a whole large source file (Read without a short limit, or cat/sed/head in the
+           shell) is denied once per file with a pointer to graph_read's outline; the same read
+           again goes through (graf tasarruf planı Faz 1).
     mark   after graph_continue: write its max_supplementary_greps to the session's marker.
 Stdlib only.
 """
@@ -39,6 +42,21 @@ GATE_SPENT = (
 )
 
 
+GATE_READ = (
+    "{path} büyük bir kaynak dosyası; tamamını okuma. `graph_read {path}` ana hatlarını (tip ve "
+    "metotlar, satır aralıklarıyla) verir; kodu `graph_read yol::Sembol` ya da `yol:BAŞ-SON` ile "
+    "oku. Düzenleyeceğin yer için Read'i offset ve en çok {lines} satırlık limit ile kullan. "
+    "Tamamı gerçekten gerekiyorsa tekrar dene, bu kez geçer."
+)
+READ_LINES = 80  # a Read limit or a sed/head span up to this is a look at the spot to edit
+READ_BYTES = 6_000  # graph_read sends a file whole up to about this size (_graph_reply.py)
+READ_COMMANDS = ("cat", "bat", "nl", "less", "more", "sed", "head", "tail")
+SOURCE_SUFFIXES = (".java", ".kt", ".kts", ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".cs")
+SOURCE_SUFFIXES += (".scala", ".groovy")
+_SPAN = re.compile(r"(\d+),(\d+)p")
+_COUNT = re.compile(r"(?:-n\s*|-)(\d+)\b")
+
+
 def searches(command: str) -> bool:
     """Whether a shell line searches the tree: a search command at a command position, or
     behind xargs. Filtering another command's output through a pipe does not count."""
@@ -69,6 +87,50 @@ def _spend(marker: Path) -> bool:
     return left > 0
 
 
+def reads(tool: str, tool_input: dict, cwd: str) -> list:
+    """Large source files a Read or shell line would read whole (or more than READ_LINES of)."""
+    found = []
+    if tool == "Read":
+        limit = tool_input.get("limit")
+        if not isinstance(limit, int) or limit > READ_LINES:
+            found.append(str(tool_input.get("file_path", "")))
+    for part in _COMMANDS.split(str(tool_input.get("command", ""))) if tool == "Bash" else []:
+        stages = part.split("|")
+        words = [w.strip("'\"") for w in stages[0].split() if not re.match(r"\w+=", w)]
+        name = words[0].rsplit("/", 1)[-1] if words else ""
+        if name not in READ_COMMANDS or any(w[:1] in "<>" or w[:2] == "2>" for w in words):
+            continue
+        if name in ("cat", "bat", "nl") and len(stages) > 1:
+            continue  # cat x | head: the filter decides how much
+        span, count = _SPAN.search(stages[0]), _COUNT.search(stages[0])
+        if name == "sed" and not (span and int(span[2]) - int(span[1]) > READ_LINES):
+            continue
+        if name in ("head", "tail") and not (count and int(count[1]) > READ_LINES):
+            continue
+        found += [w for w in words[1:] if not w.startswith("-") and not _SPAN.fullmatch(w)]
+    root = Path(cwd or ".")
+    return [p for p in found if Path(p).suffix in SOURCE_SUFFIXES and _large(root / p)]
+
+
+def _large(path: Path) -> bool:
+    try:
+        return path.stat().st_size > READ_BYTES
+    except OSError:
+        return False
+
+
+def _first_read(marker_dir: Path, session: str, paths: list) -> list:
+    """paths not refused before in this session; records them as refused."""
+    ledger = marker_dir / f"{session}.reads"
+    with open(ledger, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        seen = set(f.read().splitlines())
+        new = [p for p in dict.fromkeys(paths) if p not in seen]
+        f.write("".join(f"{p}\n" for p in new))
+    return new
+
+
 def gate(step: str, payload: str, marker_dir: Path) -> int:
     """Claude hook: exit 2 (reason on stderr) denies the tool call."""
     event = json.loads(payload or "{}")
@@ -86,8 +148,14 @@ def gate(step: str, payload: str, marker_dir: Path) -> int:
     if not marker.exists():
         print(GATE_DENY.format(tool=tool), file=sys.stderr)
         return 2
-    command = (event.get("tool_input") or {}).get("command", "") if tool == "Bash" else ""
+    tool_input = event.get("tool_input") or {}
+    command = tool_input.get("command", "") if tool == "Bash" else ""
     if (tool in SEARCH_TOOLS or searches(str(command))) and not _spend(marker):
         print(GATE_SPENT, file=sys.stderr)
+        return 2
+    whole = reads(tool, tool_input, str(event.get("cwd", "")))
+    refused = _first_read(marker_dir, session or "unknown", whole) if whole else []
+    if refused:
+        print(GATE_READ.format(path=refused[0], lines=READ_LINES), file=sys.stderr)
         return 2
     return 0

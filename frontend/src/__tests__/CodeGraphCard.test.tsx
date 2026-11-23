@@ -66,6 +66,13 @@ describe("CodeGraphCard", () => {
     expect(await screen.findByTestId("graph-tiles")).toHaveTextContent("+25%");
   });
 
+  it("shows Codex shell reads of source files under the saved share", async () => {
+    const run_tokens = { ...DATA.run_tokens, shell_reads: 7, shell_read_calls: 3 };
+    vi.mocked(getGraphUsage).mockResolvedValue({ ...DATA, run_tokens });
+    render(<CodeGraphCard />);
+    expect(await screen.findByTestId("graph-tiles")).toHaveTextContent("sent 21k of 214k chars · 7 shell reads (Codex)");
+  });
+
   it("reloads for another range", async () => {
     render(<CodeGraphCard />);
     await screen.findByTestId("graph-tiles");

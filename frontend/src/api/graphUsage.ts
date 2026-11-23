@@ -31,6 +31,9 @@ export interface RunTokens {
   baseline_tokens: number;
   saved_pct: number | null;
   turns_per_call: number | null;
+  /** Codex calls only: source files printed in the shell (cat, sed -n, ...) instead of graph_read. */
+  shell_reads?: number;
+  shell_read_calls?: number;
 }
 
 export interface GraphUsage {

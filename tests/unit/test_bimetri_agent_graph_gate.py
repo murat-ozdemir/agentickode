@@ -102,3 +102,52 @@ class TestSearches:
     )
     def test_filters_and_other_commands_are_free(self, command):
         assert not gate_module.searches(command)
+
+
+class TestWholeReads:
+    @pytest.fixture
+    def clone(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src/Big.java").write_text("x\n" * 4_000)
+        (tmp_path / "src/Small.java").write_text("x\n")
+        (tmp_path / "README.md").write_text("x\n" * 4_000)
+        return tmp_path
+
+    @pytest.mark.parametrize(
+        ("tool", "tool_input"),
+        [
+            ("Read", {"file_path": "src/Big.java"}),
+            ("Read", {"file_path": "src/Big.java", "offset": 10, "limit": 500}),
+            ("Bash", {"command": "cat src/Big.java"}),
+            ("Bash", {"command": "cd x; sed -n '1,400p' src/Big.java"}),
+            ("Bash", {"command": "head -n 200 src/Big.java"}),
+        ],
+    )
+    def test_whole_large_source_reads_are_found(self, clone, tool, tool_input):
+        assert gate_module.reads(tool, tool_input, str(clone)) == ["src/Big.java"]
+
+    @pytest.mark.parametrize(
+        ("tool", "tool_input"),
+        [
+            ("Read", {"file_path": "src/Big.java", "offset": 120, "limit": 60}),
+            ("Read", {"file_path": "src/Small.java"}),
+            ("Read", {"file_path": "README.md"}),
+            ("Bash", {"command": "cat src/Big.java | grep update"}),
+            ("Bash", {"command": "sed -n '120,170p' src/Big.java"}),
+            ("Bash", {"command": "head src/Big.java"}),
+            ("Bash", {"command": "cat > src/Big.java <<'EOF'"}),
+            ("Edit", {"file_path": "src/Big.java"}),
+        ],
+    )
+    def test_spots_small_files_and_writes_are_free(self, clone, tool, tool_input):
+        assert gate_module.reads(tool, tool_input, str(clone)) == []
+
+    def test_denied_once_per_file_then_it_goes_through(self, clone, capsys):
+        mark(clone, 2)
+        read = {"file_path": str(clone / "src/Big.java")}
+        assert call(clone, "pre", "Read", tool_input=read, cwd=str(clone)) == 2
+        assert "graph_read" in capsys.readouterr().err
+        assert call(clone, "pre", "Read", tool_input=read, cwd=str(clone)) == 0
+        # Another session is told again.
+        mark(clone, 2, session="s2")
+        assert call(clone, "pre", "Read", "s2", tool_input=read, cwd=str(clone)) == 2
