@@ -136,3 +136,17 @@ class TestInsanIstekleri:
         with patch.object(kapsam, "_pr_yorumlari", new=AsyncMock(side_effect=RuntimeError("x"))):
             ek = await kapsam.kapsam_eki(run, None, "test")
         assert ek.startswith("\n## Kapsam kuralları")
+
+
+class TestReviewScope:
+    """bimetri patch (loop efficiency item 4): review stays within the issue's scope."""
+
+    def test_unrequested_improvements_go_under_out_of_scope(self):
+        rules = kapsam._INCELEME_KURALLARI
+        assert "istemediği iyileştirmeleri" in rules
+        assert "bulgu olarak yazma; '### Kapsam dışı' başlığına yaz" in rules
+
+    def test_undoing_an_earlier_round_request_is_not_critical(self):
+        rules = kapsam._INCELEME_KURALLARI
+        assert "Önceki bir inceleme turunda istenip yapılmış" in rules
+        assert "kritik değildir: en çok 'düşük' yaz, Sonuç'u etkilemez" in rules
