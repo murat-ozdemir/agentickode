@@ -3,6 +3,7 @@
 // Commercial licensing: info@mechemsi.com
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Download, Loader2, LogIn, RefreshCw, RotateCcw, X } from "lucide-react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -427,25 +428,27 @@ export default function AgentManagementPanel({ serverId }: { serverId: number })
         ))}
       </div>
 
-      {progress && (
-        <InstallDialog
-          progress={progress}
-          onClose={() => setProgress(null)}
-        />
-      )}
+      {/* Portalled to body: the server card's stacking context would put later cards on top */}
+      {progress &&
+        createPortal(
+          <InstallDialog progress={progress} onClose={() => setProgress(null)} />,
+          document.body,
+        )}
 
-      {authModal && (
-        <AuthTerminalModal
-          serverId={serverId}
-          tmuxName={authModal.tmuxName}
-          agentName={authModal.agentName}
-          onClose={() => {
-            stopAgentAuthLogin(serverId, authModal.agentName).catch(() => {});
-            setAuthModal(null);
-          }}
-          onComplete={() => load()}
-        />
-      )}
+      {authModal &&
+        createPortal(
+          <AuthTerminalModal
+            serverId={serverId}
+            tmuxName={authModal.tmuxName}
+            agentName={authModal.agentName}
+            onClose={() => {
+              stopAgentAuthLogin(serverId, authModal.agentName).catch(() => {});
+              setAuthModal(null);
+            }}
+            onComplete={() => load()}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

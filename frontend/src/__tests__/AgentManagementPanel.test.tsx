@@ -217,4 +217,37 @@ describe("AgentManagementPanel", () => {
     expect(screen.queryByText("(SSH user)")).not.toBeInTheDocument();
     expect(screen.queryByText("(worker user)")).not.toBeInTheDocument();
   });
+  it("renders the install dialog outside the server card so later cards cannot cover it", async () => {
+    mockGetAgentStatus.mockResolvedValue({
+      agents: [],
+      by_user: [
+        {
+          user: "coder",
+          agents: [
+            {
+              agent_name: "codex",
+              display_name: "Codex CLI",
+              description: "OpenAI's coding agent",
+              agent_type: "cli_binary",
+              installed: false,
+              version: null,
+              path: null,
+            },
+          ],
+        },
+      ],
+    });
+    mockInstallAgentStream.mockImplementation(
+      async (_serverId: number, _agentName: string, onLine: (line: string, type: string) => void) => {
+        onLine("Installing codex...", "output");
+      },
+    );
+
+    const { container } = render(<AgentManagementPanel serverId={1} />);
+    fireEvent.click(await screen.findByText("Install"));
+
+    const line = await screen.findByText("Installing codex...");
+    expect(container.contains(line)).toBe(false);
+    expect(document.body.contains(line)).toBe(true);
+  });
 });
