@@ -10,6 +10,7 @@ import httpx
 
 from backend.config import settings
 from backend.services.git._bimetri_board import move_issue_card
+from backend.services.git._bimetri_links import link_files_in_body
 
 logger = logging.getLogger("agentickode.git_provider")
 
@@ -37,6 +38,8 @@ class GiteaProvider:
         return resp.status_code in (201, 409)
 
     async def create_pr(self, repo_path: str, title: str, body: str, head: str, base: str) -> str:
+        # bimetri yamasi: ajanin /workspaces/... dosya baglantilari PR dalina gider
+        body = await link_files_in_body(self, repo_path, body, branch=head)
         resp = await self._client.post(
             f"{self._base_url}/api/v1/repos/{repo_path}/pulls",
             headers=self._headers(),
@@ -98,6 +101,8 @@ class GiteaProvider:
         return items
 
     async def post_pr_comment(self, repo_path: str, pr_number: int, body: str) -> None:
+        # bimetri yamasi: ajanin /workspaces/... dosya baglantilari PR'in (issue'nun) dalina gider
+        body = await link_files_in_body(self, repo_path, body, number=pr_number)
         resp = await self._client.post(
             f"{self._base_url}/api/v1/repos/{repo_path}/issues/{pr_number}/comments",
             headers=self._headers(),
