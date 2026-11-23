@@ -51,6 +51,7 @@ from backend.worker.phases._bimetri_hata import cli_hata_nedeni, hata_bildir
 from backend.worker.phases._bimetri_notebook_record import notebook_prompt, record_run
 from backend.worker.phases._bimetri_oto import bekletildi_mi
 from backend.worker.phases._bimetri_start_note import announce_start
+from backend.worker.phases._bimetri_test_round import test_request_section
 from backend.worker.phases._helpers import (
     close_run_session,
     ensure_agent_ready,
@@ -241,6 +242,8 @@ async def execute_flow_prompt(
                 "- Biçim: önce 1-2 cümlelik özet; sonra '### Bulgular' başlığı altında her bulgu için "
                 "önem (kritik/orta/düşük), dosya:satır ve kısa açıklama; sonra '### Öneriler'. "
                 "Bulgu yoksa bunu açıkça yaz.\n"
+                "- Bulgu yalnızca eksik ya da yanlış testse satırı `- [test]` ile başlat "
+                "(düzeltme ajanı testlere dokunamaz; bu bulgular test ajanına gider).\n"
                 "- En sona tek satır: '**Sonuç:** Birleştirilebilir' ya da '**Sonuç:** Değişiklik gerekli'.\n"
                 "- Kod değiştirme.\n"
             )
@@ -250,6 +253,7 @@ async def execute_flow_prompt(
         # bimetri yamasi: test ajani kurallari (kabul kriterleri, hedefli test; _bimetri_agent_rules)
         elif (run.task_source_meta or {}).get("review_mode") == "test":
             prompt += TEST_RULES
+            prompt += await test_request_section(run, session)  # bimetri: review's test findings
             prompt += await kapsam_eki(run, session, "test")
         else:
             prompt += (

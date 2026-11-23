@@ -33,6 +33,7 @@ from backend.worker.phases._bimetri_etiket import (
 )
 from backend.worker.phases._bimetri_oto import OTO_YORUM, oto_tur_karari
 from backend.worker.phases._bimetri_soru import acik_soru, ajan_raporu, kosu_soru_karari
+from backend.worker.phases._bimetri_test_round import TEST_ROUND_PREFIX, only_test_findings
 from backend.worker.phases._helpers import (
     close_run_session,
     get_auth_url,
@@ -182,13 +183,17 @@ async def run(
             and review_mode == "comment"
             and await _bimetri_oto_duzeltme(task_run, int(pr_number), session)
         )
-        await _post_review_comment(task_run, pr_number, session, _oto)
+        # bimetri yamasi: yalniz test eksigi bulan inceleme duzeltme yerine test turu acar
+        _test_turu = _oto and only_test_findings(_ozet)
+        await _post_review_comment(task_run, pr_number, session, _oto, _test_turu)
         if _soru:
             _soru = await kosu_soru_karari(task_run, int(pr_number), session, _ozet)
         # Flip the label to mark the PR as reviewed (visible marker; the DB head
         # SHA remains the source of truth the poller dedupes on).
         if review_mode == "comment":
             await _flip_review_label(task_run, pr_number, session)
+            if _test_turu:
+                await _bimetri_test_turu_etiketi(task_run, int(pr_number), session)
             # bimetri yamasi: istenen inceleme "Birleştirilebilir" dedi -> zincirin sonu, CI kapisi
             if (
                 not _soru
@@ -483,6 +488,24 @@ async def _bimetri_oto_duzeltme(task_run: TaskRun, n: int, session: AsyncSession
     )
 
 
+async def _bimetri_test_turu_etiketi(task_run: TaskRun, n: int, session: AsyncSession) -> None:
+    """Test turu: eski test etiketlerini kaldirip ai-test koyar (label_updated -> test kosusu)."""
+    try:
+        gp = get_git_provider(
+            task_run.git_provider,
+            get_http_client(),
+            access_token=await get_project_token(task_run, session),
+        )
+        rp = f"{task_run.repo_owner}/{task_run.repo_name}"
+        for etiket in ("ai-reviewed", "ai-tested", "test/passed", "test/failed"):
+            await gp.remove_label(rp, n, etiket)
+        await gp.add_label(rp, n, "ai-test")
+    except Exception as exc:
+        await broadcaster.log(
+            task_run.id, f"Test turu baslatilamadi: {exc}", level="warning", phase="finalization"
+        )
+
+
 async def _bimetri_pr_yorumu(task_run: TaskRun, session: AsyncSession, n: int, govde: str) -> None:
     try:
         await get_git_provider(
@@ -729,7 +752,11 @@ async def _push_to_pr_branch(task_run: TaskRun, pr_branch: str, session: AsyncSe
 
 
 async def _post_review_comment(
-    task_run: TaskRun, pr_number: int, session: AsyncSession, oto: bool = False
+    task_run: TaskRun,
+    pr_number: int,
+    session: AsyncSession,
+    oto: bool = False,
+    test_turu: bool = False,
 ) -> None:
     """Post AI review results as a comment on the source PR."""
     repo_path = f"{task_run.repo_owner}/{task_run.repo_name}"
@@ -746,7 +773,9 @@ async def _post_review_comment(
         + f" · Koşu: [#{task_run.id}]({_settings.app_base_url.rstrip('/')}/runs/{task_run.id})"
         + " · AgenticKode incelemesi"
     )
-    if oto:
+    if test_turu:
+        body = TEST_ROUND_PREFIX + body
+    elif oto:
         body = (
             OTO_YORUM.format(neden="İnceleme değişiklik istedi; aşağıdaki bulguları düzelt.") + body
         )
