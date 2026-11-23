@@ -22,6 +22,13 @@ HOME = os.path.expanduser("~")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 MODEL_SLOTS = ("seven_day_opus", "seven_day_sonnet")
 ACCOUNT_KEYS = ("accountUuid", "emailAddress", "organizationUuid", "organizationName")
+# The CLI refreshes its own login before a request; no command refreshes it without one, and the
+# token endpoint is not public. So an idle worker with an expired token gets the smallest call.
+REFRESH_CMD = [
+    "claude", "-p", "Reply with: ok", "--model", "haiku", "--max-turns", "1",
+    "--strict-mcp-config", "--no-session-persistence",
+]
+REFRESH_TIMEOUT = 60
 
 
 def _load(path):
@@ -29,9 +36,50 @@ def _load(path):
         return json.load(f)
 
 
-def claude():
+def _expired(creds):
+    expires = creds.get("expiresAt") or 0
+    return bool(expires) and expires / 1000 < time.time()
+
+
+def _claude_running():
+    """True when this user runs a claude CLI process (an agent call is on)."""
+    uid = os.getuid()
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            if os.stat(f"/proc/{pid}").st_uid != uid or int(pid) == os.getpid():
+                continue
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                argv = f.read().split(b"\0")
+        except OSError:
+            continue
+        if any(os.path.basename(a) == b"claude" for a in argv[:2]):
+            return True
+    return False
+
+
+def _refresh(path):
+    """Let the CLI refresh its expired login; the new credentials, or an error text."""
+    if _claude_running():
+        return None, "token expired; an agent call is running and refreshes it"
+    if not shutil.which("claude"):
+        return None, "token expired; claude CLI not on PATH"
     try:
-        creds = _load(os.path.join(HOME, ".claude", ".credentials.json"))["claudeAiOauth"]
+        subprocess.run(
+            REFRESH_CMD, cwd="/tmp", stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=REFRESH_TIMEOUT, check=False,
+        )
+        creds = _load(path)["claudeAiOauth"]
+    except Exception as e:
+        return None, f"token expired; refresh failed: {type(e).__name__}"
+    if _expired(creds):
+        return None, "token expired; refresh call did not renew it"
+    return creds, None
+
+
+def claude():
+    path = os.path.join(HOME, ".claude", ".credentials.json")
+    try:
+        creds = _load(path)["claudeAiOauth"]
     except FileNotFoundError:
         return None
     except Exception as e:
@@ -45,10 +93,11 @@ def claude():
         "plan": creds.get("subscriptionType"),
         "tier": creds.get("rateLimitTier"),
     }
-    expires = creds.get("expiresAt") or 0
-    if expires and expires / 1000 < time.time():
-        out["error"] = "token expired; the CLI refreshes it on its next run"
-        return out
+    if _expired(creds):
+        creds, error = _refresh(path)
+        if error:
+            out["error"] = error
+            return out
     req = urllib.request.Request(
         USAGE_URL,
         headers={

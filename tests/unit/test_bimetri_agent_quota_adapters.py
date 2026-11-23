@@ -221,11 +221,12 @@ class TestWorkerProbeClaude:
         assert out["plan"] == "max" and out["account"]["accountUuid"] == "acc-9"
         assert "secret-token" not in json.dumps(out)
 
-    def test_expired_token_is_not_sent(self, tmp_path, monkeypatch):
+    def test_expired_token_is_not_sent_while_an_agent_call_runs(self, tmp_path, monkeypatch):
         self._home(tmp_path, monkeypatch, (time.time() - 60) * 1000)
         monkeypatch.setattr(worker_probe.urllib.request, "urlopen", None)
+        monkeypatch.setattr(worker_probe, "_claude_running", lambda: True)
         out = worker_probe.claude()
-        assert "expired" in out["error"] and "usage" not in out
+        assert "agent call is running" in out["error"] and "usage" not in out
 
     def test_not_logged_in_reports_nothing(self, tmp_path, monkeypatch):
         monkeypatch.setattr(worker_probe, "HOME", str(tmp_path))
