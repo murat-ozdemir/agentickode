@@ -28,6 +28,7 @@ from backend.repositories.flow_prompt_repo import FlowPromptRepository
 from backend.services.adapters._bimetri_codex import add_credits
 from backend.services.container import ServiceContainer
 from backend.worker.broadcaster import broadcaster
+from backend.worker.flow._bimetri_agent_rules import TEST_RULES
 from backend.worker.flow._bimetri_graph_calls import collect as graph_calls
 from backend.worker.flow._bimetri_graph_calls import run_env
 from backend.worker.flow._bimetri_graph_pack import context_pack, task_text
@@ -243,39 +244,9 @@ async def execute_flow_prompt(
             if review_cwd:
                 prompt += REVIEW_CLONE_RULES
             prompt += await kapsam_eki(run, session, "inceleme")
-        # bimetri yamasi: test ajani kurallari (yalnizca test kodu, calistir, sabit sonuc satiri)
+        # bimetri yamasi: test ajani kurallari (kabul kriterleri, hedefli test; _bimetri_agent_rules)
         elif (run.task_source_meta or {}).get("review_mode") == "test":
-            prompt += (
-                "\n\n## Test ajanı kuralları (yukarıdakilerden önceliklidir)\n"
-                "- Sen test ajanısın. Görevin bu PR'daki değişikliği test etmek; uygulama kodunu düzeltmek değil.\n"
-                "- Repo kökündeki AGENTS.md'yi oku. 'Test yazma' yasağı sana uygulanmaz; diğer kuralları geçerli.\n"
-                "- Yalnızca test klasörlerinde (`src/test/**`) dosya ekle ya da değiştir. Başka hiçbir dosyaya "
-                "dokunma, pom.xml'e de. Eksik bağımlılık ya da ayar varsa raporda belirt.\n"
-                "- Mevcut testleri silme; `@Disabled` ya da `@Ignore` ekleme.\n"
-                "- Yalnızca davranışı değişen uygulama kodu (`src/main/**`) için test yaz. Değişiklik belge, "
-                "yorum ya da yapılandırmadan ibaretse yeni test yazma; mevcut testleri çalıştırıp raporla. "
-                "Issue'daki ve insanın PR yorumlarındaki kapsam kısıtlarına (ör. 'yalnızca README "
-                "değişsin') uy.\n"
-                "- Değişikliğe göre birim testleri yaz (JUnit 5, Mockito; `*Test.java`). Veritabanına dokunan kod "
-                "için Testcontainers ile entegrasyon testi yaz (`*IT.java`); repodaki örnek IT'nin kurduğu yapıyı kullan.\n"
-                "- JDK'yı `mvn`/`mvnw` repo kökündeki `.sdkmanrc`'ye göre kendisi seçer; "
-                "`sdk` komutunu çalıştırma, `JAVA_HOME`'u değiştirme.\n"
-                "- Testleri çalıştır: `mvnw` varsa `sh mvnw -q verify`, yoksa `mvn -q verify`. Yalnızca ilgili "
-                "modül için `-pl <modül> -am` kullanabilirsin.\n"
-                "- Bir test kalırsa nedenini araştır. Hata uygulama kodundaysa testi değiştirme, raporla. "
-                "Hata senin testindeyse testini düzelt.\n"
-                "- Mevcut bir test, uygulama kodu doğru olduğu hâlde yalnızca kurulumu yüzünden kalıyorsa "
-                "(ör. PR'ın eklediği bir bean'in bağımlılığı için eksik mock, taranan pakete giren yeni sınıf, "
-                "eksik fixture), o testin kurulumunu güncelle: mock, bean ya da fixture ekle. Assertion'lara, "
-                "beklenen değerlere ve test metodu adlarına dokunma. Raporda hangi testin kurulumunu neden "
-                "değiştirdiğini ayrıca yaz.\n"
-                "- Commit et: Türkçe, tek satır, `test: ...` önekiyle. Push etme.\n"
-                "- Son mesajın PR'a test raporu olarak yazılır; Türkçe yaz (ç, ğ, ı, ö, ş, ü): yazdığın testler, "
-                "çalıştırdığın komut, geçen/kalan sayısı, kalan her test için beklenen, gerçekleşen ve olası neden.\n"
-                "- Son mesajının son satırı tam olarak şunlardan biri olsun: '**Sonuç:** Testler geçti', "
-                "'**Sonuç:** Testler kaldı', '**Sonuç:** Test edilemedi'. Ortam yüzünden (Docker, JDK, "
-                "bağımlılık indirme, test veritabanı) çalıştıramadıysan 'Test edilemedi'.\n"
-            )
+            prompt += TEST_RULES
             prompt += await kapsam_eki(run, session, "test")
         else:
             prompt += (
