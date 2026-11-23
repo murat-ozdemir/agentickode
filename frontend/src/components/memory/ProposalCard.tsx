@@ -88,7 +88,7 @@ export default function ProposalCard({ proposal, onApprove, onReject }: Props) {
         <p className="text-sm text-gray-200 whitespace-pre-wrap">{proposal.text}</p>
       )}
       <SimilarRecords
-        records={proposal.similar ?? []}
+        records={proposal.similar}
         replaces={replaces}
         onReplacesChange={pending ? setReplaces : undefined}
       />

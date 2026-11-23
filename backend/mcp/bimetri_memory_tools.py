@@ -14,7 +14,7 @@ from fastmcp.exceptions import ToolError
 
 from backend.api.bimetri_memories import to_record
 from backend.database import async_session
-from backend.mcp._bimetri_memory_similar import find_similar, replaced_record
+from backend.mcp._bimetri_memory_similar import replaced_record
 from backend.models import MemoryProposal, TaskRun
 from backend.repositories.memory_proposal_repo import MemoryProposalRepository
 from backend.repositories.project_config_repo import ProjectConfigRepository
@@ -25,6 +25,7 @@ from backend.services.bimetri_mem0 import (
     mem0_enabled,
     search_memories,
 )
+from backend.services.bimetri_mem0_similar import find_similar
 
 MAX_LIMIT = 20
 MAX_PROPOSALS_PER_RUN = 3
@@ -174,7 +175,7 @@ async def propose_memory(
             source="agent",
             run_id=run_id,
             pr_number=pr_number,
-            similar=similar or None,
+            similar=similar,
             replaces_mem0_id=replaces,
         )
         await repo.add_all([row])

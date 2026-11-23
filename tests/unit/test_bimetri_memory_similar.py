@@ -12,6 +12,7 @@ from fastmcp.exceptions import ToolError
 
 from backend.mcp import _bimetri_memory_similar as similar
 from backend.services import bimetri_mem0
+from backend.services import bimetri_mem0_similar as svc
 
 RID = "0b6f1b8e-2f53-4a4e-9c55-0f6f1a2b3c4d"
 
@@ -69,16 +70,20 @@ class TestMem0Client:
 class TestHelpers:
     async def test_find_similar_keeps_top_records_in_compact_form(self):
         rows = [_hit(f"r{i}", 0.9 - i / 100) | {"similarity": 0.9 - i / 100} for i in range(5)]
-        with patch.object(similar, "similar_memories", AsyncMock(return_value=rows)) as search:
-            found = await similar.find_similar("o/r", "text")
-        assert search.call_args.args[3] == similar.MIN_SIMILARITY
-        assert found is not None and len(found) == similar.MAX_SIMILAR
+        with patch.object(svc, "similar_memories", AsyncMock(return_value=rows)) as search:
+            found = await svc.find_similar("o/r", "text")
+        assert search.call_args.args[3] == svc.MIN_SIMILARITY
+        assert found is not None and len(found) == svc.MAX_SIMILAR
         assert found[0] == {"id": "r0", "text": "r0", "kind": "ders", "similarity": 0.9}
 
     async def test_find_similar_never_blocks_on_mem0_errors(self):
         failing = AsyncMock(side_effect=RuntimeError("down"))
-        with patch.object(similar, "similar_memories", failing):
-            assert await similar.find_similar("o/r", "text") is None
+        with patch.object(svc, "similar_memories", failing):
+            assert await svc.find_similar("o/r", "text") is None
+
+    async def test_find_similar_returns_empty_list_when_nothing_is_close(self):
+        with patch.object(svc, "similar_memories", AsyncMock(return_value=[])):
+            assert await svc.find_similar("o/r", "text") == []
 
     async def test_replaced_record_must_belong_to_the_project(self):
         row = {"id": RID, "memory": "old", "user_id": "o/r", "metadata": {"tur": "karar"}}

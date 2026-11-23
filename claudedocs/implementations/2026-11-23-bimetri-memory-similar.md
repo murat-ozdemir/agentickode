@@ -22,7 +22,9 @@ related: [plans/2026-11-09-bimetri-memory-mcp.md, runbooks/bimetri-mem0-pgvector
 | File | Purpose |
 |------|---------|
 | `backend/services/bimetri_mem0.py` | `similar_memories` (semantic-score threshold), `get_memory`, `update_memory` (PUT) |
-| `backend/mcp/_bimetri_memory_similar.py` | `find_similar` (never blocks; errors → None), `replaced_record` (id belongs to the project) |
+| `backend/services/bimetri_mem0_similar.py` | `find_similar` (never blocks; errors → None), shared by agent and merge proposals |
+| `backend/mcp/_bimetri_memory_similar.py` | `replaced_record` (id belongs to the project) |
+| `backend/worker/flow/_bimetri_proposals.py` | Merge (PR discussion) proposals store `similar` too |
 | `backend/mcp/bimetri_memory_tools.py` | `propose_memory` `replaces` / `force` flow; search/list results now carry `id` |
 | `backend/api/bimetri_memory_proposals.py` | PATCH `replaces_mem0_id` (only an id from `similar`); approve calls `update_memory` instead of `add_memory` |
 | `alembic/versions/051_bimetri_memory_proposal_similar.py` | `similar` JSON + `replaces_mem0_id` columns |
@@ -44,5 +46,8 @@ related: [plans/2026-11-09-bimetri-memory-mcp.md, runbooks/bimetri-mem0-pgvector
 
 - Migration 051 must run on deploy.
 - Copies of `AGENTS.md` in the project repos need the new "Benzer kayıt" bullet. Only the template in `repo-sablonlari` was changed.
-- Proposals from the PR discussion (merge source) skip the check.
-- An unreachable mem0 never blocks a proposal: it is queued with `similar` empty.
+- Proposals from the PR discussion (merge source) are checked too (since 2026-11-23); the agent never sees the result, only the reviewer does.
+- `similar` values:
+  - `[]`: checked, nothing passed the threshold. The pending card says "No similar records in memory".
+  - `null`: not checked (older proposal, or mem0 unreachable). The card says "Not checked against memory".
+- An unreachable mem0 never blocks a proposal: it is queued with `similar` null.

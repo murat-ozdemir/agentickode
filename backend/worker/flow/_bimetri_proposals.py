@@ -8,7 +8,8 @@ The merged PR's discussion (see ``_bimetri_pr_chain``) goes to an OpenAI model, 
 0-3 lessons / pitfalls / decisions worth remembering. They are stored as ``pending`` rows in
 ``bimetri_memory_proposals``; nothing reaches mem0 until a human approves one.
 
-Skipped when mem0 or ``MEM0_OPENAI_API_KEY`` is not configured, when the PR already has
+Each proposal keeps the records it resembles (``similar``), the same check agent proposals
+get. Skipped when mem0 or ``MEM0_OPENAI_API_KEY`` is not configured, when the PR already has
 proposals, or when the PR has no discussion (no LLM call). Runs in the background so the
 webhook response is not delayed; errors are only logged.
 """
@@ -23,6 +24,7 @@ from backend.models import MemoryProposal
 from backend.models.bimetri_memory import PROPOSAL_KINDS
 from backend.repositories.memory_proposal_repo import MemoryProposalRepository
 from backend.services.bimetri_mem0 import list_memories, mem0_enabled
+from backend.services.bimetri_mem0_similar import find_similar
 from backend.services.bimetri_openai_alert import check_quota, clear_alert_quietly
 from backend.services.http_client import get_http_client
 from backend.worker.flow._bimetri_pr_chain import collect_pr_chain
@@ -127,13 +129,19 @@ async def propose_for_merge(
     ]
     proposals = await generate_proposals(chain, existing + pending, rejected)
     if proposals:
-        async with session_factory() as session:
-            await MemoryProposalRepository(session).add_all(
-                [
-                    MemoryProposal(project=project, pr_number=number, source="merge", **p)
-                    for p in proposals
-                ]
+        # the reviewer sees records that already say nearly the same (agents get this up front)
+        rows = [
+            MemoryProposal(
+                project=project,
+                pr_number=number,
+                source="merge",
+                similar=await find_similar(project, p["text"]),
+                **p,
             )
+            for p in proposals
+        ]
+        async with session_factory() as session:
+            await MemoryProposalRepository(session).add_all(rows)
             await session.commit()
     return f"{len(proposals)} proposals"
 

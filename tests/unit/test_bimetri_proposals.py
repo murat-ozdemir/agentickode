@@ -142,14 +142,17 @@ class TestProposeForMerge:
         ]
         answer = {"proposals": [{"kind": "lesson", "text": "Run ruff before push"}]}
         client = _openai(json.dumps(answer))
+        hit = {"id": "m-1", "text": "Use ruff", "kind": "ders", "similarity": 0.7}
         with (
             patch.object(proposals, "get_http_client", return_value=client),
             patch.object(proposals, "list_memories", AsyncMock(return_value=known)),
+            patch.object(proposals, "find_similar", AsyncMock(return_value=[hit])) as check,
         ):
             outcome = await proposals.propose_for_merge(
                 _discussed(), PROJECT, "org/repo", PR, session_factory
             )
         assert outcome == "1 proposals"
+        check.assert_awaited_once_with(PROJECT, "Run ruff before push")
         body = client.post.call_args.kwargs["json"]
         assert body["model"] == "gpt-5-mini"
         assert client.post.call_args.kwargs["headers"]["Authorization"] == "Bearer sk-test"
@@ -167,6 +170,7 @@ class TestProposeForMerge:
             (7, "lesson", "Run ruff before push"),
             (1, "pitfall", "Old idea"),
         ]
+        assert rows[0].similar == [hit]
 
     async def test_skips_pr_that_already_has_proposals(self, enabled, session_factory):
         async with session_factory() as s:
