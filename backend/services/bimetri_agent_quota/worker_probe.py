@@ -9,6 +9,7 @@ that account's 5-hour / weekly usage, and prints one JSON object keyed by provid
 stay on the worker: only account ids, e-mail, plan and the usage numbers are printed.
 """
 
+import contextlib
 import json
 import os
 import select
@@ -153,7 +154,8 @@ def _app_server(requests, deadline_s=20):
 
 
 def codex():
-    if not os.path.exists(os.path.join(HOME, ".codex", "auth.json")) or not shutil.which("codex"):
+    auth = os.path.join(HOME, ".codex", "auth.json")
+    if not os.path.exists(auth) or not shutil.which("codex"):
         return None
     info = {"name": "agentickode", "title": "AgenticKode", "version": "1.0"}
     replies = _app_server(
@@ -170,6 +172,9 @@ def codex():
         "account": {k: account.get(k) for k in ("type", "email", "planType")},
         "account_id": (read.get("workspaceRouting") or {}).get("chatgptAccountId"),
     }
+    if not out["account_id"]:  # account/read now and then has no result; the login names it
+        with contextlib.suppress(Exception):
+            out["account_id"] = _load(auth)["tokens"]["account_id"]
     limits = replies.get(2) or {}
     if "result" in limits:
         res = limits["result"]
