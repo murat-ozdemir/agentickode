@@ -18,10 +18,16 @@ from pathlib import Path
 HOOKS = Path("/etc/codex/hooks.json")
 MIN_VERSION = (0, 124, 0)
 MARK = "bimetri-graph/agent_graph.py"  # in COMMAND; tells our hook from others
+PROGRAM = ".local/share/bimetri-graph/agent_graph.py"
 # Codex runs the hook as the worker, in its shell: $HOME is the worker's. No program, no hook.
+# Only the gate's own refusal (exit 2) blocks. An agent_graph.py from before `gate read` answers
+# with its usage and exit 2; Codex took that as a refusal and blocked every command of a run
+# (run 294). A usage answer or any other failure lets the command through.
 COMMAND = (
-    'f="$HOME/.local/share/bimetri-graph/agent_graph.py"; [ -f "$f" ] || exit 0; '
-    'exec python3 "$f" gate read'
+    f'f="$HOME/{PROGRAM}"; [ -f "$f" ] || exit 0; '
+    'err=$(python3 "$f" gate read 2>&1 >/dev/null); rc=$?; '
+    'case "$err" in usage:*) exit 0 ;; esac; '
+    '[ "$rc" -eq 2 ] || exit 0; printf "%s\\n" "$err" >&2; exit 2'
 )
 HOOK = {"matcher": "^Bash$", "hooks": [{"type": "command", "command": COMMAND, "timeout": 5}]}
 
@@ -55,6 +61,14 @@ def codex_version(user: str) -> "tuple | None":
     return tuple(int(n) for n in found.groups()) if found else None
 
 
+def has_gate_read(user: str) -> bool:
+    """The worker's agent_graph.py knows `gate read` (only `install` replaces the program)."""
+    try:
+        return '["read"]' in (Path(os.path.expanduser(f"~{user}")) / PROGRAM).read_text()
+    except OSError:
+        return False
+
+
 def main(argv: list, path: Path = HOOKS) -> int:
     if len(argv) != 2 or argv[0] not in ("graphify", "none"):
         print("usage: graphify|none WORKER_USER", file=sys.stderr)
@@ -70,6 +84,8 @@ def main(argv: list, path: Path = HOOKS) -> int:
     if version and version < MIN_VERSION:
         need = ".".join(map(str, MIN_VERSION))
         print(f"WARNING: hooks need codex {need} or later; update codex for {argv[1]}")
+    if not has_gate_read(argv[1]):
+        print("WARNING: agent_graph.py has no `gate read`; the hook does nothing until `install`")
     return 0
 
 

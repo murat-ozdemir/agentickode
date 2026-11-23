@@ -32,6 +32,7 @@ def version(monkeypatch):
         return subprocess.CompletedProcess(args, 0, found["out"], "")
 
     monkeypatch.setattr(hook.subprocess, "run", run)
+    monkeypatch.setattr(hook, "has_gate_read", lambda user: True)
     return found
 
 
@@ -40,7 +41,7 @@ class TestHooksFile:
         hook.update_hooks(path, on=True)
         data = json.loads(path.read_text())
         assert data == {"hooks": {"PreToolUse": [hook.HOOK]}}
-        assert hook.MARK in hook.COMMAND and hook.COMMAND.endswith("gate read")
+        assert hook.MARK in hook.COMMAND and "gate read" in hook.COMMAND
         assert path.stat().st_mode & 0o777 == 0o644
 
     def test_keeps_other_hooks_and_is_written_once(self, path):
@@ -62,6 +63,29 @@ class TestHooksFile:
         )
         assert done.returncode == 0
 
+    @pytest.mark.parametrize(
+        ("err", "code", "blocked"),
+        [
+            ("usage: install | update TOOL|all ROOT | gate pre|mark", 2, False),  # run 294
+            ("Traceback (most recent call last): ...", 1, False),
+            ("", 0, False),
+            ("Read src/Big.java with graph_read.", 2, True),
+        ],
+    )
+    def test_hook_command_blocks_only_on_the_gates_refusal(self, tmp_path, err, code, blocked):
+        program = tmp_path / hook.PROGRAM
+        program.parent.mkdir(parents=True)
+        program.write_text(f"import sys\nsys.stderr.write({err!r})\nsys.exit({code})\n")
+        done = subprocess.run(
+            ["/bin/sh", "-c", hook.COMMAND],
+            env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+            input="{}",
+            text=True,
+            capture_output=True,
+        )
+        assert done.returncode == (2 if blocked else 0)
+        assert (bool(err) and err in done.stderr) == blocked
+
 
 class TestMain:
     def test_graphify_prints_the_codex_version(self, path, version, capsys):
@@ -72,6 +96,20 @@ class TestMain:
         version["out"] = "codex-cli 0.120.3\n"
         assert hook.main(["graphify", "coder"], path) == 0
         assert "WARNING: hooks need codex 0.124.0 or later" in capsys.readouterr().out
+
+    def test_warns_when_the_program_has_no_gate_read(self, path, version, monkeypatch, capsys):
+        monkeypatch.setattr(hook, "has_gate_read", lambda user: False)
+        assert hook.main(["graphify", "coder"], path) == 0
+        assert "has no `gate read`" in capsys.readouterr().out
+
+    def test_has_gate_read_reads_the_workers_program(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(hook.os.path, "expanduser", lambda p: str(tmp_path))
+        assert not hook.has_gate_read("coder")
+        (tmp_path / hook.PROGRAM).parent.mkdir(parents=True)
+        (tmp_path / hook.PROGRAM).write_text('args in (["pre"], ["mark"])')
+        assert not hook.has_gate_read("coder")
+        (tmp_path / hook.PROGRAM).write_text('args in (["pre"], ["mark"], ["read"])')
+        assert hook.has_gate_read("coder")
 
     def test_none_drops_the_hook(self, path, version, capsys):
         hook.main(["graphify", "coder"], path)
